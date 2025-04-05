@@ -1,0 +1,57 @@
+{
+  "name": "archetype_warfare_nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "src/server.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "start:clean": "start.bat",
+    "test": "jest",
+    "dev": "nodemon src/server.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "deploy-commands": "node src/discord/deploy-commands.js",
+    "db:disconnect": "psql -U postgres -d postgres -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'archetype_warfare';\"",
+    "db:recreate": "psql -U postgres -d postgres -c \"DROP DATABASE IF EXISTS archetype_warfare;\" && psql -U postgres -d postgres -c \"CREATE DATABASE archetype_warfare ENCODING 'UTF-8';\" && psql -U postgres -d archetype_warfare -f ./config/scripts/recreate.sql",
+    "db:seed": "psql -U postgres -d archetype_warfare -f ./config/scripts/db.sql",
+    "db:setup": "npm run db:disconnect && npm run db:recreate && npm run db:seed",
+    "lint": "eslint .",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "axios": "^1.8.3",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "moment": "^2.30.1",
+    "moment-timezone": "^0.5.45",
+    "nodemailer": "^6.10.0",
+    "nodemon": "^3.1.9",
+    "pg-pool": "^3.7.0",
+    "sequelize": "^6.37.3", 
+    "pg": "^8.11.3",
+    "pg-hstore": "^2.3.4"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@babel/core": "^7.23.7",
+    "@babel/preset-env": "^7.23.8",
+    "eslint": "^8.56.0",
+    "husky": "^8.0.3",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2"
+    
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

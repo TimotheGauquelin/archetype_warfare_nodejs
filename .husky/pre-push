@@ -1,0 +1,20 @@
+#!/bin/sh
+if [ -t 1 ]; then
+  exec < /dev/tty
+fi
+
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔍 Vérification avant push..."
+
+# Exécuter les tests avec couverture
+echo "🧪 Exécution des tests avec vérification de la couverture..."
+npm run test:coverage
+
+# Si les tests ou la couverture échouent, empêcher le push
+if [ $? -ne 0 ]; then
+  echo "❌ Les tests ont échoué ou la couverture est insuffisante (minimum 80% requis). Push annulé."
+  exit 1
+fi
+
+echo "✅ Toutes les vérifications ont réussi !" 
