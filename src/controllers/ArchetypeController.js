@@ -2,71 +2,51 @@ import Archetype from "../models/ArchetypeModel.js";
 import ArchetypeService from "../services/ArchetypeService.js";
 
 class ArchetypeController {
-    async searchArchetypes(request, response) {
-
+    async searchArchetypes(request, response, next) {
         try {
-
-            const archetypes = await ArchetypeService.searchArchetypes(request, response)
+            const archetypes = await ArchetypeService.searchArchetypes(request, response, next)
             return response.status(200).json(archetypes)
-
         } catch (error) {
-
-            response.status(500).json({ message: error.message });
-
+            next(error)
         }
     }
 
-    async getArchetypeById(request, response) {
-
+    async getArchetypeById(request, response, next) {
         try {
-
-            const archetype = await ArchetypeService.getArchetypeById(request, response)
+            const {id} = request.params
+            const archetype = await ArchetypeService.getArchetypeById(id, next)
             return response.status(200).json(archetype)
-
         } catch (error) {
-
-            response.status(500).json({ message: error.message });
-
+            next(error)
         }
     }
 
-    async getFiveMostFamousArchetypes(request, response) {
-
+    async getFiveMostFamousArchetypes(request, response, next) {
         try {
-
-            const archetypes = await ArchetypeService.getFiveMostFamousArchetypes(request, response)
+            const archetypes = await ArchetypeService.getFiveMostFamousArchetypes(request, response, next)
             return response.status(200).json(archetypes)
-
         } catch (error) {
-
-            response.status(500).json({ message: error.message });
-
+            next(error)
         }
     }
 
-    async getEightMostRecentArchetypes(request, response) {
-
+    async getEightMostRecentArchetypes(request, response, next) {
         try {
-            const archetypes = await ArchetypeService.getEightMostRecentArchetypes(request, response)
+            const archetypes = await ArchetypeService.getEightMostRecentArchetypes(request, response, next)
             return response.status(200).json(archetypes)
-
         } catch (error) {
-
-            response.status(500).json({ message: error.message });
-
+            next(error)
         }
     }
 
-    async getFiveRandomHighlightedArchetypes(request, response) {
+    async getFiveRandomHighlightedArchetypes(request, response, next) {
 
         try {
-            const archetypes = await ArchetypeService.getFiveRandomHighlightedArchetypes(request, response)
+            const archetypes = await ArchetypeService.getFiveRandomHighlightedArchetypes(request, response, next)
             return response.status(200).json(archetypes)
-
         } catch (error) {
-
+            next(error)
             response.status(500).json({ message: error.message });
-
         }
     }
 

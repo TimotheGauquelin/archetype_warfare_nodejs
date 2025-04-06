@@ -20,38 +20,26 @@ Card.init(
         },
         description: {
             type: DataTypes.TEXT,
-            allowNull: false
+            allowNull: true
         },
         img_url: {
             type: DataTypes.STRING(255),
-            allowNull: false
+            allowNull: true
         },
         level: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: true,
             defaultValue: 0
         },
         atk: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: true,
             defaultValue: 0
         },
         def: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: true,
             defaultValue: 0
-        },
-        attribute: {
-            type: DataTypes.STRING(50),
-            allowNull: false
-        },
-        type: {
-            type: DataTypes.STRING(50),
-            allowNull: false
-        },
-        card_type: {
-            type: DataTypes.STRING(50),
-            allowNull: false
         }
     },
     {

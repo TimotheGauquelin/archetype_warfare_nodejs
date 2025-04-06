@@ -3,10 +3,12 @@ import bcrypt from 'bcryptjs';
 import { CustomError } from '../errors/CustomError.js';
 
 class UserService {
-    static async getAllUsers() {
-        return User.findAll({
-            include: [{ model: Deck }]
-        });
+    static async getUsers(next) {
+        try {
+            return User.findAll();
+        } catch (error) {
+            next(error)
+        }
     }
 
     static async getUserById(id) {

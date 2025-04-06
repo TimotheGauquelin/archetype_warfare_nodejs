@@ -4,11 +4,11 @@ const router = Router();
 
 // GET
 
-router.get('/getFiveRandomHighlightedArchetypes', (request, response) => ArchetypeController.getFiveRandomHighlightedArchetypes(request, response))
-router.get('/getFiveMostFamousArchetypes', (request, response) => ArchetypeController.getFiveMostFamousArchetypes(request, response))
-router.get('/getEightMostRecentArchetypes', (request, response) => ArchetypeController.getEightMostRecentArchetypes(request, response))
-router.get('/search', (request, response) => ArchetypeController.searchArchetypes(request, response));
-router.get('/:id', (request, response) => ArchetypeController.getArchetypeById(request, response))
+router.get('/getFiveRandomHighlightedArchetypes', (request, response, next) => ArchetypeController.getFiveRandomHighlightedArchetypes(request, response, next))
+router.get('/getFiveMostFamousArchetypes', (request, response, next) => ArchetypeController.getFiveMostFamousArchetypes(request, response, next))
+router.get('/getEightMostRecentArchetypes', (request, response, next) => ArchetypeController.getEightMostRecentArchetypes(request, response, next))
+router.get('/search', (request, response, next) => ArchetypeController.searchArchetypes(request, response, next));
+router.get('/:id', (request, response, next) => ArchetypeController.getArchetypeById(request, response, next))
 // ADD
 
 router.post('/', (request, response) => ArchetypeController.addArchetype(request, response));

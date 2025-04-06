@@ -1,0 +1,23 @@
+# On utilise Node.js version 20 avec une image légère (alpine)
+FROM node:20-alpine
+
+# On définit le dossier de travail dans le conteneur
+WORKDIR /app
+
+# On copie juste les fichiers package.json et package-lock.json
+# C'est comme si tu copiais uniquement la liste des ingrédients d'une recette
+COPY package*.json ./
+
+# On installe les dépendances
+# C'est comme si tu allais chercher tous les ingrédients dont tu as besoin
+RUN npm install
+
+# On copie le fichier de configuration nodemon
+COPY nodemon.json ./
+
+# On n'a pas besoin de copier le code ici car on va le monter en volume
+# C'est comme si tu créais un lien direct entre ton code sur ton PC et le conteneur
+
+# On lance le serveur en mode développement avec nodemon
+# nodemon va surveiller les changements et redémarrer automatiquement
+CMD ["npm", "run", "dev"] 

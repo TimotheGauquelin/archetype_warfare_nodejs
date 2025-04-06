@@ -16,30 +16,14 @@ Type.init({
     },
     label: {
         type: DataTypes.STRING(50),
-        allowNull: false,
+        allowNull: true,
         unique: true
-    },
-    description: {
-        type: DataTypes.TEXT,
-        allowNull: false
-    },
-    created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
     }
 }, {
     sequelize,
     modelName: 'Type',
     tableName: 'type',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    timestamps: false
 });
 
 export default Type; 

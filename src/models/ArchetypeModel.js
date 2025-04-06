@@ -6,7 +6,7 @@ import sequelize from '../config/Sequelize.js';
  * @class Archetype
  * @extends {Model}
  */
-class Archetype extends Model {}
+class Archetype extends Model { }
 
 Archetype.init({
     id: {
@@ -14,18 +14,52 @@ Archetype.init({
         primaryKey: true,
         autoIncrement: true
     },
-    label: {
+    name: {
         type: DataTypes.STRING(50),
-        allowNull: false,
+        allowNull: true,
         unique: true
     },
-    description: {
+    main_info: {
         type: DataTypes.TEXT,
         allowNull: false
     },
+    slider_info: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    is_highlighted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false
+    },
+    is_active: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false
+    },
+    in_tcg_date: {
+        type: DataTypes.DATE,
+        allowNull: false
+    },
+    in_aw_date: {
+        type: DataTypes.DATE,
+        allowNull: false
+    },
+    comment: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    popularity_poll: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+        defaultValue: 0,
+        validate: {
+            min: 0
+        }
+    },
     era_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
             model: 'era',
             key: 'id'
@@ -33,12 +67,12 @@ Archetype.init({
     },
     created_at: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: DataTypes.NOW
     },
     updated_at: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: DataTypes.NOW
     }
 }, {

@@ -6,13 +6,13 @@ import sequelize from '../config/Sequelize.js';
  * @class BanlistArchetypeCard
  * @extends {Model}
  */
-class BanlistArchetypeCard extends Model {}
+class BanlistArchetypeCard extends Model { }
 
 BanlistArchetypeCard.init(
     {
         banlist_id: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: true,
             references: {
                 model: 'banlist',
                 key: 'id'
@@ -20,7 +20,7 @@ BanlistArchetypeCard.init(
         },
         archetype_id: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: true,
             references: {
                 model: 'archetype',
                 key: 'id'
@@ -28,24 +28,32 @@ BanlistArchetypeCard.init(
         },
         card_id: {
             type: DataTypes.INTEGER,
-            allowNull: false,
+            allowNull: true,
             references: {
                 model: 'card',
                 key: 'id'
             }
         },
-        status: {
-            type: DataTypes.ENUM('forbidden', 'limited', 'semi_limited', 'unlimited'),
-            allowNull: false
+        explanation_text: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        card_status_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            references: {
+                model: 'card_status',
+                key: 'id'
+            }
         },
         created_at: {
             type: DataTypes.DATE,
-            allowNull: false,
+            allowNull: true,
             defaultValue: DataTypes.NOW
         },
         updated_at: {
             type: DataTypes.DATE,
-            allowNull: false,
+            allowNull: true,
             defaultValue: DataTypes.NOW
         },
     },

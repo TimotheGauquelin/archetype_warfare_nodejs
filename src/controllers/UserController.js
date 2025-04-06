@@ -3,17 +3,12 @@ import User from "../models/UserModel.js";
 import UserService from "../services/UserService.js";
 
 class UserController {
-    async searchUsers(request, response) {
-
+    async searchUsers(request, response, next) {
         try {
-
-            const users = await UserService.searchUsers(request, response)
+            const users = await UserService.getUsers(request, response, next)
             return response.status(200).json(users)
-
         } catch (error) {
-
-            response.status(500).json({ message: error.message });
-
+            next(error)
         }
     }
 

@@ -16,7 +16,7 @@ DeckCard.init({
     },
     deck_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
             model: 'deck',
             key: 'id'
@@ -24,7 +24,7 @@ DeckCard.init({
     },
     card_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
             model: 'card',
             key: 'id'
@@ -32,7 +32,7 @@ DeckCard.init({
     },
     quantity: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         defaultValue: 1,
         validate: {
             min: 1,
@@ -41,12 +41,12 @@ DeckCard.init({
     },
     created_at: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: DataTypes.NOW
     },
     updated_at: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
         defaultValue: DataTypes.NOW
     }
 }, {

@@ -65,7 +65,7 @@ Type.init({
     },
     label: {
         type: DataTypes.STRING(50),
-        allowNull: false,
+        allowNull: true,
         unique: true,
         validate: {
             notEmpty: {
