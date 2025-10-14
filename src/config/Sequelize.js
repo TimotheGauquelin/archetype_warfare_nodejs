@@ -45,7 +45,7 @@ const sequelize = new Sequelize(
     {
         host: config[env].host,
         port: config[env].port,
-        dialect: "postgres",
+        dialect: 'postgres',
         logging: env === 'development' ? console.log : false,
         define: {
             underscored: true,

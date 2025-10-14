@@ -1,0 +1,53 @@
+name: archetype-warfare
+services:
+  nodejs:
+    container_name: back-aw
+    build:
+      dockerfile: ./docker/Dockerfile.dev
+    working_dir: /usr/src/
+    environment:
+      - NODE_ENV=development
+      - FRONTEND_URL=http://localhost:8888
+      - API_PORT=1337
+      - DATABASE_CLIENT=postgres
+      - DATABASE_HOST=database
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=aw
+      - DATABASE_USER=admin
+      - DATABASE_PASSWORD=Azerty123!
+      - DATABASE_SSL=false
+      - API_TOKEN_SALT=baATgxx9waBHIYkwv87lWg==
+      - JWT_SECRET=SOTYvW+Ed63I2iCfehnBbg==
+      - EMAIL_FROM_EMAILSENDER=timothegauquelin@gmail.com
+      - PASSWORD_FROM_EMAILSENDER=cpygwfgxyvyaumps
+    volumes:
+      - ./config:/usr/src/config
+      - ./database:/usr/src/database
+      - ./public:/usr/src/public
+      - ./src:/usr/src/src
+    networks:
+      - network-project-aw
+    ports:
+      - '8889:1337'
+  database:
+    container_name: database-aw
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: Azerty123!
+      POSTGRES_DB: aw
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker-init:/docker-entrypoint-initdb.d
+    networks:
+      - network-project-aw
+    ports:
+      - '8899:5432'
+
+networks:
+  network-project-aw:
+    name: network-project-aw
+
+volumes:
+  pgdata:

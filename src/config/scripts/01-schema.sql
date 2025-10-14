@@ -74,15 +74,15 @@ CREATE TABLE IF NOT EXISTS user_role (
 
 CREATE TABLE IF NOT EXISTS deck (
     id SERIAL PRIMARY KEY,
-    label VARCHAR(200) NOT NULL,
-    comment TEXT,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
     archetype_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     CONSTRAINT fk_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE CASCADE,
     CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "user" (id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS cardtype (
+CREATE TABLE IF NOT EXISTS card_type (
     id SERIAL PRIMARY KEY,
     label VARCHAR(50) NOT NULL UNIQUE,
     num_order INT NOT NULL UNIQUE
@@ -95,8 +95,8 @@ CREATE TABLE IF NOT EXISTS card (
     level INT NULL,
     atk INT NULL,
     def INT NULL,
+    description TEXT NULL,
     attribute VARCHAR(30) NULL,
-    type VARCHAR(30) NULL,
     card_type VARCHAR(200) NULL
 );
 
@@ -104,7 +104,9 @@ CREATE TABLE IF NOT EXISTS banlist (
     id SERIAL PRIMARY KEY,
     label VARCHAR(200) NOT NULL UNIQUE,
     release_date TIMESTAMP NOT NULL,
-    description TEXT
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 );
 
 CREATE TABLE IF NOT EXISTS card_status (
@@ -114,8 +116,11 @@ CREATE TABLE IF NOT EXISTS card_status (
 
 CREATE TABLE IF NOT EXISTS deck_card (
     deck_id BIGINT NOT NULL,
-    card_id CHAR(10) NOT NULL,
+    card_id VARCHAR(8) NOT NULL,
+    id SERIAL PRIMARY KEY,
     quantity INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_deck FOREIGN KEY (deck_id) REFERENCES deck (id) ON DELETE CASCADE,
     CONSTRAINT fk_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE
 );
@@ -144,8 +149,12 @@ CREATE TABLE IF NOT EXISTS archetype_summonmechanic (
 CREATE TABLE IF NOT EXISTS banlist_archetype_card (
     banlist_id BIGINT NOT NULL,
     archetype_id BIGINT NOT NULL,
-    card_id CHAR(10) NOT NULL,
+    card_id VARCHAR(8) NOT NULL,
     card_status_id BIGINT NOT NULL,
+    explanation_text TEXT NULL,
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_banlist FOREIGN KEY (banlist_id) REFERENCES banlist (id) ON DELETE CASCADE,
     CONSTRAINT fk_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE CASCADE,
     CONSTRAINT fk_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE,
@@ -265,6 +274,48 @@ INSERT INTO summonmechanic (id, label) VALUES
     (6, 'Xyz Summon'),
     (7, 'Pendulum Summon'),
     (8, 'Link Summon');
+
+INSERT INTO card_status (id, label) VALUES
+(1, 'Banned'),
+(2, 'Limited'),
+(3, 'Semi-Limited'),
+(4, 'Unlimited');
+
+INSERT INTO card_type (id, label, num_order) VALUES
+(1, 'Normal Monster', 1),
+(2, 'Normal Tuner Monster', 2),
+(3, 'Effect Monster', 3),
+(4, 'Tuner Monster', 4),
+(5, 'Flip Monster', 5),
+(6, 'Flip Effect Monster', 6),
+(7, 'Spirit Monster', 7),
+(8, 'Union Effect Monster', 8),
+(9, 'Gemini Monster', 9),
+(16, 'Toon Monster', 10),
+(10, 'Pendulum Normal Monster', 11),
+(11, 'Pendulum Effect Monster', 12),
+(24, 'Pendulum Flip Effect Monster', 13),
+(13, 'Pendulum Tuner Effect Monster', 14),
+(14, 'Ritual Monster', 15),
+(15, 'Ritual Effect Monster', 16),
+(12, 'Pendulum Effect Ritual Monster', 17),
+(17, 'Fusion Monster', 18),
+(25, 'Pendulum Effect Fusion Monster', 19),
+(18, 'Synchro Monster', 20),
+(19, 'Synchro Tuner Monster', 21),
+(20, 'Synchro Pendulum Effect Monster', 22),
+(21, 'XYZ Monster', 23),
+(22, 'XYZ Pendulum Effect Monster', 24),
+(23, 'Link Monster', 25),
+(26, 'Normal Spell', 26),
+(27, 'Field Spell', 27),
+(28, 'Equip Spell', 28),
+(29, 'Continuous Spell', 29),
+(30, 'Quick-Play Spell', 30),
+(31, 'Ritual Spell', 31),
+(32, 'Normal Trap', 32),
+(33, 'Continuous Trap', 33),
+(34, 'Counter Trap', 34);
 
 INSERT INTO archetype_attribute (archetype_id, attribute_id) VALUES
     (1, 1), -- Blue Eyes - LIGHT

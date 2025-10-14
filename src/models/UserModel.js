@@ -1,7 +1,8 @@
-import { DataTypes, Model } from "sequelize";
+import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/Sequelize.js';
 import bcrypt from 'bcryptjs';
 import pkg from 'jsonwebtoken';
+import { CustomError } from '../errors/CustomError.js';
 const { sign } = pkg;
 /**
  * User model representing application users
@@ -10,31 +11,50 @@ const { sign } = pkg;
  */
 class User extends Model {
 
-    static async validPassword(user, password, next) {
+    static async validPassword(userPassword, password, next) {
         try {
-            return bcrypt.compare(password, user.password);
+            return await bcrypt.compare(password, userPassword);
         } catch (error) {
-            next(error)
+            next(error);
+        }
+    }
+
+    static async emailAlreadyUsed(email, next) {
+        try {
+            const user = await User.findOne({
+                where: {
+                    email: email
+                }
+            });
+
+            if (user) {
+                throw new CustomError('Email already used', 400);
+            }
+
+            return false;
+
+        } catch (error) {
+            next(error);
         }
     }
 
     static async generateToken(user, next) {
         try {
-            const { id, email, lastname, roles } = user;
+            const { id, email, username, roles } = user;
 
-            const roleLabels = roles.map(role => role.label);
+            const roleLabels = roles ? roles.map(role => role.label) : [];
 
             const payload = {
                 id,
                 email,
-                lastname,
+                username,
                 roles: roleLabels
             };
 
-            return sign(payload, process.env.DATABASE_SECRET, { expiresIn: '2h' });
+            return sign(payload, process.env.JWT_SECRET, { expiresIn: '2h' });
 
         } catch (error) {
-            next(error)
+            next(error);
         }
     }
 
@@ -42,7 +62,7 @@ class User extends Model {
         try {
             return pkg.verify(token, process.env.JWT_SECRET);
         } catch (error) {
-            next(error)
+            next(error);
         }
     }
 }
@@ -90,6 +110,11 @@ User.init({
         allowNull: true,
         defaultValue: false
     },
+    has_accepted_terms_and_conditions: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false
+    },
     created_at: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -108,12 +133,18 @@ User.init({
     createdAt: 'created_at',
     updatedAt: 'updated_at',
     hooks: {
-        beforeUpdate: async (user, options) => {
-            // Si le mot de passe est modifié, on le hache avant de l'enregistrer
-            console.log("userr", user);
+        beforeCreate: async (user) => {
+            if (user.get('password')) {
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(user.get('password'), salt);
+                user.set('password', hashedPassword);
+            }
+        },
+        beforeUpdate: async (user) => {
             if (user.changed('password')) {
                 const salt = await bcrypt.genSalt(10);
-                user.password = await bcrypt.hash(user.password, salt);
+                const hashedPassword = await bcrypt.hash(user.get('password'), salt);
+                user.set('password', hashedPassword);
             }
         }
     }

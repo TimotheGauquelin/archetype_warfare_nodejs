@@ -1,4 +1,4 @@
-import { DataTypes, Model } from "sequelize";
+import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/Sequelize.js';
 
 /**
@@ -10,6 +10,11 @@ class BanlistArchetypeCard extends Model { }
 
 BanlistArchetypeCard.init(
     {
+        id: {
+            type: DataTypes.INTEGER,
+            primaryKey: true,
+            autoIncrement: true
+        },
         banlist_id: {
             type: DataTypes.INTEGER,
             allowNull: true,
@@ -27,7 +32,7 @@ BanlistArchetypeCard.init(
             }
         },
         card_id: {
-            type: DataTypes.INTEGER,
+            type: DataTypes.STRING(8),
             allowNull: true,
             references: {
                 model: 'card',

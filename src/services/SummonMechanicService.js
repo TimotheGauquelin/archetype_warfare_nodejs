@@ -1,11 +1,11 @@
-import { SummonMechanic, Archetype } from '../models/relations.js';
+import { SummonMechanic } from '../models/relations.js';
 
 class SummonMechanicService {
     static async getSummonMechanics(next) {
         try {
             return SummonMechanic.findAll();
         } catch (error) {
-            next(error)
+            next(error);
         }
     }
 }

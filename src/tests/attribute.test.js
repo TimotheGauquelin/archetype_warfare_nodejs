@@ -18,7 +18,7 @@ describe('GET /attributes', () => {
         ]);
     });
 
-    test("should retrieve an attributes list", async () => {
+    test('should retrieve an attributes list', async () => {
         const response = await request(app).get('/attributes');
         expect(response.status).toBe(200);
         expect(response.body).toBeDefined();
@@ -39,10 +39,10 @@ describe('GET /attributes', () => {
         const attributeLabels = response.body.map(attribute => attribute.label);
         expect(attributeLabels).toContain('Fire');
         expect(attributeLabels).toContain('Water');
-        expect(attributeLabels).toContain("Earth");
-        expect(attributeLabels).toContain("Wind");
-        expect(attributeLabels).toContain("Dark");
-        expect(attributeLabels).toContain("Light");
+        expect(attributeLabels).toContain('Earth');
+        expect(attributeLabels).toContain('Wind');
+        expect(attributeLabels).toContain('Dark');
+        expect(attributeLabels).toContain('Light');
     });
 });
 

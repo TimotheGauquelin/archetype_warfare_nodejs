@@ -1,24 +1,20 @@
-import CardService from "../services/CardService.js";
+import CardService from '../services/CardService.js';
 
 class CardController {
-    async searchCards(request, response) {
+    async searchCards(request, response, next) {
         try {
-
-            const cards = await CardService.searchCards(request, response)
-            return response.status(200).json(cards)
-
+            const cards = await CardService.searchCards(request, response, next);
+            return response.status(200).json(cards);
         } catch (error) {
-
-            response.status(500).json({ message: error.message });
-
+            next(error);
         }
     }
 
-    async addCards(request, response) {
+    async addCards(request, response, next) {
         try {
 
-            const cards = await CardService.addCards(request, response)
-            return response.status(201).json(cards)
+            const cards = await CardService.addCards(request, response);
+            return cards;
 
         } catch (error) {
 
@@ -28,4 +24,4 @@ class CardController {
     }
 }
 
-export default new CardController()
+export default new CardController();

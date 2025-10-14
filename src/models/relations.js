@@ -60,7 +60,6 @@ Archetype.belongsToMany(Type, {
     as: 'types'
 });
 
-
 // Relations ArchetypeAttribute
 Attribute.belongsToMany(Archetype, {
     through: 'archetype_attribute',
@@ -94,28 +93,44 @@ Archetype.belongsToMany(SummonMechanic, {
 });
 
 // Relations BanlistArchetypeCard
-Banlist.hasMany(BanlistArchetypeCard, { foreignKey: 'banlist_id' });
-BanlistArchetypeCard.belongsTo(Banlist, { foreignKey: 'banlist_id' });
-
-// Relations BanlistArchetypeCard & Archetype
-Card.belongsToMany(Archetype, {
-    through: 'banlist_archetype_card',
-    foreignKey: 'card_id',
-    otherKey: 'archetype_id',
-    timestamps: false,
-    as: 'archetypes'
+Banlist.hasMany(BanlistArchetypeCard, {
+    foreignKey: 'banlist_id',
+    as: 'banlist_archetype_cards'
 });
-Archetype.belongsToMany(Card, {
-    through: 'banlist_archetype_card',
+BanlistArchetypeCard.belongsTo(Banlist, {
+    foreignKey: 'banlist_id',
+    as: 'banlist'
+});
+
+// Relations Archetype et BanlistArchetypeCard
+Archetype.hasMany(BanlistArchetypeCard, {
     foreignKey: 'archetype_id',
-    otherKey: 'card_id',
-    timestamps: false,
-    as: 'cards'
+    as: 'cards'  // ✅ On peut utiliser 'cards' maintenant
+});
+BanlistArchetypeCard.belongsTo(Archetype, {
+    foreignKey: 'archetype_id',
+    as: 'archetype'
 });
 
+// Relations Card et BanlistArchetypeCard
+Card.hasMany(BanlistArchetypeCard, {
+    foreignKey: 'card_id',
+    as: 'banlist_archetype_cards'
+});
+BanlistArchetypeCard.belongsTo(Card, {
+    foreignKey: 'card_id',
+    as: 'card'
+});
 
-// CardStatus.hasMany(BanlistArchetypeCard, { foreignKey: 'card_status_id' });
-// BanlistArchetypeCard.belongsTo(CardStatus, { foreignKey: 'card_status_id' });
+// Relations CardStatus et BanlistArchetypeCard
+CardStatus.hasMany(BanlistArchetypeCard, {
+    foreignKey: 'card_status_id',
+    as: 'banlist_archetype_cards'
+});
+BanlistArchetypeCard.belongsTo(CardStatus, {
+    foreignKey: 'card_status_id',
+    as: 'card_status'
+});
 
 export {
     User,

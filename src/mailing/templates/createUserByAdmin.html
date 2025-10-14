@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>Création de votre compte</title>
@@ -12,6 +13,7 @@
             background-size: cover;
             background-repeat: no-repeat;
         }
+
         .container {
             max-width: 600px;
             margin: 0 auto;
@@ -20,14 +22,17 @@
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
             padding: 40px;
         }
+
         .logo {
             text-align: center;
             margin-bottom: 32px;
         }
+
         .logo img {
             width: 192px;
             height: auto;
         }
+
         h2 {
             font-family: Arial, sans-serif;
             font-size: 28px;
@@ -37,12 +42,14 @@
             text-align: center;
             letter-spacing: -0.5px;
         }
+
         p {
             color: #4b5563;
             line-height: 1.6;
             margin-bottom: 20px;
             font-size: 15px;
         }
+
         .credentials {
             background-color: #f9fafb;
             padding: 20px;
@@ -50,15 +57,18 @@
             border: 1px solid #e5e7eb;
             margin: 24px 0;
         }
+
         .credentials p {
             margin: 12px 0;
             font-size: 15px;
             color: #4b5563;
         }
+
         .credentials strong {
             color: #374151;
             font-weight: 500;
         }
+
         .button {
             display: inline-block;
             background-color: #2563eb;
@@ -71,6 +81,7 @@
             font-weight: 500;
             font-size: 15px;
         }
+
         .link {
             color: #2563eb;
             word-break: break-all;
@@ -81,11 +92,13 @@
             padding: 12px;
             border-radius: 6px;
         }
+
         .footer {
             margin-top: 40px;
             padding-top: 20px;
             border-top: 1px solid #e5e7eb;
         }
+
         .footer p {
             font-size: 13px;
             color: #6b7280;
@@ -94,23 +107,24 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="logo">
-            <img src="/assets/img/archetype_battle_logo.png" alt="Logo">
+            <img src="../../assets/img/archetype_battle_logo.png" alt="Logo">
         </div>
         <h2>Création de votre compte</h2>
-        
+
         <p>Bonjour,</p>
         <p>Un compte a été créé pour vous par l'administrateur. Voici vos identifiants de connexion :</p>
-        
+
         <div class="credentials">
-            <p><strong>Nom d'utilisateur :</strong> {{username}}</p>
-            <p><strong>Mot de passe temporaire :</strong> {{password}}</p>
+            <p><strong>Pseudo :</strong> {{username}}</p>
+            <p><strong>Email: {{email}}</strong></p>
         </div>
 
-        <p>Pour des raisons de sécurité, nous vous recommandons de changer votre mot de passe lors de votre première connexion.</p>
-        
+        <p>Pour pouvoir vous connecter, vous devez définir un mot de passe via le lien ci-dessous</p>
+
         <div style="text-align: center;">
             <a href="{{resetLink}}" class="button">Définir mon mot de passe</a>
         </div>
@@ -124,4 +138,5 @@
         </div>
     </div>
 </body>
-</html> 
+
+</html>

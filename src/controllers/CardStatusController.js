@@ -1,11 +1,11 @@
-import CardStatusService from "../services/CardStatusService.js";
+import CardStatusService from '../services/CardStatusService.js';
 
 class CardStatusController {
     async getAllCardStatus(request, response) {
         try {
 
-            const status = await CardStatusService.getAllCardStatuses(request, response)
-            return response.status(200).json(status)
+            const status = await CardStatusService.getAllCardStatuses(request, response);
+            return response.status(200).json(status);
 
         } catch (error) {
 
@@ -15,4 +15,4 @@ class CardStatusController {
     }
 }
 
-export default new CardStatusController()
+export default new CardStatusController();

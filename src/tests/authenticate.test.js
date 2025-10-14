@@ -1,11 +1,7 @@
 import { jest } from '@jest/globals';
 import AuthenticateController from '../controllers/AuthenticateController.js';
 import User from '../models/UserModel.js';
-import Role from '../models/RoleModel.js';
 import { CustomError } from '../errors/CustomError.js';
-import AuthenticateService from '../services/AuthenticateService.js';
-import { generateRandomToken } from '../utils/token.js';
-import { sendPasswordResetEmail } from '../mailing/sendPasswordResetMail.js';
 
 // Mock des dépendances
 jest.mock('../models/UserModel.js');
@@ -128,7 +124,7 @@ describe('AuthenticateController', () => {
             expect(mockResponse.status).toHaveBeenCalledWith(200);
             expect(mockResponse.json).toHaveBeenCalledWith({
                 success: true,
-                message: "Connexion réussie !",
+                message: 'Connexion réussie !',
                 token: 'mockToken'
             });
         });
@@ -160,7 +156,7 @@ describe('AuthenticateController', () => {
             expect(mockResponse.status).toHaveBeenCalledWith(200);
             expect(mockResponse.json).toHaveBeenCalledWith({
                 success: true,
-                message: "Si un compte avec cet email existe, un lien de réinitialisation de mot de passe a été envoyé."
+                message: 'Si un compte avec cet email existe, un lien de réinitialisation de mot de passe a été envoyé.'
             });
         });
     });
@@ -222,7 +218,7 @@ describe('AuthenticateController', () => {
             expect(mockResponse.status).toHaveBeenCalledWith(200);
             expect(mockResponse.json).toHaveBeenCalledWith({
                 success: true,
-                message: "Le mot de passe a été mis à jour avec succès."
+                message: 'Le mot de passe a été mis à jour avec succès.'
             });
         });
     });

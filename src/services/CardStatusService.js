@@ -1,4 +1,4 @@
-import CardStatus from "../models/CardStatusModel.js";
+import CardStatus from '../models/CardStatusModel.js';
 
 class CardStatusService {
     static async getAllCardStatuses() {

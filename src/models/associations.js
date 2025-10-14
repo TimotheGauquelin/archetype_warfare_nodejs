@@ -12,7 +12,7 @@ import Attribute from './AttributeModel.js';
 import SummonMechanic from './SummonMechanicModel.js';
 import CardStatus from './CardStatusModel.js';
 import ArchetypeType from './ArchetypeTypeModel.js';
-import ArchetypeAttribute from './ArchetypeAttributeModeljs';
+import ArchetypeAttribute from './ArchetypeAttributeModel.js';
 import ArchetypeSummonMechanic from './ArchetypeSummonMechanicModel.js';
 
 // Relations Banlist
@@ -35,6 +35,11 @@ BanlistArchetypeCard.belongsTo(Card, {
 BanlistArchetypeCard.belongsTo(Archetype, {
     foreignKey: 'archetype_id',
     as: 'archetype'
+});
+
+BanlistArchetypeCard.belongsTo(CardStatus, {
+    foreignKey: 'card_status_id',
+    as: 'card_status'
 });
 
 // Relations Card
@@ -136,33 +141,65 @@ Role.hasMany(User, {
     as: 'users'
 });
 
+// Relations CardStatus
+CardStatus.hasMany(BanlistArchetypeCard, {
+    foreignKey: 'card_status_id',
+    as: 'banlist_entries'
+});
+
 // Associations ArchetypeType
-Archetype.hasMany(ArchetypeType, { foreignKey: 'archetype_id' });
-ArchetypeType.belongsTo(Archetype, { foreignKey: 'archetype_id' });
-CardType.hasMany(ArchetypeType, { foreignKey: 'type_id' });
-ArchetypeType.belongsTo(CardType, { foreignKey: 'type_id' });
+Archetype.hasMany(ArchetypeType, {
+    foreignKey: 'archetype_id',
+    as: 'archetype_types'
+});
+ArchetypeType.belongsTo(Archetype, {
+    foreignKey: 'archetype_id',
+    as: 'archetype'
+});
+CardType.hasMany(ArchetypeType, {
+    foreignKey: 'type_id',
+    as: 'archetype_types'
+});
+ArchetypeType.belongsTo(CardType, {
+    foreignKey: 'type_id',
+    as: 'card_type'
+});
 
 // Associations ArchetypeAttribute
-Archetype.hasMany(ArchetypeAttribute, { foreignKey: 'archetype_id' });
-ArchetypeAttribute.belongsTo(Archetype, { foreignKey: 'archetype_id' });
-Attribute.hasMany(ArchetypeAttribute, { foreignKey: 'attribute_id' });
-ArchetypeAttribute.belongsTo(Attribute, { foreignKey: 'attribute_id' });
+Archetype.hasMany(ArchetypeAttribute, {
+    foreignKey: 'archetype_id',
+    as: 'archetype_attributes'
+});
+ArchetypeAttribute.belongsTo(Archetype, {
+    foreignKey: 'archetype_id',
+    as: 'archetype'
+});
+Attribute.hasMany(ArchetypeAttribute, {
+    foreignKey: 'attribute_id',
+    as: 'archetype_attributes'
+});
+ArchetypeAttribute.belongsTo(Attribute, {
+    foreignKey: 'attribute_id',
+    as: 'attribute'
+});
 
 // Associations ArchetypeSummonMechanic
-Archetype.hasMany(ArchetypeSummonMechanic, { foreignKey: 'archetype_id' });
-ArchetypeSummonMechanic.belongsTo(Archetype, { foreignKey: 'archetype_id' });
-SummonMechanic.hasMany(ArchetypeSummonMechanic, { foreignKey: 'summonmechanic_id' });
-ArchetypeSummonMechanic.belongsTo(SummonMechanic, { foreignKey: 'summonmechanic_id' });
-
-// Associations BanlistArchetypeCard
-Banlist.hasMany(BanlistArchetypeCard, { foreignKey: 'banlist_id' });
-BanlistArchetypeCard.belongsTo(Banlist, { foreignKey: 'banlist_id' });
-Archetype.hasMany(BanlistArchetypeCard, { foreignKey: 'archetype_id' });
-BanlistArchetypeCard.belongsTo(Archetype, { foreignKey: 'archetype_id' });
-Card.hasMany(BanlistArchetypeCard, { foreignKey: 'card_id' });
-BanlistArchetypeCard.belongsTo(Card, { foreignKey: 'card_id' });
-CardStatus.hasMany(BanlistArchetypeCard, { foreignKey: 'card_status_id' });
-BanlistArchetypeCard.belongsTo(CardStatus, { foreignKey: 'card_status_id' });
+Archetype.hasMany(ArchetypeSummonMechanic, {
+    foreignKey: 'archetype_id',
+    as: 'archetype_summon_mechanics'
+});
+ArchetypeSummonMechanic.belongsTo(Archetype, {
+    foreignKey: 'archetype_id',
+    as: 'archetype'
+});
+SummonMechanic.hasMany(ArchetypeSummonMechanic, {
+    foreignKey: 'summonmechanic_id',
+    as: 'archetype_summon_mechanics'
+});
+ArchetypeSummonMechanic.belongsTo(SummonMechanic, {
+    foreignKey: 'summonmechanic_id',
+    as: 'summon_mechanic'
+});
 
 export {
     Banlist,

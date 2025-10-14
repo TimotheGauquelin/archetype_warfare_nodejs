@@ -2,10 +2,10 @@ import { Router } from 'express';
 import CardController from '../controllers/CardController.js';
 const router = Router();
 
-router.get('/search', (request, response) => CardController.searchCards(request, response));
+router.get('/search', (request, response, next) => CardController.searchCards(request, response, next));
 
 //
 
-router.post('/', (request, response) => CardController.addCards(request, response))
+router.post('/', (request, response, next) => CardController.addCards(request, response, next));
 
 export default router;

@@ -1,11 +1,11 @@
-import { Type, Archetype } from '../models/relations.js';
+import { Type } from '../models/relations.js';
 
 class TypeService {
     static async getTypes(next) {
         try {
-            return Type.findAll()
+            return Type.findAll();
         } catch (error) {
-            next(error)
+            next(error);
         }
     }
 }

@@ -1,8 +1,8 @@
 # On utilise Node.js version 20 avec une image légère (alpine)
-FROM node:20-alpine
+FROM node:22-alpine AS builder
 
 # On définit le dossier de travail dans le conteneur
-WORKDIR /app
+WORKDIR /usr/src/
 
 # On copie juste les fichiers package.json et package-lock.json
 # C'est comme si tu copiais uniquement la liste des ingrédients d'une recette
@@ -10,7 +10,7 @@ COPY package*.json ./
 
 # On installe les dépendances
 # C'est comme si tu allais chercher tous les ingrédients dont tu as besoin
-RUN npm install
+RUN npm install --silent --legacy-peer-deps
 
 # On copie le fichier de configuration nodemon
 COPY nodemon.json ./

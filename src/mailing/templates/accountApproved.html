@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compte Approuvé - Archetype Warfare</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: #667eea;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 300;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .success-message {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+
+        .success-message h2 {
+            margin: 0 0 10px 0;
+            color: #155724;
+        }
+
+        .user-info {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+
+        .user-info h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .label {
+            font-weight: 600;
+            color: #6c757d;
+        }
+
+        .value {
+            color: #495057;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            margin: 20px 0;
+            transition: transform 0.2s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Compte Approuvé !</h1>
+        </div>
+
+        <div class="content">
+            <div class="success-message">
+                <h2>Félicitations !</h2>
+                <p>Votre compte a été approuvé par un administrateur. Vous pouvez maintenant vous connecter et accéder à
+                    toutes les fonctionnalités d'Archetype Warfare.</p>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="{{loginUrl}}" class="#667eea">Se connecter maintenant</a>
+            </div>
+
+            <p style="color: #6c757d; font-size: 14px; text-align: center;">
+                Si vous avez des questions ou besoin d'aide, n'hésitez pas à contacter notre équipe de support.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>© 2024 Archetype Warfare. Tous droits réservés.</p>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,4 +1,4 @@
-import { DataTypes, Model } from "sequelize";
+import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/Sequelize.js';
 
 /**
@@ -6,7 +6,7 @@ import sequelize from '../config/Sequelize.js';
  * @class Card
  * @extends {Model}
  */
-class Card extends Model {}
+class Card extends Model { }
 
 Card.init(
     {
@@ -40,6 +40,14 @@ Card.init(
             type: DataTypes.INTEGER,
             allowNull: true,
             defaultValue: 0
+        },
+        attribute: {
+            type: DataTypes.STRING(15),
+            allowNull: true
+        },
+        card_type: {
+            type: DataTypes.STRING(50),
+            allowNull: true
         }
     },
     {

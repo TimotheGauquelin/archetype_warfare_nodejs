@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscription en attente d'approbation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            max-width: 150px;
+            height: auto;
+        }
+        .title {
+            color: #2c3e50;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+        .content {
+            margin-bottom: 30px;
+        }
+        .message {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        .highlight {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/assets/img/logo.png" alt="Logo" class="logo">
+            <h1 class="title">Inscription en cours de traitement</h1>
+            <p class="subtitle">Votre compte est en attente d'approbation</p>
+        </div>
+
+        <div class="content">
+            <p>Bonjour <strong>{{username}}</strong>,</p>
+            
+            <p>Nous avons bien reçu votre demande d'inscription sur notre plateforme.</p>
+            
+            <div class="message">
+                <p><span class="highlight">Votre compte est actuellement en attente d'approbation par un administrateur.</span></p>
+                <p>Cette étape est nécessaire pour garantir la sécurité de notre communauté. Vous recevrez un email de confirmation dès que votre compte sera approuvé.</p>
+            </div>
+
+            <p>Détails de votre inscription :</p>
+            <ul>
+                <li><strong>Nom d'utilisateur :</strong> {{username}}</li>
+                <li><strong>Email :</strong> {{email}}</li>
+                <li><strong>Date d'inscription :</strong> {{registrationDate}}</li>
+            </ul>
+
+            <p>Merci de votre patience. Nous traiterons votre demande dans les plus brefs délais.</p>
+        </div>
+
+        <div class="footer">
+            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
+            <p>&copy; 2024 Archetype Warfare. Tous droits réservés.</p>
+        </div>
+    </div>
+</body>
+</html> 
