@@ -20,6 +20,9 @@ services:
       - JWT_SECRET=SOTYvW+Ed63I2iCfehnBbg==
       - EMAIL_FROM_EMAILSENDER=timothegauquelin@gmail.com
       - PASSWORD_FROM_EMAILSENDER=cpygwfgxyvyaumps
+      - CLOUDINARY_CLOUD_NAME=dqfuwqmql
+      - CLOUDINARY_API_KEY=797713558548426
+      - CLOUDINARY_API_SECRET=a9ct3UXKhQ3fECdRgUufmP0Mcv0
     volumes:
       - ./config:/usr/src/config
       - ./database:/usr/src/database

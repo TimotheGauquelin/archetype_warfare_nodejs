@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS archetype (
     slider_info TEXT,
     is_highlighted BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    slider_img_url TEXT,
+    card_img_url TEXT,
     in_tcg_date DATE NOT NULL,
     in_aw_date DATE NOT NULL,
     comment TEXT DEFAULT NULL,

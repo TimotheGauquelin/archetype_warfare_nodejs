@@ -27,6 +27,20 @@ Archetype.init({
         type: DataTypes.TEXT,
         allowNull: false
     },
+    slider_img_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        validate: {
+            isUrl: true
+        }
+    },
+    card_img_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        validate: {
+            isUrl: true
+        }
+    },
     is_highlighted: {
         type: DataTypes.BOOLEAN,
         allowNull: true,

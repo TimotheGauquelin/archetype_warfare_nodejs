@@ -12,6 +12,7 @@ import cardRoutes from './routes/CardRoute.js';
 import cardTypeRoutes from './routes/CardTypeRoute.js';
 import cardStatusRoutes from './routes/CardStatusRoute.js';
 import userRoutes from './routes/UserRoute.js';
+import uploadImageRoutes from './routes/UploadImageRoute.js';
 import { ErrorHandler } from './middlewares/errorHandler.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -55,5 +56,6 @@ apiRouter.use('/cards', cardRoutes);
 apiRouter.use('/card-types', cardTypeRoutes);
 apiRouter.use('/card-statuses', cardStatusRoutes);
 apiRouter.use('/users', userRoutes);
+apiRouter.use('/images', uploadImageRoutes);
 
 export default app;

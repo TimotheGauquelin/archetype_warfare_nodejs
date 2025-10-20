@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { Archetype, Era, Type, Attribute, SummonMechanic, Card, Banlist, CardStatus, BanlistArchetypeCard } from '../models/relations.js';
 import { CustomError } from '../errors/CustomError.js';
 import sequelize from '../config/Sequelize.js';
+import UploadImageService from './UploadImageService.js';
 
 class ArchetypeService {
     static async searchArchetypes(request, response, next) {
@@ -389,7 +390,9 @@ class ArchetypeService {
                 attributes = [], // Array d'objets {id, label}
                 types = [], // Array d'objets {id, label}
                 summon_mechanics = [], // Array d'objets {id, label}
-                cards = [] // Array d'objets BanlistArchetypeCard
+                cards = [], // Array d'objets BanlistArchetypeCard
+                slider_img_url,
+                card_img_url
             } = request.body;
 
             if (!name || !main_info || !slider_info || !in_tcg_date || !in_aw_date || !era) {
@@ -537,7 +540,31 @@ class ArchetypeService {
                 }
             }
 
-            // Création de l'archétype avec transaction
+            // Upload de l'image slider si fournie
+            let uploadedSliderUrl = null;
+            let uploadedCardUrl = null;
+            if (slider_img_url) {
+                try {
+                    uploadedSliderUrl = await UploadImageService.uploadImage(slider_img_url, "jumbotron_archetypes");
+                } catch (uploadError) {
+                    return response.status(400).json({
+                        success: false,
+                        message: 'Erreur lors de l\'upload de l\'image slider: ' + uploadError.message
+                    });
+                }
+            }
+
+            if (card_img_url) {
+                console.log("================card_img_url", card_img_url);
+                try {
+                    uploadedCardUrl = await UploadImageService.uploadImage(card_img_url, "introduction_archetypes");
+                } catch (uploadError) {
+                    return response.status(400).json({
+                        success: false,
+                        message: 'Erreur lors de l\'upload de l\'image carte: ' + uploadError.message
+                    });
+                }
+            }
             const result = await sequelize.transaction(async (t) => {
                 // Création de l'archétype
                 const newArchetype = await Archetype.create({
@@ -546,6 +573,8 @@ class ArchetypeService {
                     slider_info,
                     is_highlighted,
                     is_active,
+                    slider_img_url: uploadedSliderUrl,
+                    card_img_url: uploadedCardUrl,
                     in_tcg_date,
                     in_aw_date,
                     comment,
