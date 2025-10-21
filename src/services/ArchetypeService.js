@@ -3,6 +3,7 @@ import { Archetype, Era, Type, Attribute, SummonMechanic, Card, Banlist, CardSta
 import { CustomError } from '../errors/CustomError.js';
 import sequelize from '../config/Sequelize.js';
 import UploadImageService from './UploadImageService.js';
+import { extractImageIdFromUrl } from '../utils/image.js';
 
 class ArchetypeService {
     static async searchArchetypes(request, response, next) {
@@ -180,11 +181,14 @@ class ArchetypeService {
         }
     }
 
-    static async getFiveMostFamousArchetypes(next) {
+    static async getEightMostFamousArchetypes(next) {
         try {
             return Archetype.findAll({
+                where: {
+                    is_active: true
+                },
                 order: [['popularity_poll', 'DESC']],
-                limit: 5,
+                limit: 8,
                 attributes: {
                     exclude: ['era_id']
                 },
@@ -200,6 +204,9 @@ class ArchetypeService {
     static async getEightMostRecentArchetypes(next) {
         try {
             return Archetype.findAll({
+                where: {
+                    is_active: true
+                },
                 order: [['in_aw_date', 'DESC']],
                 limit: 8,
                 attributes: {
@@ -948,10 +955,43 @@ class ArchetypeService {
     // DELETE
     static async deleteArchetype(id, next) {
         try {
-            await Archetype.destroy({
-                where: { id }
+            const archetypeToDelete = await Archetype.findByPk(id, {
+                attributes: ['id', 'name', 'slider_img_url', 'card_img_url']
             });
+
+            if (!archetypeToDelete) {
+                throw new CustomError('Archétype non trouvé', 404);
+            }
+
+            const sliderUrlId = extractImageIdFromUrl(archetypeToDelete.slider_img_url);
+            const cardUrlId = extractImageIdFromUrl(archetypeToDelete.card_img_url);
+
+            if (sliderUrlId) {
+                await UploadImageService.deleteImageFromCloudinary(sliderUrlId);
+            }
+            if (cardUrlId) {
+                await UploadImageService.deleteImageFromCloudinary(cardUrlId);
+            }
+            // Supprimer l'archétype de la base de données avec transaction
+            await sequelize.transaction(async (t) => {
+                // Supprimer d'abord les relations
+                await BanlistArchetypeCard.destroy({
+                    where: { archetype_id: id },
+                    transaction: t
+                });
+
+                // Supprimer l'archétype
+                await Archetype.destroy({
+                    where: { id },
+                    transaction: t
+                });
+            })
+
+
+            return true
+
         } catch (error) {
+            console.error('Erreur lors de la suppression de l\'archétype:', error);
             next(error);
         }
     }

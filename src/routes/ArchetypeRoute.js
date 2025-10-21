@@ -5,7 +5,7 @@ const router = Router();
 // GET
 
 router.get('/getFiveRandomHighlightedArchetypes', (request, response, next) => ArchetypeController.getFiveRandomHighlightedArchetypes(request, response, next));
-router.get('/getFiveMostFamousArchetypes', (request, response, next) => ArchetypeController.getFiveMostFamousArchetypes(request, response, next));
+router.get('/getEightMostFamousArchetypes', (request, response, next) => ArchetypeController.getEightMostFamousArchetypes(request, response, next));
 router.get('/getEightMostRecentArchetypes', (request, response, next) => ArchetypeController.getEightMostRecentArchetypes(request, response, next));
 router.get('/search', (request, response, next) => ArchetypeController.searchArchetypes(request, response, next));
 router.get('/random', (request, response, next) => ArchetypeController.getRandomArchetype(request, response, next));

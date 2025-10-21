@@ -21,9 +21,9 @@ class ArchetypeController {
         }
     }
 
-    async getFiveMostFamousArchetypes(request, response, next) {
+    async getEightMostFamousArchetypes(request, response, next) {
         try {
-            const archetypes = await ArchetypeService.getFiveMostFamousArchetypes(request, response, next);
+            const archetypes = await ArchetypeService.getEightMostFamousArchetypes(request, response, next);
             return response.status(200).json(archetypes);
         } catch (error) {
             next(error);
@@ -164,6 +164,8 @@ class ArchetypeController {
         const { archetypeId } = request.params;
 
         try {
+
+            console.log("CONTROLLER ====== archetypeId", archetypeId);
 
             const isExist = Archetype.findByPk(archetypeId);
 

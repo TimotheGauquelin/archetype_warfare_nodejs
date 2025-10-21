@@ -175,4 +175,36 @@ const getAllImagesFromFolder = async (request, response, next) => {
     }
 };
 
-export default { uploadImage, getAllImages, getAllImagesWithPagination, getAllImagesFromFolder };
+const deleteImageFromCloudinary = async (imageId) => {
+    console.log("=== TENTATIVE DE SUPPRESSION ===");
+    console.log("ImageId:", imageId);
+
+    try {
+        return new Promise((resolve, reject) => {
+            // Options pour la suppression
+            const deleteOptions = {
+                resource_type: 'image', // Spécifier le type de ressource
+                invalidate: true // Invalider le cache CDN
+            };
+
+            cloudinary.uploader.destroy(imageId, deleteOptions, (error, result) => {
+                console.log("=== RÉSULTAT SUPPRESSION ===");
+                console.log("Error:", error);
+                console.log("Result:", result);
+
+                if (error) {
+                    console.error("Erreur Cloudinary:", error);
+                    reject(error);
+                } else {
+                    console.log("Suppression réussie:", result);
+                    resolve(result);
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Erreur catch:', error);
+        throw new Error('Erreur lors de la suppression de l\'image: ' + error.message);
+    }
+};
+
+export default { uploadImage, getAllImages, getAllImagesWithPagination, getAllImagesFromFolder, deleteImageFromCloudinary };
