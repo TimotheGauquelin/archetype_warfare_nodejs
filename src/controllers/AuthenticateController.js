@@ -70,7 +70,6 @@ class AuthenticateController {
 
     async requestNewPassword(request, result, next) {
         try {
-            console.log('requestNewPassword', request.body);
             const { email } = request.body;
 
             if (!email) {
