@@ -9,10 +9,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export const sendPasswordResetEmail = async (user, resetToken, resetLink, next) => {
-    console.log('iciiiii');
     const templatePath = path.join(__dirname, 'templates', 'resetPassword.html');
     let htmlContent = fs.readFileSync(templatePath, 'utf8');
-    
+
     // Remplacer les variables dans le template
     htmlContent = htmlContent.replace(/{{resetLink}}/g, resetLink);
 

@@ -381,6 +381,12 @@ class ArchetypeService {
 
     // POST
 
+    /**
+     * Ajoute un archétype avec toutes ses relations
+     * @param {Object} request - Requête Express
+     * @param {Object} response - Réponse Express
+     * @param {Function} next - Fonction next Express
+     */
     static async addArchetype(request, response) {
         try {
             const {
@@ -402,100 +408,10 @@ class ArchetypeService {
                 card_img_url
             } = request.body;
 
-            if (!name || !main_info || !slider_info || !in_tcg_date || !in_aw_date || !era) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'Les champs Nom, Information principale, Information slider, Date d\'apparition TCG, Date d\'apparition AW, Points de popularité, Ere sont obligatoires'
-                });
-            }
-
-            if (!summon_mechanics || summon_mechanics.length === 0) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'Au moins une méthode d\'invocation est obligatoire'
-                });
-            }
-
-            if (!types || types.length === 0) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'Au moins un type est obligatoire'
-                });
-            }
-
-            if (!attributes || attributes.length === 0) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'Au moins un attribut est obligatoire'
-                });
-            }
-
-            const existingArchetype = await Archetype.findOne({
-                where: { name: name }
-            });
-
-            if (existingArchetype) {
-                return response.status(409).json({
-                    success: false,
-                    message: 'Un archétype avec ce nom existe déjà'
-                });
-            }
-
-            const existingEra = await Era.findByPk(era.id);
-            if (!existingEra) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'L\'ère spécifiée n\'existe pas'
-                });
-            }
-
-            // Extraction des IDs des attributs
+            // Extraction des IDs des attributs, des types et des summon mechanics
             const attributeIds = attributes.map(attr => attr.id || attr);
-
-            // Vérification des attributs
-            if (attributeIds.length > 0) {
-                const existingAttributes = await Attribute.findAll({
-                    where: { id: attributeIds }
-                });
-                if (existingAttributes.length !== attributeIds.length) {
-                    return response.status(400).json({
-                        success: false,
-                        message: 'Certains attributs spécifiés n\'existent pas'
-                    });
-                }
-            }
-
-            // Extraction des IDs des types
             const typeIds = types.map(type => type.id || type);
-
-            // Vérification des types
-            if (typeIds.length > 0) {
-                const existingTypes = await Type.findAll({
-                    where: { id: typeIds }
-                });
-                if (existingTypes.length !== typeIds.length) {
-                    return response.status(400).json({
-                        success: false,
-                        message: 'Certains types spécifiés n\'existent pas'
-                    });
-                }
-            }
-
-            // Extraction des IDs des summon mechanics
             const summonMechanicIds = summon_mechanics.map(sm => sm.id || sm);
-
-            // Vérification des summon mechanics
-            if (summonMechanicIds.length > 0) {
-                const existingSummonMechanics = await SummonMechanic.findAll({
-                    where: { id: summonMechanicIds }
-                });
-                if (existingSummonMechanics.length !== summonMechanicIds.length) {
-                    return response.status(400).json({
-                        success: false,
-                        message: 'Certaines summon mechanics spécifiées n\'existent pas'
-                    });
-                }
-            }
 
             // Vérification des cartes de banlist
             const banlistCardErrors = [];
@@ -550,6 +466,7 @@ class ArchetypeService {
             // Upload de l'image slider si fournie
             let uploadedSliderUrl = null;
             let uploadedCardUrl = null;
+
             if (slider_img_url) {
                 try {
                     uploadedSliderUrl = await UploadImageService.uploadImage(slider_img_url, "jumbotron_archetypes");
@@ -562,7 +479,6 @@ class ArchetypeService {
             }
 
             if (card_img_url) {
-                console.log("================card_img_url", card_img_url);
                 try {
                     uploadedCardUrl = await UploadImageService.uploadImage(card_img_url, "introduction_archetypes");
                 } catch (uploadError) {
@@ -572,8 +488,9 @@ class ArchetypeService {
                     });
                 }
             }
+
             const result = await sequelize.transaction(async (t) => {
-                // Création de l'archétype
+
                 const newArchetype = await Archetype.create({
                     name,
                     main_info,
@@ -679,98 +596,33 @@ class ArchetypeService {
      * @param {Function} next - Fonction next Express
      */
     static async updateArchetype(request, response) {
+
+        const {
+            id,
+            name,
+            main_info,
+            slider_info,
+            is_highlighted,
+            is_active,
+            in_tcg_date,
+            in_aw_date,
+            comment,
+            popularity_poll,
+            era, // Peut être un objet {id, label} ou un simple ID
+            attributes = [], // Array d'objets {id, label}
+            types = [], // Array d'objets {id, label}
+            summon_mechanics = [], // Array d'objets {id, label}
+            cards = [] // Array d'objets BanlistArchetypeCard
+        } = request.body;
+
         try {
-            const {
-                id,
-                name,
-                main_info,
-                slider_info,
-                is_highlighted,
-                is_active,
-                in_tcg_date,
-                in_aw_date,
-                comment,
-                popularity_poll,
-                era, // Peut être un objet {id, label} ou un simple ID
-                attributes = [], // Array d'objets {id, label}
-                types = [], // Array d'objets {id, label}
-                summon_mechanics = [], // Array d'objets {id, label}
-                cards = [] // Array d'objets BanlistArchetypeCard
-            } = request.body;
 
-            // Validation des données obligatoires
-            if (!id || !name || !main_info || !slider_info || !in_tcg_date || !in_aw_date || !era.id) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'Les champs id, name, main_info, slider_info, in_tcg_date, in_aw_date et era_id sont obligatoires'
-                });
-            }
-
-            // Vérification de l'existence de l'archétype
-            const existingArchetype = await Archetype.findByPk(id);
-            if (!existingArchetype) {
-                return response.status(404).json({
-                    success: false,
-                    message: 'Archétype non trouvé'
-                });
-            }
-
-            // Vérification de l'existence de l'era
-            const era_id = await Era.findByPk(era.id);
-            if (!era_id) {
-                return response.status(400).json({
-                    success: false,
-                    message: 'L\'era spécifiée n\'existe pas'
-                });
-            }
-
-            // Extraction des IDs des attributs
+            // Extraction des IDs des attributs, des types et des summon mechanics
             const attributeIds = attributes.map(attr => attr.id || attr);
-
-            // Vérification des attributs
-            if (attributeIds.length > 0) {
-                const existingAttributes = await Attribute.findAll({
-                    where: { id: attributeIds }
-                });
-                if (existingAttributes.length !== attributeIds.length) {
-                    return response.status(400).json({
-                        success: false,
-                        message: 'Certains attributs spécifiés n\'existent pas'
-                    });
-                }
-            }
-
-            // Extraction des IDs des types
             const typeIds = types.map(type => type.id || type);
-
-            // Vérification des types
-            if (typeIds.length > 0) {
-                const existingTypes = await Type.findAll({
-                    where: { id: typeIds }
-                });
-                if (existingTypes.length !== typeIds.length) {
-                    return response.status(400).json({
-                        success: false,
-                        message: 'Certains types spécifiés n\'existent pas'
-                    });
-                }
-            }
-
-            // Extraction des IDs des summon mechanics
             const summonMechanicIds = summon_mechanics.map(sm => sm.id || sm);
 
-            // Vérification des summon mechanics
-            if (summonMechanicIds.length > 0) {
-                const existingSummonMechanics = await SummonMechanic.findAll({
-                    where: { id: summonMechanicIds }
-                });
-                if (existingSummonMechanics.length !== summonMechanicIds.length) {
-                    return response.status(400).json({
-                        success: false,
-                        message: 'Certaines summon mechanics spécifiées n\'existent pas'
-                    });
-                }
-            }
+            const existingArchetype = await Archetype.findByPk(id);
 
             // Vérification des cartes de banlist
             const banlistCardErrors = [];
@@ -847,7 +699,7 @@ class ArchetypeService {
 
             // Mise à jour de l'archétype avec transaction
             const result = await sequelize.transaction(async (t) => {
-                // Mise à jour des données de base de l'archétype
+
                 await existingArchetype.update({
                     name,
                     main_info,
@@ -935,11 +787,7 @@ class ArchetypeService {
                 return updatedArchetype;
             });
 
-            return response.status(200).json({
-                success: true,
-                message: 'Archétype mis à jour avec succès',
-                archetype: result
-            });
+            return true;
 
         } catch (error) {
             console.error('Erreur lors de la mise à jour de l\'archétype:', error);
