@@ -12,8 +12,9 @@
   "scripts": {
     "start:clean": "start.bat",
     "test": "jest",
-    "start": "nodemon -r dotenv/config src/server.js",
+    "start": "node -r dotenv/config src/server.js",
     "dev": "npm run db:seed && nodemon --config nodemon.json src/server.js",
+    "render": "node -r dotenv/config src/server.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "deploy-commands": "node src/discord/deploy-commands.js",
