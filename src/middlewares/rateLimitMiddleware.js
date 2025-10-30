@@ -9,9 +9,9 @@ export const loginLimiter = rateLimit({
 });
 
 export const registerLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 3,
-    message: 'Trop d\'inscriptions, réessayez dans 1 heure',
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Trop de tentatives d\'inscriptions, réessayez dans 15 minutes',
 });
 
 export const limiter = rateLimit({
