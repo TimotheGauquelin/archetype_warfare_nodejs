@@ -21,16 +21,6 @@ class AuthenticateController {
                 }]
             });
 
-            // Debug temporaire pour vérifier les rôles
-            if (user) {
-                console.log('Connexion utilisateur:', {
-                    id: user.id,
-                    email: user.email,
-                    roles: user.roles?.map(r => r.label) || [],
-                    rolesCount: user.roles?.length || 0
-                });
-            }
-
             if (!user) {
                 throw new CustomError('Votre email ou votre mot de passe ne correspondent pas', 400);
             }
@@ -47,6 +37,10 @@ class AuthenticateController {
 
             if (!user.is_active) {
                 throw new CustomError('Votre compte doit être validé par un administrateur', 400);
+            }
+
+            if (!user.has_accepted_terms_and_conditions) {
+                throw new CustomError('Vous devez accepter les conditions d\'utilisation', 400);
             }
 
             const token = await User.generateToken(user, next);
