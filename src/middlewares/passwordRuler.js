@@ -30,7 +30,7 @@ export const passwordRuler = (req, res, next) => {
 
     if (errors.length > 0) {
         const errorMessage = `Le mot de passe doit répondre aux critères suivants :\n- ${errors.join('\n- ')}`;
-        throw new CustomError(errorMessage, 400);
+        throw new CustomError(errorMessage, 400, true);
     }
 
     next();

@@ -11,7 +11,6 @@ export const sendWaitingApprovalEmail = async (user, next) => {
         const templatePath = path.join(__dirname, 'templates', 'waitingApproval.html');
         let htmlContent = fs.readFileSync(templatePath, 'utf8');
 
-        // Remplacer les variables dans le template
         htmlContent = htmlContent
             .replace(/{{username}}/g, user.username || 'Utilisateur')
             .replace(/{{email}}/g, user.email)
@@ -31,7 +30,7 @@ export const sendWaitingApprovalEmail = async (user, next) => {
         };
 
         await sendMail(mailOptions);
-        
+
         return { success: true, message: 'Email d\'attente envoyé avec succès' };
     } catch (error) {
         console.error('Erreur lors de l\'envoi de l\'email d\'attente:', error);

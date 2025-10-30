@@ -133,16 +133,21 @@ class AuthenticateController {
 
     async register(request, result, next) {
         try {
-            const { email, password, username } = request.body;
+            const { email, password, username, has_accepted_terms_and_conditions } = request.body;
 
             if (!email || !password) {
                 throw new CustomError('Email et mot de passe requis', 400);
             }
 
+            if (!has_accepted_terms_and_conditions) {
+                throw new CustomError('Vous devez accepter les conditions d\'utilisation', 400);
+            }
+
             const registrationResult = await AuthenticateService.register({
                 email,
                 password,
-                username
+                username,
+                has_accepted_terms_and_conditions
             });
 
             return result.status(201).json({

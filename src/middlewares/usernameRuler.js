@@ -1,7 +1,7 @@
 import { CustomError } from '../errors/CustomError.js';
 
 const forbiddenWords = ['bite', 'enculé', 'connard', 'salaud', 'bâtard', 'putain', 'merde',
-    'trou du cul', 'couillon', 'connasse', 'fils de pute', 'sale con',
+    'trou du cul', 'couillon', 'connasse', 'fils de pute', 'sale con', 'pétasse', 'couille',
     'enflure', 'tête de noeud', 'abruti', 'tocard', 'crétin', 'imbécile',
     'tapette', 'clochard', 'dick', 'bastard', 'shithead', 'cunt', 'asshole',
     'prick', 'bitch', 'motherfucker', 'son of a bitch', 'douchebag', 'idiot',
@@ -20,8 +20,8 @@ export const usernameRuler = (req, res, next) => {
         errors.push('Au moins 3 caractères.');
     }
 
-    if (username.length > 20) {
-        errors.push('Maximum 20 caractères.');
+    if (username.length > 30) {
+        errors.push('Maximum 30 caractères.');
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
@@ -42,7 +42,7 @@ export const usernameRuler = (req, res, next) => {
 
     if (errors.length > 0) {
         const errorMessage = `Le nom d'utilisateur doit répondre aux critères suivants :\n- ${errors.join('\n- ')}`;
-        throw new CustomError(errorMessage, 400);
+        throw new CustomError(errorMessage, 400, true);
     }
 
     next();

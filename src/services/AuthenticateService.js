@@ -20,15 +20,9 @@ class AuthenticateService {
                 is_active: false
             }, { transaction });
 
-            await transaction.commit();
+            await sendWaitingApprovalEmail(user);
 
-            // Envoyer l'email d'attente d'approbation
-            try {
-                await sendWaitingApprovalEmail(user);
-            } catch (emailError) {
-                console.error('Erreur lors de l\'envoi de l\'email:', emailError);
-                // On ne fait pas échouer l'inscription si l'email échoue
-            }
+            await transaction.commit();
 
             return {
                 success: true,

@@ -10,11 +10,18 @@ services:
       - FRONTEND_URL=http://localhost:8888
       - API_PORT=1337
       - DATABASE_CLIENT=postgres
-      - DATABASE_HOST=dpg-d3vs35i4d50c73e4pop0-a
+      - DATABASE_HOST=database
       - DATABASE_PORT=5432
-      - DATABASE_NAME=aw_8vps
+      - DATABASE_NAME=aw
       - DATABASE_USER=admin
-      - DATABASE_PASSWORD=uSZjynA29y8Krk78D3i7EwT5KmSNPZbI
+      - DATABASE_PASSWORD=Azerty123!
+      # - API_PORT=1337
+      # - DATABASE_CLIENT=postgres
+      # - DATABASE_HOST=dpg-d3vs35i4d50c73e4pop0-a
+      # - DATABASE_PORT=5432
+      # - DATABASE_NAME=aw_8vps
+      # - DATABASE_USER=admin
+      # - DATABASE_PASSWORD=uSZjynA29y8Krk78D3i7EwT5KmSNPZbI
       - DATABASE_SSL=false
       - API_TOKEN_SALT=baATgxx9waBHIYkwv87lWg==
       - JWT_SECRET=SOTYvW+Ed63I2iCfehnBbg==
