@@ -3,11 +3,14 @@ import { CustomError } from '../errors/CustomError.js';
 
 export const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
+    console.log("authHeader", authHeader)
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
         throw new CustomError('Token d\'accès requis', 401);
     }
+
+    console.log("token", token)
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -28,6 +31,9 @@ export const requireRole = (requiredRoles) => {
             if (!req.user) {
                 throw new CustomError('Utilisateur non authentifié', 401);
             }
+
+            console.log("req.user", req.user)
+            console.log("requiredRoles", requiredRoles)
 
             if (!req.user.roles || !Array.isArray(req.user.roles)) {
                 throw new CustomError('Aucun rôle attribué à l\'utilisateur', 403);

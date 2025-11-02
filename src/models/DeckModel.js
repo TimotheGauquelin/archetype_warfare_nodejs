@@ -6,7 +6,7 @@ import sequelize from '../config/Sequelize.js';
  * @class Deck
  * @extends {Model}
  */
-class Deck extends Model {}
+class Deck extends Model { }
 
 Deck.init({
     id: {
@@ -14,13 +14,21 @@ Deck.init({
         primaryKey: true,
         autoIncrement: true
     },
-    name: {
+    label: {
         type: DataTypes.STRING,
         allowNull: false
     },
-    description: {
+    comment: {
         type: DataTypes.TEXT,
         allowNull: false
+    },
+    archetype_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'archetype',
+            key: 'id'
+        }
     },
     user_id: {
         type: DataTypes.INTEGER,

@@ -9,6 +9,7 @@ router.get('/getEightMostFamousArchetypes', (request, response, next) => Archety
 router.get('/getEightMostRecentArchetypes', (request, response, next) => ArchetypeController.getEightMostRecentArchetypes(request, response, next));
 router.get('/search', (request, response, next) => ArchetypeController.searchArchetypes(request, response, next));
 router.get('/random', (request, response, next) => ArchetypeController.getRandomArchetype(request, response, next));
+router.get('/allNames', (request, response, next) => ArchetypeController.getAllArchetypeNames(request, response, next));
 router.get('/:id', (request, response, next) => ArchetypeController.getArchetypeById(request, response, next));
 // ADD
 

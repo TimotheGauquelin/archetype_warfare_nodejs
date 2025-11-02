@@ -59,6 +59,15 @@ class ArchetypeController {
         }
     }
 
+    async getAllArchetypeNames(request, response, next) {
+        try {
+            const archetypeNames = await ArchetypeService.getAllArchetypeNames(next);
+            return response.status(200).json(archetypeNames);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     // ADD
 
     async addArchetype(request, response, next) {

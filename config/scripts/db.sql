@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS banlist (
 CREATE TABLE IF NOT EXISTS card_status (
     id SERIAL PRIMARY KEY,
     label VARCHAR(50) NOT NULL UNIQUE
+    limit INT NOT NULL UNIQUE
 );
 
 -- Table deck_card (relation many-to-many)
@@ -340,11 +341,11 @@ INSERT INTO summonmechanic (id, label) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert card_status
-INSERT INTO card_status (id, label) VALUES
-    (1, 'Forbidden'),
-    (2, 'Limited'),
-    (3, 'Semi-Limited'),
-    (4, 'Unlimited')
+INSERT INTO card_status (id, label, limit) VALUES
+    (1, 'Forbidden', 0),
+    (2, 'Limited', 1),
+    (3, 'Semi-Limited', 2),
+    (4, 'Unlimited', 3)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert card_type

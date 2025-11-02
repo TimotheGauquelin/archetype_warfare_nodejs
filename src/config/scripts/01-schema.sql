@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS banlist (
 CREATE TABLE IF NOT EXISTS card_status (
     id SERIAL PRIMARY KEY,
     label VARCHAR(50) NOT NULL UNIQUE
+    limit INT NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS deck_card (
@@ -275,11 +276,11 @@ INSERT INTO summonmechanic (id, label) VALUES
     (7, 'Pendulum Summon'),
     (8, 'Link Summon');
 
-INSERT INTO card_status (id, label) VALUES
-(1, 'Banned'),
-(2, 'Limited'),
-(3, 'Semi-Limited'),
-(4, 'Unlimited');
+INSERT INTO card_status (id, label, limit) VALUES
+(1, 'Banned', 0),
+(2, 'Limited', 1),
+(3, 'Semi-Limited', 2),
+(4, 'Unlimited', 3);
 
 INSERT INTO card_type (id, label, num_order) VALUES
 (1, 'Normal Monster', 1),

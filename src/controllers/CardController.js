@@ -22,6 +22,15 @@ class CardController {
 
         }
     }
+
+    async searchCardsByArchetypeBanlist(request, response, next) {
+        try {
+            const cards = await CardService.searchCardsByArchetypeBanlist(request, response, next);
+            return response.status(200).json(cards);
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export default new CardController();

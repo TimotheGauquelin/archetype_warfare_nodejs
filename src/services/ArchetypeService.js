@@ -298,6 +298,16 @@ class ArchetypeService {
         }
     }
 
+    static async getAllArchetypeNames(next) {
+        try {
+            return await Archetype.findAll({
+                attributes: ['id', 'name']
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     static async switchIsHighlighted(id, next) {
         try {
             const archetype = await Archetype.findByPk(id);

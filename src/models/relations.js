@@ -33,12 +33,24 @@ Role.belongsToMany(User, {
 });
 
 // Relations Deck
-Deck.hasMany(DeckCard, { foreignKey: 'deck_id' });
-DeckCard.belongsTo(Deck, { foreignKey: 'deck_id' });
+Deck.hasMany(DeckCard, {
+    foreignKey: 'deck_id',
+    as: 'deck_cards'
+});
+DeckCard.belongsTo(Deck, {
+    foreignKey: 'deck_id',
+    as: 'deck'
+});
 
 // Relations Card
-Card.hasMany(DeckCard, { foreignKey: 'card_id' });
-DeckCard.belongsTo(Card, { foreignKey: 'card_id' });
+Card.hasMany(DeckCard, {
+    foreignKey: 'card_id',
+    as: 'deck_cards'
+});
+DeckCard.belongsTo(Card, {
+    foreignKey: 'card_id',
+    as: 'card'
+});
 
 // Relations Archetype
 Archetype.belongsTo(Era, { foreignKey: 'era_id', as: 'era' });

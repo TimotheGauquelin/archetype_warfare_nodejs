@@ -6,25 +6,22 @@ import sequelize from '../config/Sequelize.js';
  * @class DeckCard
  * @extends {Model}
  */
-class DeckCard extends Model {}
+class DeckCard extends Model { }
 
 DeckCard.init({
-    id: {
-        type: DataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true
-    },
     deck_id: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        primaryKey: true,
         references: {
             model: 'deck',
             key: 'id'
         }
     },
     card_id: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
+        type: DataTypes.STRING(8),
+        allowNull: false,
+        primaryKey: true,
         references: {
             model: 'card',
             key: 'id'
@@ -32,30 +29,21 @@ DeckCard.init({
     },
     quantity: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
         defaultValue: 1,
         validate: {
             min: 1,
             max: 3
         }
     },
-    created_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        defaultValue: DataTypes.NOW
-    }
 }, {
     sequelize,
     modelName: 'DeckCard',
     tableName: 'deck_card',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    timestamps: false,
+    // createdAt: 'created_at',
+    // updatedAt: 'updated_at',
+    id: false
 });
 
-export default DeckCard; 
+export default DeckCard;

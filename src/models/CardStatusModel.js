@@ -6,7 +6,7 @@ import sequelize from '../config/Sequelize.js';
  * @class CardStatus
  * @extends {Model}
  */
-class CardStatus extends Model {}
+class CardStatus extends Model { }
 
 CardStatus.init(
     {
@@ -17,6 +17,11 @@ CardStatus.init(
         },
         label: {
             type: DataTypes.STRING(50),
+            allowNull: true,
+            unique: true
+        },
+        limit: {
+            type: DataTypes.INTEGER,
             allowNull: true,
             unique: true
         }
