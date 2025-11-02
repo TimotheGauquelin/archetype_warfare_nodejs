@@ -298,7 +298,7 @@ class DeckService {
         }
     }
 
-    static async deleteDeck(id) {
+    static async deleteMyDeck(id) {
         return Deck.destroy({
             where: { id }
         });

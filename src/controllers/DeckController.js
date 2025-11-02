@@ -1,5 +1,6 @@
 import { CustomError } from '../errors/CustomError.js';
 import Archetype from '../models/ArchetypeModel.js';
+import Deck from '../models/DeckModel.js';
 import DeckService from '../services/DeckService.js';
 
 class DeckController {
@@ -93,11 +94,21 @@ class DeckController {
         }
     }
 
-    async deleteDeck(request, response, next) {
+    async deleteMyDeck(request, response, next) {
         const { id } = request.params;
         try {
-            await DeckService.deleteDeck(id);
-            return response.status(200).json({ message: 'Deck deleted successfully' });
+
+            const deck = await Deck.findByPk(id);
+            if (!deck) {
+                throw new CustomError('Le deck n\'existe pas', 404);
+            }
+
+            if (deck.dataValues.user_id !== request.user.id) {
+                throw new CustomError('Vous ne pouvez pas supprimer un deck qui ne vous appartient pas', 403);
+            }
+
+            await DeckService.deleteMyDeck(id);
+            return response.status(200).json({ message: 'Deck supprimé avec succès' });
         } catch (error) {
             next(error);
         }
