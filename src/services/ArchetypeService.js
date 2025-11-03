@@ -618,11 +618,13 @@ class ArchetypeService {
             in_aw_date,
             comment,
             popularity_poll,
-            era, // Peut être un objet {id, label} ou un simple ID
-            attributes = [], // Array d'objets {id, label}
-            types = [], // Array d'objets {id, label}
-            summon_mechanics = [], // Array d'objets {id, label}
-            cards = [] // Array d'objets BanlistArchetypeCard
+            era,
+            attributes = [],
+            types = [],
+            summon_mechanics = [],
+            cards = [],
+            slider_img_url,
+            card_img_url
         } = request.body;
 
         try {
@@ -707,6 +709,30 @@ class ArchetypeService {
                 }
             }
 
+            // Upload de l'image slider si fournie
+            let uploadedSliderUrl = null;
+            let uploadedCardUrl = null;
+            if (slider_img_url) {
+                try {
+                    uploadedSliderUrl = await UploadImageService.uploadImage(slider_img_url, "jumbotron_archetypes");
+                } catch (uploadError) {
+                    return response.status(400).json({
+                        success: false,
+                        message: 'Erreur lors de l\'upload de l\'image slider: ' + uploadError.message
+                    });
+                }
+            }
+            if (card_img_url) {
+                try {
+                    uploadedCardUrl = await UploadImageService.uploadImage(card_img_url, "introduction_archetypes");
+                } catch (uploadError) {
+                    return response.status(400).json({
+                        success: false,
+                        message: 'Erreur lors de l\'upload de l\'image carte: ' + uploadError.message
+                    });
+                }
+            }
+
             // Mise à jour de l'archétype avec transaction
             const result = await sequelize.transaction(async (t) => {
 
@@ -720,7 +746,9 @@ class ArchetypeService {
                     in_aw_date,
                     comment,
                     popularity_poll,
-                    era_id: era.id  // Utiliser l'ID extrait
+                    era_id: era.id,
+                    slider_img_url: uploadedSliderUrl,
+                    card_img_url: uploadedCardUrl,
                 }, { transaction: t });
 
                 // Mise à jour des relations (remplace complètement les anciennes)
