@@ -1,7 +1,7 @@
 import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/Sequelize.js';
 
-class Banlist extends Model {}
+class Banlist extends Model { }
 
 Banlist.init(
     {
@@ -17,6 +17,11 @@ Banlist.init(
         release_date: {
             type: DataTypes.DATE,
             allowNull: false
+        },
+        is_active: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
         },
         description: {
             type: DataTypes.TEXT,

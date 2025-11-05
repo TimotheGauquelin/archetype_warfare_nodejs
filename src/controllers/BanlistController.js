@@ -29,9 +29,24 @@ class BanlistController {
     }
 
     async addBanlist(request, result) {
+
+        const banlistData = request.body;
         try {
-            const banlist = await BanlistService.addBanlist(request, result);
-            return result.status(201).json({ message: 'Banlist créé !', data: banlist });
+            if (!banlistData.label || !banlistData.release_date || !banlistData.description) {
+                return result.status(400).json({
+                    message: 'Les champs label, release_date et description sont obligatoires'
+                });
+            }
+
+            const alreadyExistBanlist = await Banlist.findOne({ where: { label: banlistData.label } });
+            if (alreadyExistBanlist) {
+                return result.status(400).json({
+                    message: 'Une banlist avec ce label existe déjà'
+                });
+            }
+
+            await BanlistService.addBanlist(banlistData);
+            return result.status(201).json({ success: true, message: 'Banlist créé !' });
         } catch (error) {
             result.status(500).json({ message: error.message });
         }

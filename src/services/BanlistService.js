@@ -1,4 +1,5 @@
 import { Banlist, BanlistArchetypeCard, Archetype, Card, CardStatus } from '../models/relations.js';
+import sequelize from '../config/Sequelize.js';
 
 class BanlistService {
     static async getAllBanlists() {
@@ -78,7 +79,37 @@ class BanlistService {
     }
 
     static async addBanlist(banlistData) {
-        return Banlist.create(banlistData);
+        const transaction = await sequelize.transaction();
+        try {
+            const { banlist_archetype_cards, label, release_date, description, is_active } = banlistData;
+
+            const banlist = await Banlist.create(
+                {
+                    label: label,
+                    release_date: release_date,
+                    description: description,
+                    is_active: is_active
+                },
+                { transaction }
+            );
+
+            if (banlist_archetype_cards && Array.isArray(banlist_archetype_cards) && banlist_archetype_cards.length > 0) {
+                for (const card of banlist_archetype_cards) {
+                    await BanlistArchetypeCard.create({
+                        banlist_id: banlist.id,
+                        card_id: card.card_id,
+                        card_status_id: card.card_status_id,
+                        explanation_text: card.explanation_text || null,
+                        archetype_id: card.archetype_id || null
+                    }, { transaction });
+                }
+            }
+
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 
     static async updateBanlist(banlistId, databaseBanlist, banlistData, next) {
