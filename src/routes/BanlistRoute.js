@@ -14,4 +14,7 @@ router.post('/', authenticateToken, requireRole(['Admin']), (request, result) =>
 // PUT
 router.put('/:id', authenticateToken, requireRole(['Admin']), (request, result, next) => BanlistController.updateBanlist(request, result, next));
 
+// DELETE
+router.delete('/:id', authenticateToken, requireRole(['Admin']), (request, result, next) => BanlistController.deleteBanlist(request, result, next));
+
 export default router;

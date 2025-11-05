@@ -257,6 +257,16 @@ class BanlistService {
             throw error;
         }
     }
+
+    static async deleteBanlist(id, next) {
+        try {
+            await Banlist.destroy({
+                where: { id }
+            });
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 export default BanlistService;

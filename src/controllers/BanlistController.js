@@ -75,6 +75,23 @@ class BanlistController {
         }
     }
 
+    async deleteBanlist(request, result, next) {
+        const { id } = request.params;
+
+        try {
+
+            const existingBanlist = await Banlist.findByPk(id);
+            if (!existingBanlist) {
+                throw new Error('Aucune banlist trouvée');
+            }
+
+            await BanlistService.deleteBanlist(id, next);
+            return result.status(200).json({ message: 'Banlist supprimée avec succès' });
+        } catch (error) {
+            result.status(500).json({ message: error.message });
+        }
+    }
+
 }
 
 export default new BanlistController();
