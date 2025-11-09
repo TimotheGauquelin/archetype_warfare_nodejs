@@ -45,10 +45,10 @@ class BanlistService {
                             model: Card,
                             as: 'card'
                         },
-                        {
-                            model: CardStatus,
-                            as: 'card_status'
-                        }
+                        // {
+                        //     model: CardStatus,
+                        //     as: 'card_status'
+                        // }
                     ]
                 }]
             });
