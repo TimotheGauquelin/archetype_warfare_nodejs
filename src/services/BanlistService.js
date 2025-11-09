@@ -25,30 +25,35 @@ class BanlistService {
         });
     }
 
-    static async getBanlistById(request, result) {
-        return Banlist.findByPk(request.params.id, {
-            include: [{
-                model: BanlistArchetypeCard,
-                as: 'banlist_archetype_cards',
-                where: {
-                    archetype_id: null
-                },
-                include: [
-                    {
-                        model: Archetype,
-                        as: 'archetype'
+    static async getBanlistById(id, next) {
+        console.log(id);
+        try {
+            return Banlist.findByPk(id, {
+                include: [{
+                    model: BanlistArchetypeCard,
+                    as: 'banlist_archetype_cards',
+                    where: {
+                        archetype_id: null
                     },
-                    {
-                        model: Card,
-                        as: 'card'
-                    },
-                    {
-                        model: CardStatus,
-                        as: 'card_status'
-                    }
-                ]
-            }]
-        });
+                    include: [
+                        {
+                            model: Archetype,
+                            as: 'archetype'
+                        },
+                        {
+                            model: Card,
+                            as: 'card'
+                        },
+                        {
+                            model: CardStatus,
+                            as: 'card_status'
+                        }
+                    ]
+                }]
+            });
+        } catch (error) {
+            next(error);
+        }
     }
 
     static async getCurrentBanlist() {

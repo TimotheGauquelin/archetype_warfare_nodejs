@@ -19,12 +19,14 @@ class BanlistController {
             result.status(500).json({ message: error.message });
         }
     }
-    async getBanlistById(request, result) {
+    async getBanlistById(request, result, next) {
+        const { id } = request.params;
         try {
-            const banlist = await BanlistService.getBanlistById(request, result);
-            return result.json(banlist);
+            const banlist = await BanlistService.getBanlistById(id, next);
+            return result.status(200).json(banlist);
         } catch (error) {
             result.status(500).json({ message: error.message });
+            next(error);
         }
     }
 
