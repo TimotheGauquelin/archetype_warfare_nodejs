@@ -30,27 +30,27 @@ class BanlistService {
         try {
             console.log("BANLIST ID=================", id);
             const banlist = await Banlist.findByPk(id, {
-                include: [{
-                    model: BanlistArchetypeCard,
-                    as: 'banlist_archetype_cards',
-                    where: {
-                        archetype_id: null
-                    },
-                    include: [
-                        {
-                            model: Archetype,
-                            as: 'archetype'
-                        },
-                        {
-                            model: Card,
-                            as: 'card'
-                        },
-                        // {
-                        //     model: CardStatus,
-                        //     as: 'card_status'
-                        // }
-                    ]
-                }]
+                // include: [{
+                //     model: BanlistArchetypeCard,
+                //     as: 'banlist_archetype_cards',
+                //     where: {
+                //         archetype_id: null
+                //     },
+                //     include: [
+                //         {
+                //             model: Archetype,
+                //             as: 'archetype'
+                //         },
+                //         {
+                //             model: Card,
+                //             as: 'card'
+                //         },
+                //         // {
+                //         //     model: CardStatus,
+                //         //     as: 'card_status'
+                //         // }
+                //     ]
+                // }]
             });
             console.log("BANLIST=================", banlist);
             return banlist;
