@@ -65,20 +65,20 @@ class BanlistService {
                 where: {
                     archetype_id: null
                 },
-                include: [
-                    {
-                        model: Archetype,
-                        as: 'archetype'
-                    },
-                    {
-                        model: Card,
-                        as: 'card'
-                    },
-                    {
-                        model: CardStatus,
-                        as: 'card_status'
-                    }
-                ]
+                // include: [
+                //     {
+                //         model: Archetype,
+                //         as: 'archetype'
+                //     },
+                //     {
+                //         model: Card,
+                //         as: 'card'
+                //     },
+                //     {
+                //         model: CardStatus,
+                //         as: 'card_status'
+                //     }
+                // ]
             }]
         });
     }
