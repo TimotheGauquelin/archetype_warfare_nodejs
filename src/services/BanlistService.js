@@ -28,7 +28,7 @@ class BanlistService {
     static async getBanlistById(id, next) {
         console.log(id);
         try {
-            return Banlist.findByPk(id, {
+            const banlist = await Banlist.findByPk(id, {
                 include: [{
                     model: BanlistArchetypeCard,
                     as: 'banlist_archetype_cards',
@@ -51,6 +51,8 @@ class BanlistService {
                     ]
                 }]
             });
+            console.log("BANLIST=================", banlist);
+            return banlist;
         } catch (error) {
             next(error);
         }

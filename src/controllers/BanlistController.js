@@ -23,7 +23,9 @@ class BanlistController {
         const { id } = request.params;
         try {
             const banlist = await BanlistService.getBanlistById(id, next);
-            return result.status(200).json(banlist);
+            return result.status(200).json(
+                { success: true, data: banlist }
+            );
         } catch (error) {
             result.status(500).json({ message: error.message });
             next(error);
