@@ -6,8 +6,9 @@ const router = Router();
 
 // GET
 router.get('/search', (request, response, next) => UserController.searchUsers(request, response, next));
-router.get('/:id', (request, response, next) => UserController.getUserById(request, response, next));
 router.get('/getUserByResetPassword/:token', (request, response, next) => UserController.getUserByResetPassword(request, response, next));
+router.get('/getNewUsers', (request, response, next) => UserController.getNewUsers(request, response, next));
+router.get('/:id', (request, response, next) => UserController.getUserById(request, response, next));
 
 // POST
 router.post('/', usernameRuler, (request, response, next) => UserController.createUser(request, response, next));

@@ -52,6 +52,15 @@ class UserController {
         }
     }
 
+    async getNewUsers(request, response, next) {
+        try {
+            const users = await UserService.getNewUsers(next);
+            return response.status(200).json(users);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     // POST
 
     async createUser(request, response, next) {

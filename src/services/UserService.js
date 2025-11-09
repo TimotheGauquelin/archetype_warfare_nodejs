@@ -1,6 +1,7 @@
-import { User, Deck, Role } from '../models/relations.js';
+import { User, Role } from '../models/relations.js';
 import { CustomError } from '../errors/CustomError.js';
 import { Op } from 'sequelize';
+import sequelize from '../config/Sequelize.js';
 
 class UserService {
     static async searchUsers(request, next) {
@@ -111,6 +112,37 @@ class UserService {
         }
     }
 
+    static async getNewUsers(next) {
+        try {
+            const users = await User.findAll({
+                where: {
+                    is_active: false,
+                    is_banned: false,
+                    created_at: { [Op.gte]: new Date(Date.now() - 1000 * 60 * 60 * 24) },
+                    [Op.and]: [
+                        sequelize.literal(`(
+                            SELECT COUNT(*) 
+                            FROM "user_role" 
+                            WHERE "user_role"."user_id" = "User"."id"
+                        ) = 0`)
+                    ]
+                },
+                include: [
+                    {
+                        model: Role,
+                        as: 'roles',
+                        required: false,
+                        through: {
+                            attributes: []
+                        }
+                    }
+                ]
+            });
+            return users;
+        } catch (error) {
+            next(error);
+        }
+    }
     static async updateResetPasswordToken(user, resetToken, next) {
         try {
             const [updatedCount] = await User.update(
