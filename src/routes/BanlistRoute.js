@@ -6,7 +6,7 @@ const router = Router();
 
 router.get('/current', (request, result) => BanlistController.getCurrentBanlist(request, result));
 router.get('/', (request, result) => BanlistController.getAllBanlists(request, result));
-router.get('/:id', (request, result) => BanlistController.getBanlistById(request, result));
+router.get('/:id', (request, result, next) => BanlistController.getBanlistById(request, result, next));
 
 // POST
 router.post('/', authenticateToken, requireRole(['Admin']), (request, result) => BanlistController.addBanlist(request, result));
