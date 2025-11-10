@@ -26,11 +26,44 @@ class BanlistService {
     }
 
     static async getBanlistById(id, next) {
-        return Banlist.findOne({
+        const banlist = await Banlist.findOne({
             where: { id },
             include: [{
                 model: BanlistArchetypeCard,
                 as: 'banlist_archetype_cards',
+                where: {
+                    archetype_id: null
+                },
+                include: [
+                    {
+                        model: Archetype,
+                        as: 'archetype',
+                    },
+                    {
+                        model: Card,
+                        as: 'card',
+                        attributes: ['id', 'name', 'img_url']
+                    },
+                    {
+                        model: CardStatus,
+                        as: 'card_status'
+                    }
+                ]
+            }]
+        });
+        console.log(banlist);
+        return banlist;
+    }
+
+    static async getCurrentBanlist() {
+        return Banlist.findOne({
+            order: [['release_date', 'DESC']],
+            include: [{
+                model: BanlistArchetypeCard,
+                as: 'banlist_archetype_cards',
+                where: {
+                    archetype_id: null
+                },
                 include: [
                     {
                         model: Archetype,
@@ -45,33 +78,6 @@ class BanlistService {
                         as: 'card_status'
                     }
                 ]
-            }]
-        });
-    }
-
-    static async getCurrentBanlist() {
-        return Banlist.findOne({
-            order: [['release_date', 'DESC']],
-            include: [{
-                model: BanlistArchetypeCard,
-                as: 'banlist_archetype_cards',
-                where: {
-                    archetype_id: null
-                },
-                // include: [
-                //     {
-                //         model: Archetype,
-                //         as: 'archetype'
-                //     },
-                //     {
-                //         model: Card,
-                //         as: 'card'
-                //     },
-                //     {
-                //         model: CardStatus,
-                //         as: 'card_status'
-                //     }
-                // ]
             }]
         });
     }
