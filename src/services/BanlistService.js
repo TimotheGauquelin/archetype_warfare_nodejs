@@ -66,10 +66,6 @@ class BanlistService {
                 },
                 include: [
                     {
-                        model: Archetype,
-                        as: 'archetype'
-                    },
-                    {
                         model: Card,
                         as: 'card'
                     },
