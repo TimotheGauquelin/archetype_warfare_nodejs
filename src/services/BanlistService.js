@@ -6,12 +6,11 @@ class BanlistService {
         return Banlist.findAll({
             include: [{
                 model: BanlistArchetypeCard,
-                as: 'banlist_archetype_cards', // Utiliser l'alias défini dans relations.js
+                as: 'banlist_archetype_cards',
+                where: {
+                    archetype_id: null
+                },
                 include: [
-                    {
-                        model: Archetype,
-                        as: 'archetype'
-                    },
                     {
                         model: Card,
                         as: 'card'
@@ -35,10 +34,6 @@ class BanlistService {
                     archetype_id: null
                 },
                 include: [
-                    {
-                        model: Archetype,
-                        as: 'archetype',
-                    },
                     {
                         model: Card,
                         as: 'card',
