@@ -17,7 +17,7 @@ router.post('/', (request, response, next) => ArchetypeController.addArchetype(r
 
 // PUT
 
-router.put('/:archetypeId/update', (request, response) => ArchetypeController.updateArchetype(request, response));
+router.put('/:archetypeId/update', (request, response, next) => ArchetypeController.updateArchetype(request, response, next));
 router.put('/:archetypeId/switchIsHighlighted', (request, response, next) => ArchetypeController.switchIsHighlighted(request, response, next));
 router.put('/:archetypeId/switchIsActive', (request, response, next) => ArchetypeController.switchIsActive(request, response, next));
 

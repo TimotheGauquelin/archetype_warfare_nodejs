@@ -227,8 +227,16 @@ class BanlistService {
             }
 
             if (cardsToAdd.length > 0) {
+                const cardsToAddWithoutId = cardsToAdd.map(card => {
+                    const { id, ...cardWithoutId } = card;
+                    return cardWithoutId;
+                });
+
                 operations.push(
-                    BanlistArchetypeCard.bulkCreate(cardsToAdd)
+                    BanlistArchetypeCard.bulkCreate(cardsToAddWithoutId, {
+                        ignoreDuplicates: false,
+                        returning: true
+                    })
                 );
             }
 

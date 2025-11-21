@@ -196,7 +196,7 @@ class ArchetypeController {
             }
 
         } catch (error) {
-            next(error);
+
         }
     }
 
