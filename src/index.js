@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import './models/relations.js';
 import { limiter } from './middlewares/rateLimitMiddleware.js';
+import websiteActionsRoutes from './routes/WebsiteActionsRoute.js';
 
 dotenv.config();
 
@@ -60,5 +61,6 @@ apiRouter.use('/card-statuses', cardStatusRoutes);
 apiRouter.use('/users', userRoutes);
 apiRouter.use('/images', uploadImageRoutes);
 apiRouter.use('/decks', deckRoutes);
+apiRouter.use('/website-actions', websiteActionsRoutes);
 
 export default app;

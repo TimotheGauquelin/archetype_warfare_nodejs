@@ -178,7 +178,6 @@ CREATE TABLE IF NOT EXISTS archetype_summonmechanic (
     CONSTRAINT fk_summonmechanic FOREIGN KEY (summonmechanic_id) REFERENCES summonmechanic (id) ON DELETE CASCADE
 );
 
--- Table banlist_archetype_card
 CREATE TABLE IF NOT EXISTS banlist_archetype_card (
     id SERIAL PRIMARY KEY,
     banlist_id BIGINT NOT NULL,
@@ -193,6 +192,18 @@ CREATE TABLE IF NOT EXISTS banlist_archetype_card (
     CONSTRAINT fk_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE,
     CONSTRAINT fk_card_status FOREIGN KEY (card_status_id) REFERENCES card_status (id) ON DELETE CASCADE
 );
+
+-- Table website_actions (singleton - une seule ligne)
+CREATE TABLE IF NOT EXISTS website_actions (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    stream_banner_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    registration_enabled BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Insertion de la ligne unique
+INSERT INTO website_actions (stream_banner_enabled, registration_enabled) 
+VALUES (false, true)
+ON CONFLICT DO NOTHING;
 
 -- ==========================================
 -- FUNCTIONS AND TRIGGERS

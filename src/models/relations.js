@@ -15,6 +15,7 @@ import ArchetypeAttribute from './ArchetypeAttributeModel.js';
 import ArchetypeSummonMechanic from './ArchetypeSummonMechanicModel.js';
 import Role from './RoleModel.js';
 import UserRole from './UserRoleModel.js';
+import WebsiteActions from './WebsiteActionsModel.js';
 
 // Relations User
 User.hasMany(Deck, { foreignKey: 'user_id' });
@@ -161,5 +162,6 @@ export {
     ArchetypeAttribute,
     ArchetypeSummonMechanic,
     Role,
-    UserRole
+    UserRole,
+    WebsiteActions
 }; 
