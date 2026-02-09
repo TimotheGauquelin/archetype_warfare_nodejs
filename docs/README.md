@@ -13,7 +13,7 @@ Ce projet utilise les technologies suivantes :
 Voici les différentes parties à cloner :  
 - **FRONT :** 📂 [Alumni Frontend](https://github.com/foreach-academy/Alumni_Frontend)  
 - **BACK :** 📂 [Alumni Backend](https://github.com/foreach-academy/Alumni_Backend)  
-- **BDD :** 🗄️ Base de données à créer à partir du fichier `db.sql`.  
+- **BDD :** 🗄️ Base de données initialisée via les scripts dans `docker-init/` (schéma + seed).  
 
 
 ## **🚀 Pour lancer ce projet :**
@@ -33,8 +33,9 @@ Voici les différentes parties à cloner :
    > **⚠️ Note importante :**  
      Les variables d'environnement **ne doivent jamais être partagées**. C'est pourquoi le fichier `.env` est inclus dans le `.gitignore`.
 
-3. **📜 Exécuter le script de base de données :**  
-   - Lancez le fichier `db.sql` dans votre instance PostgreSQL pour créer les tables nécessaires.  
+3. **📜 Base de données :**  
+   - Avec Docker : `docker compose up -d` (les scripts dans `docker-init/` créent les tables et les données au premier démarrage).  
+   - Sans Docker : `npm run db:recreate` puis `npm run db:seed` (référence : `docker-init/01-schema.sql` et `docker-init/02-data.sql`).  
 
 ### **Commandes disponibles :**
 

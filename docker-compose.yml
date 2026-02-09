@@ -5,31 +5,10 @@ services:
     build:
       dockerfile: ./docker/Dockerfile.dev
     working_dir: /usr/src/
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=development
-      - FRONTEND_URL=http://localhost:8888
-      - API_PORT=1337
-      - DATABASE_CLIENT=postgres
       - DATABASE_HOST=database
-      - DATABASE_PORT=5432
-      - DATABASE_NAME=aw
-      - DATABASE_USER=admin
-      - DATABASE_PASSWORD=Azerty123!
-      # - API_PORT=1337
-      # - DATABASE_CLIENT=postgres
-      # - DATABASE_HOST=dpg-d3vs35i4d50c73e4pop0-a
-      # - DATABASE_PORT=5432
-      # - DATABASE_NAME=aw_8vps
-      # - DATABASE_USER=admin
-      # - DATABASE_PASSWORD=uSZjynA29y8Krk78D3i7EwT5KmSNPZbI
-      - DATABASE_SSL=false
-      - API_TOKEN_SALT=baATgxx9waBHIYkwv87lWg==
-      - JWT_SECRET=SOTYvW+Ed63I2iCfehnBbg==
-      - EMAIL_FROM_EMAILSENDER=timothegauquelin@gmail.com
-      - PASSWORD_FROM_EMAILSENDER=cpygwfgxyvyaumps
-      - CLOUDINARY_CLOUD_NAME=dqfuwqmql
-      - CLOUDINARY_API_KEY=797713558548426
-      - CLOUDINARY_API_SECRET=a9ct3UXKhQ3fECdRgUufmP0Mcv0
     volumes:
       - ./config:/usr/src/config
       - ./database:/usr/src/database
@@ -41,15 +20,18 @@ services:
       - '8889:1337'
   database:
     container_name: database-aw
-    image: postgres
+    image: postgres:18
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: Azerty123!
+      POSTGRES_PASSWORD: admin
       POSTGRES_DB: aw
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
       - ./docker-init:/docker-entrypoint-initdb.d
+      - ./config/scripts:/scripts
     networks:
       - network-project-aw
     ports:

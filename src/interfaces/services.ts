@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { ITypeModel, ICardModel, IArchetypeModel, IEraModel, IAttributeModel, ISummonMechanicModel, IUserModel, IRoleModel, IDeckModel, IDeckCardModel, ICardStatusModel, IBanlistModel, IBanlistArchetypeCardModel } from './models.js';
+import { ICardTypeModel as ITypeModel, ICardModel, IArchetypeModel, IEraModel, IAttributeModel, ISummonMechanicModel, IUserModel, IRoleModel, IDeckModel, IDeckCardModel, ICardStatusModel, IBanlistModel, IBanlistArchetypeCardModel } from './models';
 
 export interface ITypeService {
     getTypes(request: Request, response: Response): Promise<ITypeModel[]>;
