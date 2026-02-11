@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import TournamentService from '../services/TournamentService';
 import { getIntParam } from '../utils/request';
-import TournamentService from '../services/TournamentService.ts';
+import Tournament from '../models/TournamentModel';
+import { CustomError } from '../errors/CustomError';
 
 class TournamentController {
     async create(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -134,7 +136,25 @@ class TournamentController {
     async startNextRound(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const tournamentId = getIntParam(request.params.tournamentId);
-            const round = await TournamentService.startNextRound(tournamentId);
+
+            const tournament = await Tournament.findByPk(tournamentId);
+
+            if (!tournament) {
+                throw new CustomError('Tournoi introuvable', 404);
+            }
+
+
+            if (tournament.status === 'tournament_finished') {
+                throw new CustomError('Le tournoi est terminé', 400);
+            }
+
+            const canStartRound = ['registration_open', 'tournament_beginning', 'tournament_in_progress'].includes(tournament.status);
+
+            if (!canStartRound) {
+                throw new CustomError('Ce tournoi ne peut pas démarrer une ronde', 400);
+            }
+
+            const round = await TournamentService.startNextRound(tournament as Tournament);
             response.status(201).json(round);
         } catch (error) {
             next(error);
@@ -168,7 +188,8 @@ class TournamentController {
 
     async completeRound(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const roundId = getIntParam(request.params.roundId);
+            const roundId = getIntParam(request.params.tournamentId);
+
             const round = await TournamentService.completeRound(roundId);
             response.status(200).json(round);
         } catch (error) {

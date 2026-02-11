@@ -229,7 +229,7 @@ CREATE TABLE IF NOT EXISTS tournament_match (
     round_id INT NOT NULL,
     tournament_id INT NOT NULL,
     player1_tournament_player_id INT NOT NULL,
-    player2_tournament_player_id INT NOT NULL,
+    player2_tournament_player_id INT NULL,
     player1_games_won INT NOT NULL DEFAULT 0,
     player2_games_won INT NOT NULL DEFAULT 0,
     winner_tournament_player_id INT NULL,
@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS tournament_match (
     CONSTRAINT fk_tm_player1 FOREIGN KEY (player1_tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
     CONSTRAINT fk_tm_player2 FOREIGN KEY (player2_tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
     CONSTRAINT fk_tm_winner FOREIGN KEY (winner_tournament_player_id) REFERENCES tournament_player (id) ON DELETE SET NULL,
-    CONSTRAINT chk_tm_players_different CHECK (player1_tournament_player_id != player2_tournament_player_id)
+    CONSTRAINT chk_tm_players_different CHECK (player2_tournament_player_id IS NULL OR player1_tournament_player_id != player2_tournament_player_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournament (status);

@@ -8,7 +8,7 @@ interface TournamentMatchAttributes {
     round_id: number;
     tournament_id: number;
     player1_tournament_player_id: number;
-    player2_tournament_player_id: number;
+    player2_tournament_player_id: number | null;
     player1_games_won: number;
     player2_games_won: number;
     winner_tournament_player_id: number | null;
@@ -17,14 +17,14 @@ interface TournamentMatchAttributes {
     updated_at?: Date;
 }
 
-interface TournamentMatchCreationAttributes extends Optional<TournamentMatchAttributes, 'id' | 'player1_games_won' | 'player2_games_won' | 'winner_tournament_player_id' | 'status' | 'created_at' | 'updated_at'> {}
+interface TournamentMatchCreationAttributes extends Optional<TournamentMatchAttributes, 'id' | 'player2_tournament_player_id' | 'player1_games_won' | 'player2_games_won' | 'winner_tournament_player_id' | 'status' | 'created_at' | 'updated_at'> {}
 
 class TournamentMatch extends Model<TournamentMatchAttributes, TournamentMatchCreationAttributes> implements TournamentMatchAttributes {
     declare id: number;
     declare round_id: number;
     declare tournament_id: number;
     declare player1_tournament_player_id: number;
-    declare player2_tournament_player_id: number;
+    declare player2_tournament_player_id: number | null;
     declare player1_games_won: number;
     declare player2_games_won: number;
     declare winner_tournament_player_id: number | null;
@@ -56,7 +56,7 @@ TournamentMatch.init({
     },
     player2_tournament_player_id: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: { model: 'tournament_player', key: 'id' }
     },
     player1_games_won: {

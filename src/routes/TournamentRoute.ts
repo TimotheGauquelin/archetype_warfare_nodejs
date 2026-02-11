@@ -20,5 +20,6 @@ router.put('/:tournamentId', authenticateToken, requireRole(['Admin']), (req: Re
 router.post('/:tournamentId/register', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.registerToATournament(req, res, next));
 router.post('/:tournamentId/unregister', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.unregisterToATournament(req, res, next));
 router.post('/:tournamentId/rounds/start', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.startNextRound(req, res, next));
+router.post('/:tournamentId/rounds/complete', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.completeRound(req, res, next));
 
 export default router;
