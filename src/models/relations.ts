@@ -1,5 +1,9 @@
 import User from './UserModel';
 import Deck from './DeckModel';
+import Tournament from './TournamentModel';
+import TournamentPlayer from './TournamentPlayerModel';
+import TournamentRound from './TournamentRoundModel';
+import TournamentMatch from './TournamentMatchModel';
 import DeckCard from './DeckCardModel';
 import Card from './CardModel';
 import Archetype from './ArchetypeModel';
@@ -20,6 +24,23 @@ import WebsiteActions from './WebsiteActionsModel';
 // Relations User
 User.hasMany(Deck, { foreignKey: 'user_id' });
 Deck.belongsTo(User, { foreignKey: 'user_id' });
+
+// Relations Tournoi
+Tournament.hasMany(TournamentPlayer, { foreignKey: 'tournament_id', as: 'players' });
+TournamentPlayer.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentPlayer.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(TournamentPlayer, { foreignKey: 'user_id', as: 'tournament_registrations' });
+
+Tournament.hasMany(TournamentRound, { foreignKey: 'tournament_id', as: 'rounds' });
+TournamentRound.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
+
+TournamentRound.hasMany(TournamentMatch, { foreignKey: 'round_id', as: 'matches' });
+TournamentMatch.belongsTo(TournamentRound, { foreignKey: 'round_id', as: 'round' });
+TournamentMatch.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'player1_tournament_player_id', as: 'player1' });
+TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'player2_tournament_player_id', as: 'player2' });
+TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'winner_tournament_player_id', as: 'winner' });
+Tournament.hasMany(TournamentMatch, { foreignKey: 'tournament_id', as: 'matches' });
 
 // Relations User-Role (Many-to-Many)
 User.belongsToMany(Role, {
@@ -163,5 +184,9 @@ export {
     ArchetypeSummonMechanic,
     Role,
     UserRole,
-    WebsiteActions
+    WebsiteActions,
+    Tournament,
+    TournamentPlayer,
+    TournamentRound,
+    TournamentMatch
 };

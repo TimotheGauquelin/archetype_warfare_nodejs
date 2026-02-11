@@ -94,7 +94,11 @@ export const ErrorHandler = (
     if (haveMultipleErrors || err.errors) {
         response.multipleErrors = true;
         if (err.errors) {
-            response.errors = err.errors;
+            response.errors = err.errors.map((e: { field?: string; path?: string; message?: string; value?: unknown }) => ({
+                field: e.field ?? e.path,
+                message: e.message ?? 'Erreur de validation',
+                value: e.value
+            }));
         }
     }
 

@@ -205,10 +205,10 @@ class UserController {
         }
     }
 
-    async updateMyProfile(request: Request, response: Response, next: NextFunction): Promise<void> {
+    async updateMyProfile(request: Request, _response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getIntParam(request.params.id);
-            const { myBelovedArchetype } = request.body;
+            const { myBelovedArchetype: _myBelovedArchetype } = request.body;
 
             const existingUser = await User.findByPk(id);
 

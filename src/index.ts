@@ -13,6 +13,7 @@ import cardStatusRoutes from './routes/CardStatusRoute';
 import userRoutes from './routes/UserRoute';
 import uploadImageRoutes from './routes/UploadImageRoute';
 import deckRoutes from './routes/DeckRoute';
+import tournamentRoutes from './routes/TournamentRoute';
 import { ErrorHandler } from './middlewares/errorHandler';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -58,6 +59,7 @@ apiRouter.use('/card-statuses', cardStatusRoutes);
 apiRouter.use('/users', userRoutes);
 apiRouter.use('/images', uploadImageRoutes);
 apiRouter.use('/decks', deckRoutes);
+apiRouter.use('/tournaments', tournamentRoutes);
 apiRouter.use('/website-actions', websiteActionsRoutes);
 
 // ErrorHandler doit être après toutes les routes

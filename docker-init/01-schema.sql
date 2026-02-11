@@ -179,6 +179,77 @@ CREATE TABLE IF NOT EXISTS website_actions (
     registration_enabled BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+-- Tournois (système suisse)
+CREATE TABLE IF NOT EXISTS tournament (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    number_of_rounds INT NOT NULL CHECK (number_of_rounds >= 1),
+    matches_per_round INT NOT NULL CHECK (matches_per_round IN (1, 3)),
+    status VARCHAR(30) NOT NULL DEFAULT 'draft' CHECK (status IN ('registration_open', 'registration_closed', 'tournament_beginning', 'tournament_in_progress', 'tournament_finished', 'tournament_cancelled')),
+    current_round INT NOT NULL DEFAULT 0,
+    max_players INT NULL,
+    location VARCHAR(255) NULL,
+    event_date TIMESTAMP NULL,
+    event_date_end TIMESTAMP NULL,
+    is_online BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tournament_player (
+    id SERIAL PRIMARY KEY,
+    tournament_id INT NOT NULL,
+    user_id BIGINT NOT NULL,
+    match_wins INT NOT NULL DEFAULT 0,
+    match_losses INT NOT NULL DEFAULT 0,
+    match_draws INT NOT NULL DEFAULT 0,
+    games_won INT NOT NULL DEFAULT 0,
+    games_played INT NOT NULL DEFAULT 0,
+    dropped BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_tp_tournament FOREIGN KEY (tournament_id) REFERENCES tournament (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tp_user FOREIGN KEY (user_id) REFERENCES "user" (id) ON DELETE CASCADE,
+    CONSTRAINT uq_tournament_user UNIQUE (tournament_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_round (
+    id SERIAL PRIMARY KEY,
+    tournament_id INT NOT NULL,
+    round_number INT NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_tr_tournament FOREIGN KEY (tournament_id) REFERENCES tournament (id) ON DELETE CASCADE,
+    CONSTRAINT uq_tournament_round UNIQUE (tournament_id, round_number)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_match (
+    id SERIAL PRIMARY KEY,
+    round_id INT NOT NULL,
+    tournament_id INT NOT NULL,
+    player1_tournament_player_id INT NOT NULL,
+    player2_tournament_player_id INT NOT NULL,
+    player1_games_won INT NOT NULL DEFAULT 0,
+    player2_games_won INT NOT NULL DEFAULT 0,
+    winner_tournament_player_id INT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_tm_round FOREIGN KEY (round_id) REFERENCES tournament_round (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tm_tournament FOREIGN KEY (tournament_id) REFERENCES tournament (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tm_player1 FOREIGN KEY (player1_tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tm_player2 FOREIGN KEY (player2_tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tm_winner FOREIGN KEY (winner_tournament_player_id) REFERENCES tournament_player (id) ON DELETE SET NULL,
+    CONSTRAINT chk_tm_players_different CHECK (player1_tournament_player_id != player2_tournament_player_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournament (status);
+CREATE INDEX IF NOT EXISTS idx_tournament_player_tournament ON tournament_player (tournament_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_round_tournament ON tournament_round (tournament_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_match_round ON tournament_match (round_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_match_tournament ON tournament_match (tournament_id);
+
 -- Index sur "user"
 CREATE INDEX IF NOT EXISTS idx_user_email ON "user" (email);
 CREATE INDEX IF NOT EXISTS idx_user_username ON "user" (username);

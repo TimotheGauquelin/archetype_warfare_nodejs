@@ -207,7 +207,7 @@ class UserService {
         }
     }
 
-    static async updateMyProfile(existingUser: User, myBelovedArchetype: number): Promise<void> {
+    static async updateMyProfile(_existingUser: User, _myBelovedArchetype: number): Promise<void> {
         // const [updatedCount] = await User.update(
         //     { beloved_archetype_id: myBelovedArchetype },
         //     { where: { id: existingUser.id } }
