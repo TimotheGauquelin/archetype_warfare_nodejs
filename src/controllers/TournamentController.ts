@@ -133,6 +133,36 @@ class TournamentController {
         }
     }
 
+    async dropATournament(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const tournamentId = getIntParam(request.params.tournamentId);
+            const userId = request.user?.id;
+
+            if (!userId) {
+                response.status(401).json({ message: 'Authentification requise pour abandonner un tournoi' });
+                return;
+            }
+
+            await TournamentService.dropATournament({ tournamentId, userId });
+
+            response.status(200).json({
+                message: 'Abandon du tournoi enregistré',
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async startTournament(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournament = await TournamentService.startTournament(tournamentId);
+            response.status(200).json(tournament);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async startNextRound(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const tournamentId = getIntParam(request.params.tournamentId);
@@ -143,15 +173,14 @@ class TournamentController {
                 throw new CustomError('Tournoi introuvable', 404);
             }
 
-
             if (tournament.status === 'tournament_finished') {
                 throw new CustomError('Le tournoi est terminé', 400);
             }
 
-            const canStartRound = ['registration_open', 'tournament_beginning', 'tournament_in_progress'].includes(tournament.status);
+            const canStartRound = ['tournament_beginning', 'tournament_in_progress'].includes(tournament.status);
 
             if (!canStartRound) {
-                throw new CustomError('Ce tournoi ne peut pas démarrer une ronde', 400);
+                throw new CustomError('Vous devez d\'abord démarrer le tournoi', 400);
             }
 
             const round = await TournamentService.startNextRound(tournament as Tournament);

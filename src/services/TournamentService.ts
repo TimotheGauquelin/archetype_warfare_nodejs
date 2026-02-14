@@ -1,15 +1,19 @@
 import sequelize from '../config/Sequelize';
 import { Op } from 'sequelize';
+import type { Transaction } from 'sequelize';
 import { Tournament, TournamentPlayer, TournamentRound, TournamentMatch, User } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 
 import type { RoundStatus } from '../models/TournamentRoundModel';
 import { TournamentStatus } from '../models/TournamentModel';
-import { cp } from 'node:fs';
 
 const REGISTRATION_DEADLINE_HOURS = 48;
 
-/** Vérifie que les inscriptions/désinscriptions sont encore autorisées (au moins 48h avant le début). */
+/** Check that the registration/unregistration is still allowed (at least 48 hours before the start).
+ * 
+ * @param eventDate - The event date of the tournament.
+ * @returns A boolean indicating if the registration/unregistration is still allowed.
+ */
 function isWithinRegistrationWindow(eventDate: Date | null): boolean {
     if (!eventDate) return true;
     const start = new Date(eventDate).getTime();
@@ -39,6 +43,11 @@ interface RecordMatchResultData {
     player2GamesWon: number;
 }
 
+/** Get the played pairs for a tournament.
+ * 
+ * @param tournamentId - The ID of the tournament to get the played pairs for.
+ * @returns A promise that resolves to a set of strings representing the played pairs.
+ */
 async function getPlayedPairs(tournamentId: number): Promise<Set<string>> {
     const matches = await TournamentMatch.findAll({
         where: { tournament_id: tournamentId },
@@ -54,10 +63,23 @@ async function getPlayedPairs(tournamentId: number): Promise<Set<string>> {
     return pairs;
 }
 
+/** Check if two players have already played against each other.
+ * 
+ * @param pairs - The set of played pairs.
+ * @param id1 - The ID of the first player.
+ * @param id2 - The ID of the second player.
+ * @returns A boolean indicating if the two players have already played against each other.
+ */
 function haveAlreadyPlayed(pairs: Set<string>, id1: number, id2: number): boolean {
     return pairs.has([Math.min(id1, id2), Math.max(id1, id2)].join('-'));
 }
 
+/** Pair the players using the Swiss system.
+ * 
+ * @param players - The players to pair.
+ * @param playedPairs - The set of played pairs.
+ * @returns A promise that resolves to an array of pairs of player IDs.
+ */
 function swissPair(players: { id: number; match_wins: number }[], playedPairs: Set<string>): [number, number][] {
     const sorted = [...players].sort((a, b) => b.match_wins - a.match_wins);
     const used = new Set<number>();
@@ -80,9 +102,37 @@ function swissPair(players: { id: number; match_wins: number }[], playedPairs: S
     return result;
 }
 
+/** Mark the round as completed (in the provided transaction).
+ * 
+ * @param tournamentId - The ID of the tournament.
+ * @param roundNumber - The number of the round to mark as completed.
+ * @param transaction - The transaction to use.
+ * @returns A promise that resolves to void.
+ */
+async function markRoundAsCompleted(
+    tournamentId: number,
+    roundNumber: number,
+    transaction: Transaction
+): Promise<void> {
+    const round = await TournamentRound.findOne({
+        where: { tournament_id: tournamentId, round_number: roundNumber },
+        transaction
+    });
+    if (round) {
+        round.status = 'completed';
+        await round.save({ transaction });
+    }
+}
+
 class TournamentService {
+    /** Create a new tournament.
+     * 
+     * @param data - The data to create the tournament with.
+     * @returns A promise that resolves to the created tournament.
+     */
     static async create(data: CreateTournamentData) {
-        return Tournament.create({
+        // Ne jamais passer id : la base (SERIAL) l'auto-incrémente.
+        const payload = {
             name: data.name,
             number_of_rounds: data.number_of_rounds,
             matches_per_round: data.matches_per_round,
@@ -91,11 +141,17 @@ class TournamentService {
             event_date: data.event_date != null ? new Date(data.event_date) : null,
             event_date_end: data.event_date_end != null ? new Date(data.event_date_end) : null,
             is_online: data.is_online ?? true,
-            status: 'registration_closed',
+            status: 'registration_closed' as const,
             current_round: 0
-        });
+        };
+        return Tournament.create(payload);
     }
 
+    /** Get all current tournaments.
+     * 
+     * @param status - The status of the tournaments to get.
+     * @returns A promise that resolves to an array of tournaments.
+     */
     static async getAllCurrentTournaments(status?: TournamentStatus) {
         const dateFrom = new Date();
         dateFrom.setDate(dateFrom.getDate() - 7);
@@ -111,6 +167,11 @@ class TournamentService {
         });
     }
 
+    /** Get the tournaments for a user.
+     * 
+     * @param userId - The ID of the user to get the tournaments for.
+     * @returns A promise that resolves to an array of tournaments.
+     */
     static async getTournamentsForUser(userId: number) {
         return Tournament.findAll({
             include: [
@@ -212,30 +273,81 @@ class TournamentService {
             ...(plain.location != null && { location: plain.location }),
             ...(plain.max_players != null && { max_players: plain.max_players }),
             ...(plain.is_online != null && { is_online: plain.is_online }),
-            rounds: (plain.rounds || []).map((r) => ({
-                id: r.id,
-                round_number: r.round_number,
-                status: r.status,
-                matches: (r.matches || []).map((m) => ({
-                    id: m.id,
-                    round_id: m.round_id,
-                    status: m.status,
-                    player1_tournament_player_id: m.player1_tournament_player_id,
-                    player2_tournament_player_id: m.player2_tournament_player_id,
-                    player1_games_won: m.player1_games_won,
-                    player2_games_won: m.player2_games_won,
-                    winner_tournament_player_id: m.winner_tournament_player_id,
-                    player1: m.player1
-                        ? { user: { id: m.player1.user?.id, username: m.player1.user?.username } }
-                        : null,
-                    player2: m.player2
-                        ? { user: { id: m.player2.user?.id, username: m.player2.user?.username } }
-                        : null,
-                    winner: m.winner
-                        ? { user: { id: m.winner.user?.id, username: m.winner.user?.username } }
-                        : null
-                }))
-            }))
+            tournament_player: {
+                id: tournamentPlayer.id,
+                user_id: tournamentPlayer.user_id,
+                match_wins: tournamentPlayer.match_wins,
+                match_losses: tournamentPlayer.match_losses,
+                match_draws: tournamentPlayer.match_draws,
+                games_won: tournamentPlayer.games_won,
+                games_played: tournamentPlayer.games_played,
+                dropped: tournamentPlayer.dropped
+            },
+            rounds: (plain.rounds || []).map((r) => {
+                const m = (r.matches && r.matches[0]) || null;
+
+                let match:
+                    | null
+                    | {
+                        id: number;
+                        round_id: number;
+                        status: string;
+                        player1: {
+                            id: number | null;
+                            username: string | null;
+                            isWinner: boolean;
+                            gamesWon: number;
+                        } | null;
+                        player2:
+                        | {
+                            id: number;
+                            username: string;
+                            isWinner: boolean;
+                            gamesWon: number;
+                        }
+                        | null;
+                    } = null;
+
+                if (m) {
+                    const isP1Winner = m.winner_tournament_player_id === m.player1_tournament_player_id;
+                    const isP2Winner =
+                        m.player2_tournament_player_id != null &&
+                        m.winner_tournament_player_id === m.player2_tournament_player_id;
+
+                    const p1User = m.player1?.user;
+                    const p2User = m.player2?.user;
+
+                    match = {
+                        id: m.id,
+                        round_id: m.round_id,
+                        status: m.status,
+                        player1: p1User
+                            ? {
+                                id: p1User.id,
+                                username: p1User.username,
+                                isWinner: isP1Winner,
+                                gamesWon: m.player1_games_won
+                            }
+                            : null,
+                        player2:
+                            m.player2_tournament_player_id == null || !p2User
+                                ? null
+                                : {
+                                    id: p2User.id,
+                                    username: p2User.username,
+                                    isWinner: isP2Winner,
+                                    gamesWon: m.player2_games_won
+                                }
+                    };
+                }
+
+                return {
+                    id: r.id,
+                    round_number: r.round_number,
+                    status: r.status,
+                    match
+                };
+            })
         };
     }
 
@@ -328,132 +440,212 @@ class TournamentService {
         await tp.destroy();
     }
 
+    /**
+     * Allow a player to drop from a tournament ("drop").
+     * - Before the start (registration open) : equivalent to unregistration.
+     * - During the tournament : forbidden if the player has still an active match in the current round.
+     * 
+     * @param data - The data to drop from the tournament.
+     * @returns A promise that resolves to void.
+     */
+
+    static async dropATournament(data: RegisterPlayerData) {
+        const tournament = await Tournament.findByPk(data.tournamentId);
+
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+
+        const droppableStatuses: TournamentStatus[] = ['tournament_in_progress'];
+        if (!droppableStatuses.includes(tournament.status)) {
+            throw new CustomError('Vous ne pouvez pas abandonner ce tournoi à ce stade', 400);
+        }
+
+        const tournamentPlayer = await TournamentPlayer.findOne({
+            where: { tournament_id: data.tournamentId, user_id: data.userId }
+        });
+
+        if (!tournamentPlayer) {
+            throw new CustomError('Vous ne participez pas à ce tournoi', 400);
+        }
+
+        if (tournament.current_round >= 1) {
+            const currentRound = await TournamentRound.findOne({
+                where: { tournament_id: data.tournamentId, round_number: tournament.current_round }
+            });
+
+            if (currentRound) {
+                const activeMatch = await TournamentMatch.findOne({
+                    where: {
+                        round_id: currentRound.id,
+                        [Op.or]: [
+                            { player1_tournament_player_id: tournamentPlayer.id },
+                            { player2_tournament_player_id: tournamentPlayer.id }
+                        ],
+                        status: { [Op.ne]: 'completed' }
+                    }
+                });
+
+                if (activeMatch) {
+                    throw new CustomError(
+                        'Vous ne pouvez pas abandonner tant que votre match de la ronde en cours n\'est pas terminé',
+                        400
+                    );
+                }
+            }
+        }
+
+        tournamentPlayer.dropped = true;
+        await tournamentPlayer.save();
+    }
+
+    /** Met un tournoi en statut "tournament_beginning" (démarrage sans créer de ronde). */
+    static async startTournament(tournamentId: number) {
+        const tournament = await Tournament.findByPk(tournamentId);
+
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+
+        if (['tournament_beginning', 'tournament_in_progress', 'tournament_finished', 'tournament_cancelled'].includes(tournament.status)) {
+            throw new CustomError('Ce tournoi est déjà démarré ou terminé', 400);
+        }
+
+        tournament.status = 'tournament_beginning';
+        await tournament.save();
+        return tournament;
+    }
+
+    /**
+     * Start the next round : close the current round if needed, create the new round
+     * with Swiss pairings and BYE matches. If it was the last round, finish the tournament.
+     * 
+     * @param tournament - The tournament to start the next round for.
+     * @returns A promise that resolves to the next round.
+     */
     static async startNextRound(tournament: Tournament) {
+
         const tournamentId = tournament.id;
 
         const nextRoundNum = tournament.current_round + 1;
 
         if (nextRoundNum > tournament.number_of_rounds) {
+            return this.finishTournament(tournamentId, tournament.current_round);
+        }
 
-            const transaction = await sequelize.transaction();
-            const currentRound = await TournamentRound.findOne({
-                where: { tournament_id: tournamentId, round_number: tournament.current_round },
-                transaction
-            });
+        await this.ensureCurrentRoundFullyPlayed(tournamentId, tournament.current_round);
 
-            if (currentRound) {
-                currentRound.status = 'completed';
-                await currentRound.save({ transaction });
-            }
+        const players = await TournamentPlayer.findAll({
+            where: { tournament_id: tournamentId, dropped: false },
+            attributes: ['id', 'match_wins']
+        });
+        if (players.length < 2) {
+            throw new CustomError('Il faut au moins 2 joueurs pour démarrer une ronde', 400);
+        }
 
-            tournament.status = 'tournament_finished';
-            await tournament.save({ transaction });
+        const playedPairs = await getPlayedPairs(tournamentId);
+        const pairs = swissPair(players.map((p) => ({ id: p.id, match_wins: p.match_wins })), playedPairs);
 
-            await transaction.commit();
-
-            return {
-                message: 'Le tournoi est terminé',
-            };
-        } else {
+        const nextRoundId = await sequelize.transaction(async (transaction) => {
             if (tournament.current_round >= 1) {
-                const currentRound = await TournamentRound.findOne({
-                    where: { tournament_id: tournamentId, round_number: tournament.current_round }
-                });
-                if (currentRound) {
-                    const pendingMatches = await TournamentMatch.count({
-                        where: { round_id: currentRound.id, status: { [Op.ne]: 'completed' } }
-                    });
-                    if (pendingMatches > 0) {
-                        throw new CustomError('Tous les scores de la ronde en cours doivent être renseignés avant de démarrer la ronde suivante', 400);
-                    }
-                }
+                await markRoundAsCompleted(tournamentId, tournament.current_round, transaction);
             }
 
-            const players = await TournamentPlayer.findAll({
-                where: { tournament_id: tournamentId, dropped: false },
-                attributes: ['id', 'match_wins']
-            });
-
-            if (players.length < 2) {
-                throw new CustomError('Il faut au moins 2 joueurs pour démarrer une ronde', 400);
+            if (tournament.status === 'tournament_beginning') {
+                tournament.status = 'tournament_in_progress';
+                await tournament.save({ transaction });
             }
 
-            const playedPairs = await getPlayedPairs(tournamentId);
-            const pairs = swissPair(players.map(p => ({ id: p.id, match_wins: p.match_wins })), playedPairs);
-            const transaction = await sequelize.transaction();
-            try {
-                if (tournament.current_round >= 1) {
-                    const currentRound = await TournamentRound.findOne({
-                        where: { tournament_id: tournamentId, round_number: tournament.current_round },
-                        transaction
-                    });
+            const nextRound = await TournamentRound.create(
+                {
+                    tournament_id: tournamentId,
+                    round_number: nextRoundNum,
+                    status: 'in_progress' as RoundStatus
+                },
+                { transaction }
+            );
 
-                    if (currentRound) {
-                        currentRound.status = 'completed';
-                        await currentRound.save({ transaction });
-                    }
-                }
-
-                if (tournament.status === 'registration_open') {
-                    tournament.status = 'tournament_beginning';
-                    await tournament.save({ transaction });
-                } else if (tournament.status === 'tournament_beginning' && nextRoundNum > 1) {
-                    tournament.status = 'tournament_in_progress';
-                    await tournament.save({ transaction });
-                }
-                const nextRound = await TournamentRound.create(
+            for (const [p1Id, p2Id] of pairs) {
+                await TournamentMatch.create(
                     {
+                        round_id: nextRound.id,
                         tournament_id: tournamentId,
-                        round_number: nextRoundNum,
-                        status: 'in_progress' as RoundStatus
+                        player1_tournament_player_id: p1Id,
+                        player2_tournament_player_id: p2Id,
+                        status: 'pending'
                     },
                     { transaction }
                 );
-                for (const [p1Id, p2Id] of pairs) {
-                    await TournamentMatch.create(
-                        {
-                            round_id: nextRound.id,
-                            tournament_id: tournamentId,
-                            player1_tournament_player_id: p1Id,
-                            player2_tournament_player_id: p2Id,
-                            status: 'pending'
-                        },
-                        { transaction }
-                    );
-                }
-                const pairedIds = new Set<number>(pairs.flatMap(([a, b]) => [a, b]));
-                for (const p of players) {
-                    if (!pairedIds.has(p.id)) {
-                        const byePlayer = await TournamentPlayer.findByPk(p.id, { transaction });
-                        if (byePlayer) {
-                            await TournamentMatch.create(
-                                {
-                                    round_id: nextRound.id,
-                                    tournament_id: tournamentId,
-                                    player1_tournament_player_id: byePlayer.id,
-                                    player2_tournament_player_id: null,
-                                    player1_games_won: 0,
-                                    player2_games_won: 0,
-                                    winner_tournament_player_id: byePlayer.id,
-                                    status: 'completed'
-                                },
-                                { transaction }
-                            );
-                            byePlayer.match_wins += 1;
-                            await byePlayer.save({ transaction });
-                        }
-                    }
-                }
-                tournament.current_round = nextRoundNum;
-                await tournament.save({ transaction });
-                await transaction.commit();
-                return this.getRoundWithMatches(nextRound.id);
-            } catch (err) {
-                try {
-                    await transaction.rollback();
-                } catch { }
-                throw err;
             }
+
+            const pairedIds = new Set(pairs.flatMap(([a, b]) => [a, b]));
+            for (const p of players) {
+                if (pairedIds.has(p.id)) continue;
+                const byePlayer = await TournamentPlayer.findByPk(p.id, { transaction });
+                if (!byePlayer) continue;
+                await TournamentMatch.create(
+                    {
+                        round_id: nextRound.id,
+                        tournament_id: tournamentId,
+                        player1_tournament_player_id: byePlayer.id,
+                        player2_tournament_player_id: null,
+                        player1_games_won: 0,
+                        player2_games_won: 0,
+                        winner_tournament_player_id: byePlayer.id,
+                        status: 'completed'
+                    },
+                    { transaction }
+                );
+                byePlayer.match_wins += 1;
+                await byePlayer.save({ transaction });
+            }
+
+            tournament.current_round = nextRoundNum;
+            await tournament.save({ transaction });
+
+            return nextRound.id;
+        });
+
+        return this.getRoundWithMatches(nextRoundId);
+    }
+
+    /** Finish the last round and mark the tournament as finished.
+     * 
+     * @param tournamentId - The ID of the tournament to finish.
+     * @param currentRoundNumber - The number of the current round to finish.
+     * @returns A promise that resolves to the message 'Le tournoi est terminé'.
+     */
+    private static async finishTournament(tournamentId: number, currentRoundNumber: number) {
+        return sequelize.transaction(async (transaction) => {
+            await markRoundAsCompleted(tournamentId, currentRoundNumber, transaction);
+            await Tournament.update(
+                { status: 'tournament_finished' },
+                { where: { id: tournamentId }, transaction }
+            );
+            return { message: 'Le tournoi est terminé' };
+        });
+    }
+
+    /** Check that all matches of the current round are completed ; otherwise throw an error 400. 
+     * 
+     * @param tournamentId - The ID of the tournament to check.
+     * @param currentRoundNumber - The number of the current round to check.
+     * @returns A promise that resolves to void.
+    */
+    private static async ensureCurrentRoundFullyPlayed(tournamentId: number, currentRoundNumber: number): Promise<void> {
+        if (currentRoundNumber < 1) return;
+        const currentRound = await TournamentRound.findOne({
+            where: { tournament_id: tournamentId, round_number: currentRoundNumber }
+        });
+        if (!currentRound) return;
+        const pendingCount = await TournamentMatch.count({
+            where: { round_id: currentRound.id, status: { [Op.ne]: 'completed' } }
+        });
+        if (pendingCount > 0) {
+            throw new CustomError(
+                'Tous les scores de la ronde en cours doivent être renseignés avant de démarrer la ronde suivante',
+                400
+            );
         }
     }
     static async getRoundWithMatches(roundId: number) {
@@ -571,20 +763,32 @@ class TournamentService {
 
     static async getStandings(tournamentId: number) {
         const players = await TournamentPlayer.findAll({
-            where: { tournament_id: tournamentId, dropped: false },
+            where: { tournament_id: tournamentId },
             include: [{ model: User, as: 'user', attributes: ['id', 'username'] }],
             order: [['match_wins', 'DESC'], ['match_draws', 'DESC'], ['games_won', 'DESC']]
         });
-        return players.map((p, i) => ({
-            rank: i + 1,
-            tournament_player_id: p.id,
-            user_id: p.user_id,
-            username: (p as any).user?.username ?? null,
-            match_wins: p.match_wins,
-            match_losses: p.match_losses,
-            match_draws: p.match_draws,
-            games_won: p.games_won,
-            games_played: p.games_played
+        return players.map((player, index) => ({
+            rank: index + 1,
+            tournament_player_id: player.id,
+            user_id: player.user_id,
+            username: (player as any).user?.username ?? null,
+            matches_breakdown: {
+                wins: {
+                    count: player.match_wins,
+                    total_points: player.match_wins * 3
+                },
+                losses: {
+                    count: player.match_losses,
+                    total_points: player.match_losses * 0
+                },
+                draws: {
+                    count: player.match_draws,
+                    total_points: player.match_draws * 1
+                },
+                games_won: player.games_won,
+                games_played: player.games_played,
+                hasDropped: player.dropped
+            }
         }));
     }
 }

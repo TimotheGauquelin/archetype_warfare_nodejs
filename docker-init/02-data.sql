@@ -200,6 +200,7 @@ INSERT INTO tournament (id, name, number_of_rounds, matches_per_round, status, c
     (4, 'Tournoi amical novembre', 3, 1, 'registration_closed', 0, 8, NULL, '2025-11-15 18:00:00', '2025-11-15 22:00:00', TRUE),
     (5, 'Winter Cup 2025', 5, 3, 'tournament_beginning', 0, 64, 'Lille - Convention JEUX', '2026-02-10 09:00:00', '2026-02-10 19:00:00', FALSE)
 ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('tournament', 'id'), (SELECT COALESCE(MAX(id), 1) FROM tournament));
 
 -- Inscriptions de démo : quelques utilisateurs inscrits à des tournois
 -- Championnat du printemps 2025 (id = 1) : tournoi plein (16 joueurs)
