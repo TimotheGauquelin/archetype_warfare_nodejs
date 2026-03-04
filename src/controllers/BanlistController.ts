@@ -26,9 +26,7 @@ class BanlistController {
         try {
             const id = getIntParam(request.params.id);
             const banlist = await BanlistService.getBanlistById(id);
-            response.status(200).json(
-                { success: true, data: banlist }
-            );
+            response.status(200).json(banlist);
         } catch (error) {
             next(error);
         }

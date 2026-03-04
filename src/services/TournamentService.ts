@@ -1,11 +1,13 @@
 import sequelize from '../config/Sequelize';
 import { Op } from 'sequelize';
 import type { Transaction } from 'sequelize';
-import { Tournament, TournamentPlayer, TournamentRound, TournamentMatch, User } from '../models/relations';
+import { Tournament, TournamentPlayer, TournamentRound, TournamentMatch, User, Deck, DeckCard, TournamentPlayerDeck, TournamentPlayerDeckCard, Card, Archetype } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 
 import type { RoundStatus } from '../models/TournamentRoundModel';
 import { TournamentStatus } from '../models/TournamentModel';
+import { sendPlayerRemovedFromTournamentMail } from '../mailing/sendPlayerRemovedFromTournamentMail';
+import { sendPlayerAddedToTournamentMail } from '../mailing/sendPlayerAddedToTournamentMail';
 
 const REGISTRATION_DEADLINE_HOURS = 48;
 
@@ -23,8 +25,10 @@ function isWithinRegistrationWindow(eventDate: Date | null): boolean {
 
 interface CreateTournamentData {
     name: string;
-    number_of_rounds: number;
+    max_number_of_rounds: number;
     matches_per_round: 1 | 3 | 5;
+    until_winner?: boolean;
+    require_deck_list?: boolean;
     max_players?: number | null;
     location?: string | null;
     event_date?: Date | string | null;
@@ -134,8 +138,10 @@ class TournamentService {
         // Ne jamais passer id : la base (SERIAL) l'auto-incrémente.
         const payload = {
             name: data.name,
-            number_of_rounds: data.number_of_rounds,
+            max_number_of_rounds: data.max_number_of_rounds,
             matches_per_round: data.matches_per_round,
+            until_winner: data.until_winner ?? false,
+            require_deck_list: data.require_deck_list ?? false,
             max_players: data.max_players ?? null,
             location: data.location ?? null,
             event_date: data.event_date != null ? new Date(data.event_date) : null,
@@ -167,20 +173,66 @@ class TournamentService {
         });
     }
 
+    /** Recherche tous les tournois (admin). Filtres optionnels : name, status, location (mot dans le lieu), is_online. */
+    static async searchAllTournaments(filters?: {
+        name?: string;
+        status?: TournamentStatus;
+        location?: string;
+        is_online?: boolean;
+    }) {
+        const where: Record<string, unknown> = {};
+        if (filters?.name?.trim()) {
+            where.name = { [Op.iLike]: `%${filters.name.trim()}%` };
+        }
+        if (filters?.status) {
+            where.status = filters.status;
+        }
+        if (filters?.location?.trim()) {
+            where.location = { [Op.iLike]: `%${filters.location.trim()}%` };
+        }
+        if (filters?.is_online !== undefined) {
+            where.is_online = filters.is_online;
+        }
+        return Tournament.findAll({
+            where,
+            order: [['event_date', 'ASC']],
+            include: [{ model: TournamentPlayer, as: 'players', attributes: ['id'] }]
+        });
+    }
+
     /** Get the tournaments for a user.
      * 
      * @param userId - The ID of the user to get the tournaments for.
      * @returns A promise that resolves to an array of tournaments.
      */
     static async getTournamentsForUser(userId: number) {
+        const userTournamentPlayers = await TournamentPlayer.findAll({
+            where: { user_id: userId },
+            attributes: ['tournament_id']
+        });
+
+        const tournamentIds = Array.from(
+            new Set(userTournamentPlayers.map(tp => tp.tournament_id as number))
+        );
+
+        if (tournamentIds.length === 0) {
+            return [];
+        }
+
         return Tournament.findAll({
+            where: { id: tournamentIds },
             include: [
                 {
                     model: TournamentPlayer,
                     as: 'players',
-                    required: true,
-                    where: { user_id: userId },
-                    include: [{ model: User, as: 'user', attributes: ['id', 'username', 'email'] }]
+                    required: false,
+                    include: [
+                        {
+                            model: User,
+                            as: 'user',
+                            attributes: ['id', 'username', 'email']
+                        }
+                    ]
                 }
             ],
             order: [['event_date', 'DESC']]
@@ -233,9 +285,11 @@ class TournamentService {
             id: number;
             name: string;
             status: string;
-            number_of_rounds: number;
+            max_number_of_rounds: number;
             matches_per_round: number;
             current_round: number;
+            until_winner?: boolean;
+            require_deck_list?: boolean;
             event_date: string | null;
             event_date_end?: string | null;
             location?: string | null;
@@ -265,9 +319,11 @@ class TournamentService {
             id: plain.id,
             name: plain.name,
             status: plain.status,
-            number_of_rounds: plain.number_of_rounds,
+            max_number_of_rounds: plain.max_number_of_rounds,
             matches_per_round: plain.matches_per_round,
             current_round: plain.current_round,
+            until_winner: plain.until_winner ?? false,
+            require_deck_list: plain.require_deck_list ?? false,
             event_date: plain.event_date,
             ...(plain.event_date_end != null && { event_date_end: plain.event_date_end }),
             ...(plain.location != null && { location: plain.location }),
@@ -276,6 +332,7 @@ class TournamentService {
             tournament_player: {
                 id: tournamentPlayer.id,
                 user_id: tournamentPlayer.user_id,
+                deck_id: tournamentPlayer.deck_id,
                 match_wins: tournamentPlayer.match_wins,
                 match_losses: tournamentPlayer.match_losses,
                 match_draws: tournamentPlayer.match_draws,
@@ -351,13 +408,45 @@ class TournamentService {
         };
     }
 
-    static async getById(id: number) {
-        const t = await Tournament.findByPk(id, {
-            include: [
-                { model: TournamentPlayer, as: 'players', include: [{ model: User, as: 'user', attributes: ['id', 'username', 'email'] }] },
-                { model: TournamentRound, as: 'rounds', order: [['round_number', 'ASC']], include: [{ model: TournamentMatch, as: 'matches' }] }
-            ]
-        });
+    static async getById(id: number, options?: { includePlayers?: boolean }) {
+        const includePlayers = options?.includePlayers !== false;
+        const include: Array<Record<string, unknown>> = [
+            { model: TournamentRound, as: 'rounds', order: [['round_number', 'ASC']], include: [{ model: TournamentMatch, as: 'matches' }] }
+        ];
+        if (includePlayers) {
+            include.unshift({
+                model: TournamentPlayer,
+                as: 'players',
+                include: [
+                    {
+                        model: User,
+                        as: 'user',
+                        attributes: ['id', 'username', 'email']
+                    },
+                    {
+                        model: TournamentPlayerDeck,
+                        as: 'deck_snapshot',
+                        include: [
+                            {
+                                model: TournamentPlayerDeckCard,
+                                as: 'cards',
+                                include: [
+                                    {
+                                        model: Card,
+                                        as: 'card'
+                                    }
+                                ]
+                            },
+                            {
+                                model: Archetype,
+                                as: 'archetype'
+                            }
+                        ]
+                    }
+                ]
+            });
+        }
+        const t = await Tournament.findByPk(id, { include });
         if (!t) throw new CustomError('Tournoi introuvable', 404);
         return t;
     }
@@ -367,6 +456,9 @@ class TournamentService {
         updates: {
             name?: string;
             status?: TournamentStatus;
+            max_number_of_rounds?: number;
+            until_winner?: boolean;
+            require_deck_list?: boolean;
             max_players?: number | null;
             location?: string | null;
             event_date?: Date | string | null;
@@ -378,6 +470,9 @@ class TournamentService {
         if (!t) throw new CustomError('Tournoi introuvable', 404);
         if (updates.name != null) t.name = updates.name;
         if (updates.status != null) t.status = updates.status;
+        if (updates.max_number_of_rounds !== undefined) t.max_number_of_rounds = updates.max_number_of_rounds;
+        if (updates.until_winner !== undefined) t.until_winner = updates.until_winner;
+        if (updates.require_deck_list !== undefined) t.require_deck_list = updates.require_deck_list;
         if (updates.max_players !== undefined) t.max_players = updates.max_players;
         if (updates.location !== undefined) t.location = updates.location;
         if (updates.event_date !== undefined) t.event_date = updates.event_date != null ? new Date(updates.event_date) : null;
@@ -385,6 +480,126 @@ class TournamentService {
         if (updates.is_online !== undefined) t.is_online = updates.is_online;
         await t.save();
         return t;
+    }
+
+    static async toggleRegistrationStatus(tournamentId: number) {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+        if (tournament.status !== 'registration_open' && tournament.status !== 'registration_closed') {
+            throw new CustomError('Seul un tournoi en inscription ouverte ou fermée peut basculer ce statut', 400);
+        }
+
+        tournament.status = tournament.status === 'registration_open' ? 'registration_closed' : 'registration_open';
+        await tournament.save();
+
+        if (tournament.status === 'registration_closed') {
+            await this.createDeckSnapshotsForTournament(tournamentId);
+        }
+
+        return {
+            message: 'Le statut a été modifié avec succès'
+        };
+    }
+
+    /**
+     * Crée le snapshot du deck pour chaque joueur inscrit ayant choisi un deck (au verrouillage des inscriptions).
+     */
+    static async createDeckSnapshotsForTournament(tournamentId: number): Promise<void> {
+        const players = await TournamentPlayer.findAll({
+            where: { tournament_id: tournamentId, deck_id: { [Op.ne]: null } },
+            include: [
+                { model: Deck, as: 'deck', required: true, include: [{ model: DeckCard, as: 'deck_cards' }] }
+            ]
+        });
+
+        for (const tp of players) {
+            const existing = await TournamentPlayerDeck.findOne({ where: { tournament_player_id: tp.id } });
+            if (existing) continue;
+
+            const deck = tp.get('deck') as Deck & { deck_cards?: DeckCard[] };
+            if (!deck) continue;
+
+            const deckCards = deck.deck_cards ?? [];
+            await sequelize.transaction(async (transaction) => {
+                const snapshot = await TournamentPlayerDeck.create(
+                    {
+                        tournament_player_id: tp.id,
+                        label: deck.label,
+                        archetype_id: deck.archetype_id,
+                        is_playable: deck.is_playable
+                    },
+                    { transaction }
+                );
+                for (const dc of deckCards) {
+                    await TournamentPlayerDeckCard.create(
+                        {
+                            tournament_player_deck_id: snapshot.id,
+                            card_id: dc.card_id,
+                            quantity: dc.quantity
+                        },
+                        { transaction }
+                    );
+                }
+            });
+        }
+    }
+
+    /**
+     * Crée ou met à jour le snapshot de deck pour un joueur donné (en fonction de son deck_id actuel).
+     */
+    private static async ensureSnapshotForTournamentPlayer(tp: TournamentPlayer): Promise<void> {
+        if (!tp.deck_id) {
+            return;
+        }
+
+        const deck = await Deck.findByPk(tp.deck_id, {
+            include: [{ model: DeckCard, as: 'deck_cards' }]
+        });
+        if (!deck) {
+            return;
+        }
+
+        await sequelize.transaction(async (transaction) => {
+            const existing = await TournamentPlayerDeck.findOne({
+                where: { tournament_player_id: tp.id },
+                transaction
+            });
+
+            if (existing) {
+                await existing.destroy({ transaction });
+            }
+
+            const snapshot = await TournamentPlayerDeck.create(
+                {
+                    tournament_player_id: tp.id,
+                    label: deck.label,
+                    archetype_id: deck.archetype_id,
+                    is_playable: deck.is_playable
+                },
+                { transaction }
+            );
+
+            const deckCards = (deck as Deck & { deck_cards?: DeckCard[] }).deck_cards ?? [];
+            for (const dc of deckCards) {
+                await TournamentPlayerDeckCard.create(
+                    {
+                        tournament_player_deck_id: snapshot.id,
+                        card_id: dc.card_id,
+                        quantity: dc.quantity
+                    },
+                    { transaction }
+                );
+            }
+        });
+    }
+
+    /** Supprime un tournoi (les joueurs, rondes et matchs sont supprimés en cascade). */
+    static async delete(id: number): Promise<void> {
+        const t = await Tournament.findByPk(id);
+        if (!t) throw new CustomError('Tournoi introuvable', 404);
+        await t.destroy();
     }
 
     static async registerToATournament(data: RegisterPlayerData) {
@@ -413,7 +628,52 @@ class TournamentService {
             throw new CustomError('Vous êtes déjà inscrit à ce tournoi', 400);
         }
 
-        return TournamentPlayer.create({ tournament_id: data.tournamentId, user_id: data.userId });
+        return TournamentPlayer.create({ tournament_id: data.tournamentId, user_id: data.userId, deck_id: null });
+    }
+
+    /**
+     * Admin ajoute un utilisateur à un tournoi. L'utilisateur ne doit pas déjà y être inscrit.
+     */
+    static async addPlayerToTournament(tournamentId: number, userId: number, deckId?: number | null) {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            throw new CustomError('Utilisateur introuvable', 404);
+        }
+
+        const existing = await TournamentPlayer.findOne({
+            where: { tournament_id: tournamentId, user_id: userId }
+        });
+        if (existing) {
+            throw new CustomError('Cet utilisateur est déjà inscrit à ce tournoi', 400);
+        }
+
+        if (tournament.max_players != null) {
+            const count = await TournamentPlayer.count({ where: { tournament_id: tournamentId } });
+            if (count >= tournament.max_players) {
+                throw new CustomError('Le tournoi est complet', 400);
+            }
+        }
+
+        const tournamentPlayer = await TournamentPlayer.create({ tournament_id: tournamentId, user_id: userId, deck_id: deckId ?? null });
+
+        if (deckId != null) {
+            await this.ensureSnapshotForTournamentPlayer(tournamentPlayer);
+        }
+
+        if (user.email) {
+            await sendPlayerAddedToTournamentMail({
+                email: user.email,
+                username: user.username ?? 'Joueur',
+                tournamentName: tournament.name
+            });
+        }
+
+        return tournamentPlayer;
     }
 
     static async unregisterToATournament(data: RegisterPlayerData) {
@@ -438,6 +698,69 @@ class TournamentService {
         }
 
         await tp.destroy();
+    }
+
+    /**
+     * Définit le deck du joueur connecté pour un tournoi (inscription déjà faite).
+     * Autorisé tant que les inscriptions sont ouvertes ou fermées (avant le début du tournoi).
+     */
+    static async setMyDeckForTournament(tournamentId: number, userId: number, deckId: number): Promise<TournamentPlayer> {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+        if (tournament.status !== 'registration_open' && tournament.status !== 'registration_closed') {
+            throw new CustomError('Il n\'est plus possible de modifier votre deck pour ce tournoi', 400);
+        }
+        const tp = await TournamentPlayer.findOne({ where: { tournament_id: tournamentId, user_id: userId } });
+        if (!tp) {
+            throw new CustomError('Vous n\'êtes pas inscrit à ce tournoi', 404);
+        }
+        const deck = await Deck.findByPk(deckId);
+        if (!deck || deck.user_id !== userId) {
+            throw new CustomError('Deck introuvable ou ne vous appartient pas', 400);
+        }
+        await tp.update({ deck_id: deckId });
+        await this.ensureSnapshotForTournamentPlayer(tp);
+        return tp;
+    }
+
+    /**
+     * Admin removes a player from a tournament (sets dropped = true) and sends an email with the reason.
+     */
+    static async removePlayerFromTournament(tournamentId: number, playerId: number, reason: string) {
+
+        console.log('tournamentId', tournamentId);
+        console.log('playerId', playerId);
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+
+        const tournamentPlayer = await TournamentPlayer.findOne({
+            where: { tournament_id: tournamentId, id: playerId },
+            include: [{ model: User, as: 'user', attributes: ['id', 'username', 'email'] }]
+        });
+
+        if (!tournamentPlayer) {
+            throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
+        }
+
+        tournamentPlayer.destroy();
+
+        const user = (tournamentPlayer as any).user;
+        if (user?.email) {
+            await sendPlayerRemovedFromTournamentMail({
+                email: user.email,
+                username: user.username ?? 'Joueur',
+                tournamentName: tournament.name,
+                reason: reason?.trim() || 'Non précisé.'
+            });
+        }
+
+        return {
+            message: `${user?.username ?? 'Joueur'} a été retiré du tournoi et un email lui a été envoyé.`,
+        };
     }
 
     /**
@@ -513,6 +836,9 @@ class TournamentService {
 
         tournament.status = 'tournament_beginning';
         await tournament.save();
+
+        await this.createDeckSnapshotsForTournament(tournamentId);
+
         return tournament;
     }
 
@@ -529,7 +855,14 @@ class TournamentService {
 
         const nextRoundNum = tournament.current_round + 1;
 
-        if (nextRoundNum > tournament.number_of_rounds) {
+        if (tournament.until_winner && tournament.current_round >= 1) {
+            const singleLeader = await this.hasSingleLeader(tournamentId);
+            if (singleLeader) {
+                return this.finishTournament(tournamentId, tournament.current_round);
+            }
+        }
+
+        if (nextRoundNum > tournament.max_number_of_rounds) {
             return this.finishTournament(tournamentId, tournament.current_round);
         }
 
@@ -607,6 +940,160 @@ class TournamentService {
         });
 
         return this.getRoundWithMatches(nextRoundId);
+    }
+
+    /**
+     * Rollback the last round of a tournament : remove its matches, delete the round
+     * and revert players' stats (wins/losses/draws/games) impacted by that round.
+     * 
+     * @param tournamentId - The ID of the tournament.
+     */
+    static async rollbackLastRound(tournamentId: number) {
+        const tournament = await Tournament.findByPk(tournamentId);
+
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+
+        if (tournament.status === 'tournament_finished') {
+            throw new CustomError('Impossible d\'annuler une ronde d\'un tournoi terminé', 400);
+        }
+
+        const currentRoundNumber = tournament.current_round;
+        if (currentRoundNumber < 1) {
+            throw new CustomError('Aucune ronde à annuler pour ce tournoi', 400);
+        }
+
+        return sequelize.transaction(async (transaction) => {
+            const round = await TournamentRound.findOne({
+                where: { tournament_id: tournamentId, round_number: currentRoundNumber },
+                transaction
+            });
+
+            if (!round) {
+                throw new CustomError('Ronde actuelle introuvable pour ce tournoi', 404);
+            }
+
+            const matches = await TournamentMatch.findAll({
+                where: { round_id: round.id },
+                transaction
+            });
+
+            // Précharger les joueurs concernés en une seule requête
+            const playerIds = Array.from(
+                new Set(
+                    matches
+                        .flatMap((m) => [m.player1_tournament_player_id, m.player2_tournament_player_id])
+                        .filter((id): id is number => id != null)
+                )
+            );
+
+            const players = await TournamentPlayer.findAll({
+                where: { id: playerIds },
+                transaction
+            });
+            const playersById = new Map(players.map((p) => [p.id, p]));
+
+            // Revenir en arrière sur les stats des joueurs pour cette ronde
+            for (const match of matches) {
+                if (match.status !== 'completed') {
+                    continue;
+                }
+
+                const p1 =
+                    match.player1_tournament_player_id != null
+                        ? playersById.get(match.player1_tournament_player_id)
+                        : undefined;
+                const p2 =
+                    match.player2_tournament_player_id != null
+                        ? playersById.get(match.player2_tournament_player_id)
+                        : undefined;
+
+                // BYE : uniquement p1 existe, p2 est null
+                if (match.player2_tournament_player_id == null) {
+                    if (p1 && p1.match_wins > 0) {
+                        p1.match_wins -= 1;
+                    }
+                    continue;
+                }
+
+                if (!p1 || !p2) {
+                    continue;
+                }
+
+                const p1Games = match.player1_games_won ?? 0;
+                const p2Games = match.player2_games_won ?? 0;
+                const totalGames = p1Games + p2Games;
+                const winnerId = match.winner_tournament_player_id;
+
+                if (winnerId === p1.id) {
+                    if (p1.match_wins > 0) p1.match_wins -= 1;
+                    if (p2.match_losses > 0) p2.match_losses -= 1;
+                } else if (winnerId === p2.id) {
+                    if (p2.match_wins > 0) p2.match_wins -= 1;
+                    if (p1.match_losses > 0) p1.match_losses -= 1;
+                } else {
+                    if (p1.match_draws > 0) p1.match_draws -= 1;
+                    if (p2.match_draws > 0) p2.match_draws -= 1;
+                }
+
+                p1.games_won = Math.max(0, p1.games_won - p1Games);
+                p1.games_played = Math.max(0, p1.games_played - totalGames);
+
+                p2.games_won = Math.max(0, p2.games_won - p2Games);
+                p2.games_played = Math.max(0, p2.games_played - totalGames);
+            }
+
+            // Sauvegarde des joueurs modifiés
+            for (const player of playersById.values()) {
+                await player.save({ transaction });
+            }
+
+            // Supprimer les matchs de la ronde
+            await TournamentMatch.destroy({
+                where: { round_id: round.id },
+                transaction
+            });
+
+            // Supprimer la ronde elle-même (sinon conflit sur round_number lors de la recréation)
+            await round.destroy({ transaction });
+
+            // Mettre à jour le tournoi (current_round et éventuellement status)
+            const newCurrentRound = currentRoundNumber - 1;
+            tournament.current_round = newCurrentRound;
+            if (newCurrentRound === 0 && tournament.status === 'tournament_in_progress') {
+                tournament.status = 'tournament_beginning';
+            }
+            await tournament.save({ transaction });
+
+            return {
+                message: 'Dernière ronde annulée avec succès',
+                current_round: tournament.current_round,
+                status: tournament.status
+            };
+        });
+    }
+
+    /** True if there is exactly one leader (strictly better than second on match_wins, match_draws, games_won). */
+    private static async hasSingleLeader(tournamentId: number): Promise<boolean> {
+        const players = await TournamentPlayer.findAll({
+            where: { tournament_id: tournamentId, dropped: false },
+            attributes: ['id', 'match_wins', 'match_draws', 'games_won']
+        });
+        const sorted = [...players].sort((a, b) => {
+            if (a.match_wins !== b.match_wins) return b.match_wins - a.match_wins;
+            if (a.match_draws !== b.match_draws) return b.match_draws - a.match_draws;
+            return b.games_won - a.games_won;
+        });
+        if (sorted.length === 0) return false;
+        if (sorted.length === 1) return true;
+        const first = sorted[0];
+        const second = sorted[1];
+        return (
+            first.match_wins > second.match_wins ||
+            (first.match_wins === second.match_wins && first.match_draws > second.match_draws) ||
+            (first.match_wins === second.match_wins && first.match_draws === second.match_draws && first.games_won > second.games_won)
+        );
     }
 
     /** Finish the last round and mark the tournament as finished.
@@ -764,32 +1251,89 @@ class TournamentService {
     static async getStandings(tournamentId: number) {
         const players = await TournamentPlayer.findAll({
             where: { tournament_id: tournamentId },
-            include: [{ model: User, as: 'user', attributes: ['id', 'username'] }],
+            include: [
+                { model: User, as: 'user', attributes: ['id', 'username'] },
+                {
+                    model: TournamentPlayerDeck,
+                    as: 'deck_snapshot',
+                    include: [
+                        {
+                            model: TournamentPlayerDeckCard,
+                            as: 'cards',
+                            include: [
+                                {
+                                    model: Card,
+                                    as: 'card'
+                                }
+                            ]
+                        },
+                        {
+                            model: Archetype,
+                            as: 'archetype'
+                        }
+                    ]
+                }
+            ],
             order: [['match_wins', 'DESC'], ['match_draws', 'DESC'], ['games_won', 'DESC']]
         });
-        return players.map((player, index) => ({
-            rank: index + 1,
-            tournament_player_id: player.id,
-            user_id: player.user_id,
-            username: (player as any).user?.username ?? null,
-            matches_breakdown: {
-                wins: {
-                    count: player.match_wins,
-                    total_points: player.match_wins * 3
+        return players.map((player, index) => {
+            const snapshot = (player as any).deck_snapshot ?? null;
+            return {
+                rank: index + 1,
+                tournament_player_id: player.id,
+                user_id: player.user_id,
+                username: (player as any).user?.username ?? null,
+                deck: snapshot,
+                matches_breakdown: {
+                    wins: {
+                        count: player.match_wins,
+                        total_points: player.match_wins * 3
+                    },
+                    losses: {
+                        count: player.match_losses,
+                        total_points: player.match_losses * 0
+                    },
+                    draws: {
+                        count: player.match_draws,
+                        total_points: player.match_draws * 1
+                    },
+                    games_won: player.games_won,
+                    games_played: player.games_played,
+                    hasDropped: player.dropped
+                }
+            };
+        });
+    }
+
+    /**
+     * Récupère le snapshot de deck (et ses cartes) pour un TournamentPlayer donné.
+     */
+    static async getDeckSnapshotForTournamentPlayer(tournamentPlayerId: number) {
+        const snapshot = await TournamentPlayerDeck.findOne({
+            where: { tournament_player_id: tournamentPlayerId },
+            include: [
+                {
+                    model: TournamentPlayerDeckCard,
+                    as: 'cards',
+                    include: [
+                        {
+                            model: Card,
+                            as: 'card'
+                        }
+                    ]
                 },
-                losses: {
-                    count: player.match_losses,
-                    total_points: player.match_losses * 0
-                },
-                draws: {
-                    count: player.match_draws,
-                    total_points: player.match_draws * 1
-                },
-                games_won: player.games_won,
-                games_played: player.games_played,
-                hasDropped: player.dropped
-            }
-        }));
+                {
+                    model: Archetype,
+                    as: 'archetype'
+                }
+            ]
+        });
+
+        if (!snapshot) {
+            throw new CustomError('Snapshot de deck introuvable pour ce joueur de tournoi', 404);
+        }
+
+        return snapshot;
     }
 }
 

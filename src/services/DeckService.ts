@@ -23,9 +23,13 @@ interface UpdateDeckData {
 }
 
 class DeckService {
-    static async getAllDecksByUserId(userId: number): Promise<Deck[]> {
+    static async getAllDecksByUserId(userId: number, isPlayable?: boolean | null): Promise<Deck[]> {
+        const where: { user_id: number; is_playable?: boolean } = { user_id: userId };
+        if (isPlayable !== undefined && isPlayable !== null) {
+            where.is_playable = isPlayable;
+        }
         return Deck.findAll({
-            where: { user_id: userId },
+            where,
             include: [
                 {
                     model: DeckCard,
@@ -73,6 +77,7 @@ class DeckService {
 
             const deckId = deck.id;
 
+            let totalCards = 0;
             if (body.deck_cards && Array.isArray(body.deck_cards) && body.deck_cards.length > 0) {
                 const cardMap = new Map<string, number>();
 
@@ -133,7 +138,11 @@ class DeckService {
                         quantity: quantity
                     }, { transaction });
                 }
+                totalCards = [...cardMap.values()].reduce((a, b) => a + b, 0);
             }
+
+            const is_playable = totalCards >= 40 && totalCards <= 60;
+            await deck.update({ is_playable }, { transaction });
 
             await transaction.commit();
         } catch (error) {
@@ -263,6 +272,9 @@ class DeckService {
                         }, { transaction });
                     }
                 }
+                const totalCards = [...newCardMap.values()].reduce((a, b) => a + b, 0);
+                const is_playable = totalCards >= 40 && totalCards <= 60;
+                await Deck.update({ is_playable }, { where: { id }, transaction });
             }
 
             await transaction.commit();

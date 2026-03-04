@@ -5,6 +5,7 @@ interface TournamentPlayerAttributes {
     id: number;
     tournament_id: number;
     user_id: number;
+    deck_id: number | null;
     match_wins: number;
     match_losses: number;
     match_draws: number;
@@ -15,12 +16,13 @@ interface TournamentPlayerAttributes {
     updated_at?: Date;
 }
 
-interface TournamentPlayerCreationAttributes extends Optional<TournamentPlayerAttributes, 'id' | 'match_wins' | 'match_losses' | 'match_draws' | 'games_won' | 'games_played' | 'dropped' | 'created_at' | 'updated_at'> {}
+interface TournamentPlayerCreationAttributes extends Optional<TournamentPlayerAttributes, 'id' | 'deck_id' | 'match_wins' | 'match_losses' | 'match_draws' | 'games_won' | 'games_played' | 'dropped' | 'created_at' | 'updated_at'> {}
 
 class TournamentPlayer extends Model<TournamentPlayerAttributes, TournamentPlayerCreationAttributes> implements TournamentPlayerAttributes {
     declare id: number;
     declare tournament_id: number;
     declare user_id: number;
+    declare deck_id: number | null;
     declare match_wins: number;
     declare match_losses: number;
     declare match_draws: number;
@@ -46,6 +48,11 @@ TournamentPlayer.init({
         type: DataTypes.BIGINT,
         allowNull: false,
         references: { model: 'user', key: 'id' }
+    },
+    deck_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'deck', key: 'id' }
     },
     match_wins: {
         type: DataTypes.INTEGER,

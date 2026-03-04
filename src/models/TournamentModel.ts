@@ -21,10 +21,12 @@ const TOURNAMENT_STATUSES: TournamentStatus[] = [
 interface TournamentAttributes {
     id: number;
     name: string;
-    number_of_rounds: number;
+    max_number_of_rounds: number;
     matches_per_round: number;
     status: TournamentStatus;
     current_round: number;
+    until_winner: boolean;
+    require_deck_list: boolean;
     max_players: number | null;
     location: string | null;
     event_date: Date | null;
@@ -37,16 +39,18 @@ interface TournamentAttributes {
 interface TournamentCreationAttributes
     extends Optional<
         TournamentAttributes,
-        'id' | 'status' | 'current_round' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
+        'id' | 'status' | 'current_round' | 'until_winner' | 'require_deck_list' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
     > {}
 
 class Tournament extends Model<TournamentAttributes, TournamentCreationAttributes> implements TournamentAttributes {
     declare id: number;
     declare name: string;
-    declare number_of_rounds: number;
+    declare max_number_of_rounds: number;
     declare matches_per_round: number;
     declare status: TournamentStatus;
     declare current_round: number;
+    declare until_winner: boolean;
+    declare require_deck_list: boolean;
     declare max_players: number | null;
     declare location: string | null;
     declare event_date: Date | null;
@@ -67,7 +71,7 @@ Tournament.init(
             type: DataTypes.STRING(200),
             allowNull: false
         },
-        number_of_rounds: {
+        max_number_of_rounds: {
             type: DataTypes.INTEGER,
             allowNull: false
         },
@@ -86,6 +90,16 @@ Tournament.init(
             type: DataTypes.INTEGER,
             allowNull: false,
             defaultValue: 0
+        },
+        until_winner: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
+        require_deck_list: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
         },
         max_players: {
             type: DataTypes.INTEGER,

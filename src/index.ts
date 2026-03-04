@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 import './models/relations';
 // import { limiter } from './middlewares/rateLimitMiddleware';
 import websiteActionsRoutes from './routes/WebsiteActionsRoute';
+import archetypeRankingRoutes from './routes/ArchetypeRankingRoute';
 import envVars from './config/envValidation';
 import logger from './utils/logger';
 
@@ -61,6 +62,7 @@ apiRouter.use('/images', uploadImageRoutes);
 apiRouter.use('/decks', deckRoutes);
 apiRouter.use('/tournaments', tournamentRoutes);
 apiRouter.use('/website-actions', websiteActionsRoutes);
+apiRouter.use('/archetype-rankings', archetypeRankingRoutes);
 
 // ErrorHandler doit être après toutes les routes
 app.use(ErrorHandler);

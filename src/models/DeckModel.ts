@@ -7,11 +7,12 @@ interface DeckAttributes {
     comment: string;
     archetype_id: number | null;
     user_id: number | null;
+    is_playable: boolean;
     created_at?: Date;
     updated_at?: Date;
 }
 
-interface DeckCreationAttributes extends Optional<DeckAttributes, 'id' | 'archetype_id' | 'user_id' | 'created_at' | 'updated_at'> {}
+interface DeckCreationAttributes extends Optional<DeckAttributes, 'id' | 'archetype_id' | 'user_id' | 'is_playable' | 'created_at' | 'updated_at'> {}
 
 /**
  * Deck model representing user cards deck
@@ -22,6 +23,7 @@ class Deck extends Model<DeckAttributes, DeckCreationAttributes> implements Deck
     declare comment: string;
     declare archetype_id: number | null;
     declare user_id: number | null;
+    declare is_playable: boolean;
     declare created_at?: Date;
     declare updated_at?: Date;
 }
@@ -55,6 +57,11 @@ Deck.init({
             model: 'user',
             key: 'id'
         }
+    },
+    is_playable: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
     },
     created_at: {
         type: DataTypes.DATE,

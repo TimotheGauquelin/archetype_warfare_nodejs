@@ -193,12 +193,12 @@ AND NOT EXISTS (SELECT 1 FROM user_role ur WHERE ur.user_id = u.id AND ur.role_i
 SELECT setval('user_id_seq', (SELECT COALESCE(MAX(id), 1) FROM "user"));
 
 -- Tournois de démo (event_date = début, event_date_end = fin)
-INSERT INTO tournament (id, name, number_of_rounds, matches_per_round, status, current_round, max_players, location, event_date, event_date_end, is_online) VALUES
-    (1, 'Championnat du printemps 2025', 5, 3, 'registration_open', 0, 16, 'Paris - Salle des Duelistes', '2026-04-12 14:00:00', '2026-04-12 20:00:00', FALSE),
-    (2, 'Ligue en ligne - Semaine 42', 4, 1, 'registration_open', 0, 32, NULL, '2026-10-20 19:00:00', '2026-10-20 23:00:00', TRUE),
-    (3, 'Open Lyon', 6, 3, 'tournament_in_progress', 2, 24, 'Lyon - Game Over Store', '2025-03-01 10:00:00', '2025-03-01 18:00:00', FALSE),
-    (4, 'Tournoi amical novembre', 3, 1, 'registration_closed', 0, 8, NULL, '2025-11-15 18:00:00', '2025-11-15 22:00:00', TRUE),
-    (5, 'Winter Cup 2025', 5, 3, 'tournament_beginning', 0, 64, 'Lille - Convention JEUX', '2026-02-10 09:00:00', '2026-02-10 19:00:00', FALSE)
+INSERT INTO tournament (id, name, max_number_of_rounds, matches_per_round, status, current_round, until_winner, max_players, location, event_date, event_date_end, is_online) VALUES
+    (1, 'Championnat du printemps 2025', 2, 3, 'registration_open', 0, FALSE, 4, 'Paris - Salle des Duelistes', '2026-04-12 14:00:00', '2026-04-12 20:00:00', FALSE),
+    (2, 'Ligue en ligne - Semaine 42', 4, 1, 'registration_open', 0, FALSE, 32, NULL, '2026-10-20 19:00:00', '2026-10-20 23:00:00', TRUE),
+    (3, 'Open Lyon', 6, 3, 'tournament_in_progress', 2, FALSE, 24, 'Lyon - Game Over Store', '2025-03-01 10:00:00', '2025-03-01 18:00:00', FALSE),
+    (4, 'Tournoi amical novembre', 3, 1, 'registration_closed', 0, FALSE, 8, NULL, '2025-11-15 18:00:00', '2025-11-15 22:00:00', TRUE),
+    (5, 'Winter Cup 2025', 5, 3, 'tournament_beginning', 0, TRUE, 64, 'Lille - Convention JEUX', '2026-02-10 09:00:00', '2026-02-10 19:00:00', FALSE)
 ON CONFLICT (id) DO NOTHING;
 SELECT setval(pg_get_serial_sequence('tournament', 'id'), (SELECT COALESCE(MAX(id), 1) FROM tournament));
 
@@ -209,18 +209,6 @@ INSERT INTO tournament_player (tournament_id, user_id) VALUES
     (1, 2),
     (1, 3),
     (1, 4),
-    (1, 5),
-    (1, 6),
-    (1, 7),
-    (1, 8),
-    (1, 9),
-    (1, 10),
-    (1, 11),
-    (1, 12),
-    (1, 13),
-    (1, 14),
-    (1, 15),
-    (1, 16),
     (2, 4),
     (2, 6),
     (3, 2),

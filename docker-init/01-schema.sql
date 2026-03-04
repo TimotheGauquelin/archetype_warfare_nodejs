@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS deck (
     comment TEXT,
     archetype_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
+    is_playable BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_deck_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE CASCADE,
@@ -122,6 +123,9 @@ CREATE TABLE IF NOT EXISTS banlist (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE IF EXISTS banlist
+    ADD COLUMN IF NOT EXISTS is_event_banlist BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS card_status (
     id SERIAL PRIMARY KEY,
@@ -183,10 +187,12 @@ CREATE TABLE IF NOT EXISTS website_actions (
 CREATE TABLE IF NOT EXISTS tournament (
     id SERIAL PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
-    number_of_rounds INT NOT NULL CHECK (number_of_rounds >= 1),
+    max_number_of_rounds INT NOT NULL CHECK (max_number_of_rounds >= 1),
     matches_per_round INT NOT NULL CHECK (matches_per_round IN (1, 3)),
     status VARCHAR(30) NOT NULL DEFAULT 'draft' CHECK (status IN ('registration_open', 'registration_closed', 'tournament_beginning', 'tournament_in_progress', 'tournament_finished', 'tournament_cancelled')),
     current_round INT NOT NULL DEFAULT 0,
+    until_winner BOOLEAN NOT NULL DEFAULT FALSE,
+    require_deck_list BOOLEAN NOT NULL DEFAULT FALSE,
     max_players INT NULL,
     location VARCHAR(255) NULL,
     event_date TIMESTAMP NULL,
@@ -200,6 +206,7 @@ CREATE TABLE IF NOT EXISTS tournament_player (
     id SERIAL PRIMARY KEY,
     tournament_id INT NOT NULL,
     user_id BIGINT NOT NULL,
+    deck_id INT NULL,
     match_wins INT NOT NULL DEFAULT 0,
     match_losses INT NOT NULL DEFAULT 0,
     match_draws INT NOT NULL DEFAULT 0,
@@ -210,6 +217,7 @@ CREATE TABLE IF NOT EXISTS tournament_player (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_tp_tournament FOREIGN KEY (tournament_id) REFERENCES tournament (id) ON DELETE CASCADE,
     CONSTRAINT fk_tp_user FOREIGN KEY (user_id) REFERENCES "user" (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tp_deck FOREIGN KEY (deck_id) REFERENCES deck (id) ON DELETE SET NULL,
     CONSTRAINT uq_tournament_user UNIQUE (tournament_id, user_id)
 );
 
@@ -244,11 +252,47 @@ CREATE TABLE IF NOT EXISTS tournament_match (
     CONSTRAINT chk_tm_players_different CHECK (player2_tournament_player_id IS NULL OR player1_tournament_player_id != player2_tournament_player_id)
 );
 
+-- Snapshot du deck au verrouillage des inscriptions (liste figée pour le tournoi)
+CREATE TABLE IF NOT EXISTS tournament_player_deck (
+    id SERIAL PRIMARY KEY,
+    tournament_player_id INT NOT NULL UNIQUE,
+    label VARCHAR(200) NOT NULL,
+    archetype_id BIGINT NULL,
+    is_playable BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_tpd_tournament_player FOREIGN KEY (tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tpd_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS tournament_player_deck_card (
+    id SERIAL PRIMARY KEY,
+    tournament_player_deck_id INT NOT NULL,
+    card_id VARCHAR(8) NOT NULL,
+    quantity INT NOT NULL,
+    CONSTRAINT fk_tpdc_deck FOREIGN KEY (tournament_player_deck_id) REFERENCES tournament_player_deck (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tpdc_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournament (status);
 CREATE INDEX IF NOT EXISTS idx_tournament_player_tournament ON tournament_player (tournament_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_round_tournament ON tournament_round (tournament_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_match_round ON tournament_match (round_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_match_tournament ON tournament_match (tournament_id);
+
+-- Colonne deck_id sur tournament_player (pour classement par archétype)
+ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS deck_id INT NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tp_deck') THEN
+        ALTER TABLE tournament_player ADD CONSTRAINT fk_tp_deck FOREIGN KEY (deck_id) REFERENCES deck (id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- Colonne is_playable sur deck (40-60 cartes = jouable)
+ALTER TABLE deck ADD COLUMN IF NOT EXISTS is_playable BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Colonne require_deck_list sur tournament (deck list obligatoire ou non)
+ALTER TABLE tournament ADD COLUMN IF NOT EXISTS require_deck_list BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Index sur "user"
 CREATE INDEX IF NOT EXISTS idx_user_email ON "user" (email);

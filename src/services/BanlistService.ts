@@ -1,5 +1,6 @@
 import { Banlist, BanlistArchetypeCard, Archetype, Card, CardStatus } from '../models/relations';
 import sequelize from '../config/Sequelize';
+import { Op } from 'sequelize';
 
 interface BanlistArchetypeCardData {
     card_id: string;
@@ -14,90 +15,111 @@ interface BanlistData {
     release_date: Date;
     description: string;
     is_active: boolean;
+    is_event_banlist?: boolean;
     banlist_archetype_cards?: BanlistArchetypeCardData[];
 }
 
 class BanlistService {
     static async getAllBanlists(): Promise<Banlist[]> {
-        return Banlist.findAll({
-            include: [{
-                model: BanlistArchetypeCard,
-                as: 'banlist_archetype_cards',
-                where: {
-                    archetype_id: null
-                },
-                include: [
-                    {
-                        model: Card,
-                        as: 'card'
-                    },
-                    {
-                        model: CardStatus,
-                        as: 'card_status'
-                    }
-                ]
-            }]
-        });
+        return Banlist.findAll();
     }
 
     static async getBanlistById(id: number): Promise<Banlist | null> {
         return Banlist.findOne({
             where: { id },
-            include: [{
-                model: BanlistArchetypeCard,
-                as: 'banlist_archetype_cards',
-                where: {
-                    archetype_id: null
-                },
-                include: [
-                    {
-                        model: Card,
-                        as: 'card',
-                        attributes: ['id', 'name', 'img_url']
-                    },
-                    {
-                        model: CardStatus,
-                        as: 'card_status'
-                    }
-                ]
-            }]
+            include: [
+                {
+                    model: BanlistArchetypeCard,
+                    as: 'banlist_archetype_cards',
+                    // where: {
+                    //     archetype_id: null
+                    // },
+                    include: [
+                        {
+                            model: Card,
+                            as: 'card',
+                            attributes: ['id', 'name', 'img_url']
+                        },
+                        {
+                            model: CardStatus,
+                            as: 'card_status'
+                        }
+                    ]
+                }]
         });
     }
 
     static async getCurrentBanlist(): Promise<Banlist | null> {
-        return Banlist.findOne({
+        const today = new Date();
+
+        let standardBanlist = await Banlist.findOne({
             order: [['release_date', 'DESC']],
-            include: [{
-                model: BanlistArchetypeCard,
-                as: 'banlist_archetype_cards',
-                where: {
-                    archetype_id: null
-                },
-                include: [
-                    {
-                        model: Card,
-                        as: 'card'
-                    },
-                    {
-                        model: CardStatus,
-                        as: 'card_status'
-                    }
-                ]
-            }]
+            where: {
+                is_active: true,
+                is_event_banlist: false,
+                release_date: {
+                    [Op.lte]: today
+                }
+            },
+            include: [
+                {
+                    model: BanlistArchetypeCard,
+                    as: 'banlist_archetype_cards',
+                    include: [
+                        {
+                            model: Card,
+                            as: 'card',
+                            attributes: ['id', 'name', 'img_url']
+                        },
+                        {
+                            model: CardStatus,
+                            as: 'card_status',
+                            attributes: ['id', 'label']
+                        }
+                    ]
+                }
+            ]
         });
+
+        return standardBanlist;
+
+        // if (!standardBanlist) {
+        //     standardBanlist = await Banlist.findOne({
+        //         order: [['release_date', 'ASC']],
+        //         where: {
+        //             is_active: true,
+        //             is_event_banlist: false,
+        //             release_date: {
+        //                 [Op.gte]: today
+        //             }
+        //         }
+        //     });
+        // }
+
+        // const eventBanlists = await Banlist.findAll({
+        //     order: [['release_date', 'DESC']],
+        //     where: {
+        //         is_active: true,
+        //         is_event_banlist: true,
+        //         release_date: {
+        //             [Op.lte]: today
+        //         }
+        //     }
+        // });
     }
 
     static async addBanlist(banlistData: BanlistData): Promise<void> {
         const transaction = await sequelize.transaction();
         try {
-            const { banlist_archetype_cards, label, release_date, description, is_active } = banlistData;
+            const { banlist_archetype_cards, label, release_date, description, is_active, is_event_banlist } = banlistData;
 
             const banlist = await Banlist.create(
                 {
                     label: label,
                     release_date: release_date,
                     description: description,
-                    is_active: is_active
+                    is_active: is_active,
+                    is_event_banlist: is_event_banlist ?? false
                 },
                 { transaction }
             );

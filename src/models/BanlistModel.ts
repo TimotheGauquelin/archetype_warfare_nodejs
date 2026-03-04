@@ -7,6 +7,7 @@ interface BanlistAttributes {
     release_date: Date;
     is_active: boolean;
     description: string;
+    is_event_banlist: boolean;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -19,6 +20,7 @@ class Banlist extends Model<BanlistAttributes, BanlistCreationAttributes> implem
     declare release_date: Date;
     declare is_active: boolean;
     declare description: string;
+     declare is_event_banlist: boolean;
     declare created_at?: Date;
     declare updated_at?: Date;
 }
@@ -46,6 +48,11 @@ Banlist.init(
         description: {
             type: DataTypes.TEXT,
             allowNull: false
+        },
+        is_event_banlist: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
         },
         created_at: {
             type: DataTypes.DATE,

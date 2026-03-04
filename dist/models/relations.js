@@ -1,5 +1,11 @@
 import User from './UserModel';
 import Deck from './DeckModel';
+import Tournament from './TournamentModel';
+import TournamentPlayer from './TournamentPlayerModel';
+import TournamentRound from './TournamentRoundModel';
+import TournamentMatch from './TournamentMatchModel';
+import TournamentPlayerDeck from './TournamentPlayerDeckModel';
+import TournamentPlayerDeckCard from './TournamentPlayerDeckCardModel';
 import DeckCard from './DeckCardModel';
 import Card from './CardModel';
 import Archetype from './ArchetypeModel';
@@ -19,6 +25,29 @@ import WebsiteActions from './WebsiteActionsModel';
 // Relations User
 User.hasMany(Deck, { foreignKey: 'user_id' });
 Deck.belongsTo(User, { foreignKey: 'user_id' });
+// Relations Tournoi
+Tournament.hasMany(TournamentPlayer, { foreignKey: 'tournament_id', as: 'players' });
+TournamentPlayer.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentPlayer.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+TournamentPlayer.belongsTo(Deck, { foreignKey: 'deck_id', as: 'deck' });
+Deck.hasMany(TournamentPlayer, { foreignKey: 'deck_id', as: 'tournament_participations' });
+User.hasMany(TournamentPlayer, { foreignKey: 'user_id', as: 'tournament_registrations' });
+Tournament.hasMany(TournamentRound, { foreignKey: 'tournament_id', as: 'rounds' });
+TournamentRound.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentRound.hasMany(TournamentMatch, { foreignKey: 'round_id', as: 'matches' });
+TournamentMatch.belongsTo(TournamentRound, { foreignKey: 'round_id', as: 'round' });
+TournamentMatch.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'player1_tournament_player_id', as: 'player1' });
+TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'player2_tournament_player_id', as: 'player2' });
+TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'winner_tournament_player_id', as: 'winner' });
+Tournament.hasMany(TournamentMatch, { foreignKey: 'tournament_id', as: 'matches' });
+// Snapshot deck (liste figée au verrouillage des inscriptions)
+TournamentPlayer.hasOne(TournamentPlayerDeck, { foreignKey: 'tournament_player_id', as: 'deck_snapshot' });
+TournamentPlayerDeck.belongsTo(TournamentPlayer, { foreignKey: 'tournament_player_id' });
+TournamentPlayerDeck.hasMany(TournamentPlayerDeckCard, { foreignKey: 'tournament_player_deck_id', as: 'cards' });
+TournamentPlayerDeckCard.belongsTo(TournamentPlayerDeck, { foreignKey: 'tournament_player_deck_id' });
+TournamentPlayerDeckCard.belongsTo(Card, { foreignKey: 'card_id', as: 'card' });
+TournamentPlayerDeck.belongsTo(Archetype, { foreignKey: 'archetype_id', as: 'archetype' });
 // Relations User-Role (Many-to-Many)
 User.belongsToMany(Role, {
     through: UserRole,
@@ -35,6 +64,8 @@ Deck.hasMany(DeckCard, {
     foreignKey: 'deck_id',
     as: 'deck_cards'
 });
+Deck.belongsTo(Archetype, { foreignKey: 'archetype_id', as: 'archetype' });
+Archetype.hasMany(Deck, { foreignKey: 'archetype_id' });
 DeckCard.belongsTo(Deck, {
     foreignKey: 'deck_id',
     as: 'deck'
@@ -132,5 +163,5 @@ BanlistArchetypeCard.belongsTo(CardStatus, {
     foreignKey: 'card_status_id',
     as: 'card_status'
 });
-export { User, Deck, DeckCard, Card, Archetype, Era, Attribute, SummonMechanic, Type, Banlist, CardStatus, BanlistArchetypeCard, ArchetypeType, ArchetypeAttribute, ArchetypeSummonMechanic, Role, UserRole, WebsiteActions };
+export { User, Deck, DeckCard, Card, Archetype, Era, Attribute, SummonMechanic, Type, Banlist, CardStatus, BanlistArchetypeCard, ArchetypeType, ArchetypeAttribute, ArchetypeSummonMechanic, Role, UserRole, WebsiteActions, Tournament, TournamentPlayer, TournamentPlayerDeck, TournamentPlayerDeckCard, TournamentRound, TournamentMatch };
 //# sourceMappingURL=relations.js.map

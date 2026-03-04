@@ -9,7 +9,11 @@ class DeckController {
     async getAllDecksByUserId(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const userId = getIntParam(request.params.userId);
-            const decks = await DeckService.getAllDecksByUserId(userId);
+            const isPlayableParam = request.query.is_playable;
+            let isPlayable: boolean | undefined;
+            if (isPlayableParam === 'true') isPlayable = true;
+            else if (isPlayableParam === 'false') isPlayable = false;
+            const decks = await DeckService.getAllDecksByUserId(userId, isPlayable);
             response.status(200).json(decks);
         } catch (error) {
             next(error);
