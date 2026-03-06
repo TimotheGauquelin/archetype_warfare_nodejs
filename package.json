@@ -4,7 +4,6 @@
   "description": "API REST backend pour le jeu de cartes Archetype Warfare",
   "license": "ISC",
   "author": "Archetype Warfare Team",
-  "type": "module",
   "main": "dist/server.js",
   "directories": {
     "doc": "docs"

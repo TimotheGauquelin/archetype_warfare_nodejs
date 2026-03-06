@@ -1,111 +1,143 @@
-import User from './UserModel';
-import Deck from './DeckModel';
-import Tournament from './TournamentModel';
-import TournamentPlayer from './TournamentPlayerModel';
-import TournamentRound from './TournamentRoundModel';
-import TournamentMatch from './TournamentMatchModel';
-import TournamentPlayerDeck from './TournamentPlayerDeckModel';
-import TournamentPlayerDeckCard from './TournamentPlayerDeckCardModel';
-import DeckCard from './DeckCardModel';
-import Card from './CardModel';
-import Archetype from './ArchetypeModel';
-import Era from './EraModel';
-import Attribute from './AttributeModel';
-import SummonMechanic from './SummonMechanicModel';
-import Type from './TypeModel';
-import Banlist from './BanlistModel';
-import CardStatus from './CardStatusModel';
-import BanlistArchetypeCard from './BanlistArchetypeCardModel';
-import ArchetypeType from './ArchetypeTypeModel';
-import ArchetypeAttribute from './ArchetypeAttributeModel';
-import ArchetypeSummonMechanic from './ArchetypeSummonMechanicModel';
-import Role from './RoleModel';
-import UserRole from './UserRoleModel';
-import WebsiteActions from './WebsiteActionsModel';
-import PenaltyType from './PenaltyTypeModel';
-import TournamentPlayerPenalty from './TournamentPlayerPenaltyModel';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
+const UserModel_1 = __importDefault(require("./UserModel"));
+exports.User = UserModel_1.default;
+const DeckModel_1 = __importDefault(require("./DeckModel"));
+exports.Deck = DeckModel_1.default;
+const TournamentModel_1 = __importDefault(require("./TournamentModel"));
+exports.Tournament = TournamentModel_1.default;
+const TournamentPlayerModel_1 = __importDefault(require("./TournamentPlayerModel"));
+exports.TournamentPlayer = TournamentPlayerModel_1.default;
+const TournamentRoundModel_1 = __importDefault(require("./TournamentRoundModel"));
+exports.TournamentRound = TournamentRoundModel_1.default;
+const TournamentMatchModel_1 = __importDefault(require("./TournamentMatchModel"));
+exports.TournamentMatch = TournamentMatchModel_1.default;
+const TournamentPlayerDeckModel_1 = __importDefault(require("./TournamentPlayerDeckModel"));
+exports.TournamentPlayerDeck = TournamentPlayerDeckModel_1.default;
+const TournamentPlayerDeckCardModel_1 = __importDefault(require("./TournamentPlayerDeckCardModel"));
+exports.TournamentPlayerDeckCard = TournamentPlayerDeckCardModel_1.default;
+const DeckCardModel_1 = __importDefault(require("./DeckCardModel"));
+exports.DeckCard = DeckCardModel_1.default;
+const CardModel_1 = __importDefault(require("./CardModel"));
+exports.Card = CardModel_1.default;
+const ArchetypeModel_1 = __importDefault(require("./ArchetypeModel"));
+exports.Archetype = ArchetypeModel_1.default;
+const EraModel_1 = __importDefault(require("./EraModel"));
+exports.Era = EraModel_1.default;
+const AttributeModel_1 = __importDefault(require("./AttributeModel"));
+exports.Attribute = AttributeModel_1.default;
+const SummonMechanicModel_1 = __importDefault(require("./SummonMechanicModel"));
+exports.SummonMechanic = SummonMechanicModel_1.default;
+const TypeModel_1 = __importDefault(require("./TypeModel"));
+exports.Type = TypeModel_1.default;
+const BanlistModel_1 = __importDefault(require("./BanlistModel"));
+exports.Banlist = BanlistModel_1.default;
+const CardStatusModel_1 = __importDefault(require("./CardStatusModel"));
+exports.CardStatus = CardStatusModel_1.default;
+const BanlistArchetypeCardModel_1 = __importDefault(require("./BanlistArchetypeCardModel"));
+exports.BanlistArchetypeCard = BanlistArchetypeCardModel_1.default;
+const ArchetypeTypeModel_1 = __importDefault(require("./ArchetypeTypeModel"));
+exports.ArchetypeType = ArchetypeTypeModel_1.default;
+const ArchetypeAttributeModel_1 = __importDefault(require("./ArchetypeAttributeModel"));
+exports.ArchetypeAttribute = ArchetypeAttributeModel_1.default;
+const ArchetypeSummonMechanicModel_1 = __importDefault(require("./ArchetypeSummonMechanicModel"));
+exports.ArchetypeSummonMechanic = ArchetypeSummonMechanicModel_1.default;
+const RoleModel_1 = __importDefault(require("./RoleModel"));
+exports.Role = RoleModel_1.default;
+const UserRoleModel_1 = __importDefault(require("./UserRoleModel"));
+exports.UserRole = UserRoleModel_1.default;
+const WebsiteActionsModel_1 = __importDefault(require("./WebsiteActionsModel"));
+exports.WebsiteActions = WebsiteActionsModel_1.default;
+const PenaltyTypeModel_1 = __importDefault(require("./PenaltyTypeModel"));
+exports.PenaltyType = PenaltyTypeModel_1.default;
+const TournamentPlayerPenaltyModel_1 = __importDefault(require("./TournamentPlayerPenaltyModel"));
+exports.TournamentPlayerPenalty = TournamentPlayerPenaltyModel_1.default;
 // Relations User
-User.hasMany(Deck, { foreignKey: 'user_id' });
-Deck.belongsTo(User, { foreignKey: 'user_id' });
+UserModel_1.default.hasMany(DeckModel_1.default, { foreignKey: 'user_id' });
+DeckModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id' });
 // Relations Tournoi
-Tournament.hasMany(TournamentPlayer, { foreignKey: 'tournament_id', as: 'players' });
-TournamentPlayer.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
-TournamentPlayer.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
-TournamentPlayer.belongsTo(Deck, { foreignKey: 'deck_id', as: 'deck' });
-Deck.hasMany(TournamentPlayer, { foreignKey: 'deck_id', as: 'tournament_participations' });
-User.hasMany(TournamentPlayer, { foreignKey: 'user_id', as: 'tournament_registrations' });
-Tournament.hasMany(TournamentRound, { foreignKey: 'tournament_id', as: 'rounds' });
-TournamentRound.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
-TournamentRound.hasMany(TournamentMatch, { foreignKey: 'round_id', as: 'matches' });
-TournamentMatch.belongsTo(TournamentRound, { foreignKey: 'round_id', as: 'round' });
-TournamentMatch.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
-TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'player1_tournament_player_id', as: 'player1' });
-TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'player2_tournament_player_id', as: 'player2' });
-TournamentMatch.belongsTo(TournamentPlayer, { foreignKey: 'winner_tournament_player_id', as: 'winner' });
-Tournament.hasMany(TournamentMatch, { foreignKey: 'tournament_id', as: 'matches' });
+TournamentModel_1.default.hasMany(TournamentPlayerModel_1.default, { foreignKey: 'tournament_id', as: 'players' });
+TournamentPlayerModel_1.default.belongsTo(TournamentModel_1.default, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentPlayerModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id', as: 'user' });
+TournamentPlayerModel_1.default.belongsTo(DeckModel_1.default, { foreignKey: 'deck_id', as: 'deck' });
+DeckModel_1.default.hasMany(TournamentPlayerModel_1.default, { foreignKey: 'deck_id', as: 'tournament_participations' });
+UserModel_1.default.hasMany(TournamentPlayerModel_1.default, { foreignKey: 'user_id', as: 'tournament_registrations' });
+TournamentModel_1.default.hasMany(TournamentRoundModel_1.default, { foreignKey: 'tournament_id', as: 'rounds' });
+TournamentRoundModel_1.default.belongsTo(TournamentModel_1.default, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentRoundModel_1.default.hasMany(TournamentMatchModel_1.default, { foreignKey: 'round_id', as: 'matches' });
+TournamentMatchModel_1.default.belongsTo(TournamentRoundModel_1.default, { foreignKey: 'round_id', as: 'round' });
+TournamentMatchModel_1.default.belongsTo(TournamentModel_1.default, { foreignKey: 'tournament_id', as: 'tournament' });
+TournamentMatchModel_1.default.belongsTo(TournamentPlayerModel_1.default, { foreignKey: 'player1_tournament_player_id', as: 'player1' });
+TournamentMatchModel_1.default.belongsTo(TournamentPlayerModel_1.default, { foreignKey: 'player2_tournament_player_id', as: 'player2' });
+TournamentMatchModel_1.default.belongsTo(TournamentPlayerModel_1.default, { foreignKey: 'winner_tournament_player_id', as: 'winner' });
+TournamentModel_1.default.hasMany(TournamentMatchModel_1.default, { foreignKey: 'tournament_id', as: 'matches' });
 // Snapshot deck (liste figée au verrouillage des inscriptions)
-TournamentPlayer.hasOne(TournamentPlayerDeck, { foreignKey: 'tournament_player_id', as: 'deck_snapshot' });
-TournamentPlayerDeck.belongsTo(TournamentPlayer, { foreignKey: 'tournament_player_id' });
-TournamentPlayerDeck.hasMany(TournamentPlayerDeckCard, { foreignKey: 'tournament_player_deck_id', as: 'cards' });
-TournamentPlayerDeckCard.belongsTo(TournamentPlayerDeck, { foreignKey: 'tournament_player_deck_id' });
-TournamentPlayerDeckCard.belongsTo(Card, { foreignKey: 'card_id', as: 'card' });
-TournamentPlayerDeck.belongsTo(Archetype, { foreignKey: 'archetype_id', as: 'archetype' });
-TournamentPlayerDeck.belongsTo(User, { foreignKey: 'snapshot_by_user_id', as: 'snapshot_by' });
-User.hasMany(TournamentPlayerDeck, { foreignKey: 'snapshot_by_user_id', as: 'snapshotted_decks' });
+TournamentPlayerModel_1.default.hasOne(TournamentPlayerDeckModel_1.default, { foreignKey: 'tournament_player_id', as: 'deck_snapshot' });
+TournamentPlayerDeckModel_1.default.belongsTo(TournamentPlayerModel_1.default, { foreignKey: 'tournament_player_id' });
+TournamentPlayerDeckModel_1.default.hasMany(TournamentPlayerDeckCardModel_1.default, { foreignKey: 'tournament_player_deck_id', as: 'cards' });
+TournamentPlayerDeckCardModel_1.default.belongsTo(TournamentPlayerDeckModel_1.default, { foreignKey: 'tournament_player_deck_id' });
+TournamentPlayerDeckCardModel_1.default.belongsTo(CardModel_1.default, { foreignKey: 'card_id', as: 'card' });
+TournamentPlayerDeckModel_1.default.belongsTo(ArchetypeModel_1.default, { foreignKey: 'archetype_id', as: 'archetype' });
+TournamentPlayerDeckModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'snapshot_by_user_id', as: 'snapshot_by' });
+UserModel_1.default.hasMany(TournamentPlayerDeckModel_1.default, { foreignKey: 'snapshot_by_user_id', as: 'snapshotted_decks' });
 // Pénalités (KDE / Konami)
-TournamentPlayer.hasMany(TournamentPlayerPenalty, { foreignKey: 'tournament_player_id', as: 'penalties' });
-TournamentPlayerPenalty.belongsTo(TournamentPlayer, { foreignKey: 'tournament_player_id' });
-TournamentPlayerPenalty.belongsTo(PenaltyType, { foreignKey: 'penalty_type_id', as: 'penalty_type' });
-PenaltyType.hasMany(TournamentPlayerPenalty, { foreignKey: 'penalty_type_id' });
-TournamentPlayerPenalty.belongsTo(TournamentRound, { foreignKey: 'round_id', as: 'round' });
-TournamentRound.hasMany(TournamentPlayerPenalty, { foreignKey: 'round_id' });
-TournamentPlayerPenalty.belongsTo(TournamentMatch, { foreignKey: 'tournament_match_id', as: 'tournament_match' });
-TournamentMatch.hasMany(TournamentPlayerPenalty, { foreignKey: 'tournament_match_id' });
-TournamentPlayerPenalty.belongsTo(User, { foreignKey: 'applied_by_user_id', as: 'applied_by' });
-User.hasMany(TournamentPlayerPenalty, { foreignKey: 'applied_by_user_id', as: 'applied_penalties' });
+TournamentPlayerModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'tournament_player_id', as: 'penalties' });
+TournamentPlayerPenaltyModel_1.default.belongsTo(TournamentPlayerModel_1.default, { foreignKey: 'tournament_player_id' });
+TournamentPlayerPenaltyModel_1.default.belongsTo(PenaltyTypeModel_1.default, { foreignKey: 'penalty_type_id', as: 'penalty_type' });
+PenaltyTypeModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'penalty_type_id' });
+TournamentPlayerPenaltyModel_1.default.belongsTo(TournamentRoundModel_1.default, { foreignKey: 'round_id', as: 'round' });
+TournamentRoundModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'round_id' });
+TournamentPlayerPenaltyModel_1.default.belongsTo(TournamentMatchModel_1.default, { foreignKey: 'tournament_match_id', as: 'tournament_match' });
+TournamentMatchModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'tournament_match_id' });
+TournamentPlayerPenaltyModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'applied_by_user_id', as: 'applied_by' });
+UserModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'applied_by_user_id', as: 'applied_penalties' });
 // Relations User-Role (Many-to-Many)
-User.belongsToMany(Role, {
-    through: UserRole,
+UserModel_1.default.belongsToMany(RoleModel_1.default, {
+    through: UserRoleModel_1.default,
     foreignKey: 'user_id',
     as: 'roles'
 });
-Role.belongsToMany(User, {
-    through: UserRole,
+RoleModel_1.default.belongsToMany(UserModel_1.default, {
+    through: UserRoleModel_1.default,
     foreignKey: 'role_id',
     as: 'Users'
 });
 // Relations Deck
-Deck.hasMany(DeckCard, {
+DeckModel_1.default.hasMany(DeckCardModel_1.default, {
     foreignKey: 'deck_id',
     as: 'deck_cards'
 });
-Deck.belongsTo(Archetype, { foreignKey: 'archetype_id', as: 'archetype' });
-Archetype.hasMany(Deck, { foreignKey: 'archetype_id' });
-DeckCard.belongsTo(Deck, {
+DeckModel_1.default.belongsTo(ArchetypeModel_1.default, { foreignKey: 'archetype_id', as: 'archetype' });
+ArchetypeModel_1.default.hasMany(DeckModel_1.default, { foreignKey: 'archetype_id' });
+DeckCardModel_1.default.belongsTo(DeckModel_1.default, {
     foreignKey: 'deck_id',
     as: 'deck'
 });
 // Relations Card
-Card.hasMany(DeckCard, {
+CardModel_1.default.hasMany(DeckCardModel_1.default, {
     foreignKey: 'card_id',
     as: 'deck_cards'
 });
-DeckCard.belongsTo(Card, {
+DeckCardModel_1.default.belongsTo(CardModel_1.default, {
     foreignKey: 'card_id',
     as: 'card'
 });
 // Relations Archetype
-Archetype.belongsTo(Era, { foreignKey: 'era_id', as: 'era' });
-Era.hasMany(Archetype, { foreignKey: 'era_id' });
+ArchetypeModel_1.default.belongsTo(EraModel_1.default, { foreignKey: 'era_id', as: 'era' });
+EraModel_1.default.hasMany(ArchetypeModel_1.default, { foreignKey: 'era_id' });
 // Relations ArchetypeType
-Type.belongsToMany(Archetype, {
+TypeModel_1.default.belongsToMany(ArchetypeModel_1.default, {
     through: 'archetype_type',
     foreignKey: 'type_id',
     otherKey: 'archetype_id',
     timestamps: false,
     as: 'archetypes'
 });
-Archetype.belongsToMany(Type, {
+ArchetypeModel_1.default.belongsToMany(TypeModel_1.default, {
     through: 'archetype_type',
     foreignKey: 'archetype_id',
     otherKey: 'type_id',
@@ -113,14 +145,14 @@ Archetype.belongsToMany(Type, {
     as: 'types'
 });
 // Relations ArchetypeAttribute
-Attribute.belongsToMany(Archetype, {
+AttributeModel_1.default.belongsToMany(ArchetypeModel_1.default, {
     through: 'archetype_attribute',
     foreignKey: 'attribute_id',
     otherKey: 'archetype_id',
     timestamps: false,
     as: 'archetypes'
 });
-Archetype.belongsToMany(Attribute, {
+ArchetypeModel_1.default.belongsToMany(AttributeModel_1.default, {
     through: 'archetype_attribute',
     foreignKey: 'archetype_id',
     otherKey: 'attribute_id',
@@ -128,14 +160,14 @@ Archetype.belongsToMany(Attribute, {
     as: 'attributes'
 });
 // Relations ArchetypeSummonMechanic
-SummonMechanic.belongsToMany(Archetype, {
+SummonMechanicModel_1.default.belongsToMany(ArchetypeModel_1.default, {
     through: 'archetype_summonmechanic',
     foreignKey: 'summonmechanic_id',
     otherKey: 'archetype_id',
     timestamps: false,
     as: 'archetypes'
 });
-Archetype.belongsToMany(SummonMechanic, {
+ArchetypeModel_1.default.belongsToMany(SummonMechanicModel_1.default, {
     through: 'archetype_summonmechanic',
     foreignKey: 'archetype_id',
     otherKey: 'summonmechanic_id',
@@ -143,40 +175,39 @@ Archetype.belongsToMany(SummonMechanic, {
     as: 'summon_mechanics'
 });
 // Relations BanlistArchetypeCard
-Banlist.hasMany(BanlistArchetypeCard, {
+BanlistModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {
     foreignKey: 'banlist_id',
     as: 'banlist_archetype_cards'
 });
-BanlistArchetypeCard.belongsTo(Banlist, {
+BanlistArchetypeCardModel_1.default.belongsTo(BanlistModel_1.default, {
     foreignKey: 'banlist_id',
     as: 'banlist'
 });
 // Relations Archetype et BanlistArchetypeCard
-Archetype.hasMany(BanlistArchetypeCard, {
+ArchetypeModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {
     foreignKey: 'archetype_id',
     as: 'cards'
 });
-BanlistArchetypeCard.belongsTo(Archetype, {
+BanlistArchetypeCardModel_1.default.belongsTo(ArchetypeModel_1.default, {
     foreignKey: 'archetype_id',
     as: 'archetype'
 });
 // Relations Card et BanlistArchetypeCard
-Card.hasMany(BanlistArchetypeCard, {
+CardModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {
     foreignKey: 'card_id',
     as: 'banlist_archetype_cards'
 });
-BanlistArchetypeCard.belongsTo(Card, {
+BanlistArchetypeCardModel_1.default.belongsTo(CardModel_1.default, {
     foreignKey: 'card_id',
     as: 'card'
 });
 // Relations CardStatus et BanlistArchetypeCard
-CardStatus.hasMany(BanlistArchetypeCard, {
+CardStatusModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {
     foreignKey: 'card_status_id',
     as: 'banlist_archetype_cards'
 });
-BanlistArchetypeCard.belongsTo(CardStatus, {
+BanlistArchetypeCardModel_1.default.belongsTo(CardStatusModel_1.default, {
     foreignKey: 'card_status_id',
     as: 'card_status'
 });
-export { User, Deck, DeckCard, Card, Archetype, Era, Attribute, SummonMechanic, Type, Banlist, CardStatus, BanlistArchetypeCard, ArchetypeType, ArchetypeAttribute, ArchetypeSummonMechanic, Role, UserRole, WebsiteActions, Tournament, TournamentPlayer, TournamentPlayerDeck, TournamentPlayerDeckCard, TournamentRound, TournamentMatch, PenaltyType, TournamentPlayerPenalty };
 //# sourceMappingURL=relations.js.map

@@ -1,8 +1,6 @@
 import { sendMail } from '../utils/nodemailer';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import UserService from '../services/UserService';
 import envVars from '../config/envValidation';
 
@@ -10,9 +8,6 @@ interface User {
     id: number;
     email: string;
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export const sendPasswordResetEmail = async (
     user: User,

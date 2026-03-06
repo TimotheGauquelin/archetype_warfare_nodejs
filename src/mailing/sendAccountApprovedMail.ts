@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { transporter } from '../utils/nodemailer';
 import envVars from '../config/envValidation';
 import logger from '../utils/logger';
@@ -11,9 +10,6 @@ interface User {
     username?: string;
 }
 
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 /**
  * Envoie un email de confirmation d'approbation de compte

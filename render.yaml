@@ -1,0 +1,9 @@
+# Blueprint Render pour archetype_warfare_nodejs
+# Build : install + compilation TypeScript → dist/
+# Start : node dist/server.js via npm start
+services:
+  - type: web
+    runtime: node
+    name: archetype-warfare-api
+    buildCommand: npm install && npm run build
+    startCommand: npm start

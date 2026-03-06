@@ -1,12 +1,7 @@
 import { sendMail } from '../utils/nodemailer';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import envVars from '../config/envValidation';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 /**
  * Admin send an email to alert user that his account is created

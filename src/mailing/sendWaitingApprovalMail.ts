@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { sendMail } from '../utils/nodemailer';
 import envVars from '../config/envValidation';
 import logger from '../utils/logger';
@@ -15,9 +14,6 @@ interface EmailResult {
     success: boolean;
     message: string;
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export const sendWaitingApprovalEmail = async (user: User): Promise<EmailResult> => {
     try {

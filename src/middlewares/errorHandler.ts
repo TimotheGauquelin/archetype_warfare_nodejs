@@ -24,33 +24,33 @@ export const ErrorHandler = (
     _next: NextFunction
 ): void => {
     // Erreurs Sequelize (contraintes unique, not null, etc.)
-    // if ((err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') && Array.isArray(err.errors) && err.errors.length > 0) {
-    //     const first = err.errors[0] as SequelizeValidationErrorItem;
-    //     const msg = first.type === 'unique violation'
-    //         ? (first.path === 'email' ? 'Un utilisateur avec cet email existe déjà.' : first.path === 'username' ? 'Ce nom d\'utilisateur est déjà utilisé.' : first.message || 'Cette valeur est déjà utilisée.')
-    //         : (first.message || err.message || 'Données invalides.');
-    //     res.status(400).json({ message: msg, status: 400 });
-    //     return;
-    // }
+    if ((err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') && Array.isArray(err.errors) && err.errors.length > 0) {
+        const first = err.errors[0] as SequelizeValidationErrorItem;
+        const msg = first.type === 'unique violation'
+            ? (first.path === 'email' ? 'Un utilisateur avec cet email existe déjà.' : first.path === 'username' ? 'Ce nom d\'utilisateur est déjà utilisé.' : first.message || 'Cette valeur est déjà utilisée.')
+            : (first.message || err.message || 'Données invalides.');
+        res.status(400).json({ message: msg, status: 400 });
+        return;
+    }
 
-    // // Gérer les erreurs de validation express-validator
-    // if (err.name === 'ValidationError' || err.errors) {
-    //     const errors = validationResult(req);
-    //     if (!errors.isEmpty()) {
-    //         const errorMessages = errors.array().map((validationError: any) => ({
-    //             field: validationError.path || validationError.param,
-    //             message: validationError.msg,
-    //             value: validationError.value
-    //         }));
+    // Gérer les erreurs de validation express-validator
+    if (err.name === 'ValidationError' || err.errors) {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            const errorMessages = errors.array().map((validationError: any) => ({
+                field: validationError.path || validationError.param,
+                message: validationError.msg,
+                value: validationError.value
+            }));
 
-    //         res.status(400).json({
-    //             message: 'Erreur de validation des données',
-    //             status: 400,
-    //             errors: errorMessages
-    //         });
-    //         return;
-    //     }
-    // }
+            res.status(400).json({
+                message: 'Erreur de validation des données',
+                status: 400,
+                errors: errorMessages
+            });
+            return;
+        }
+    }
 
     const errStatus = err.statusCode || 500;
     const errMessage = err.message || 'Une erreur inconnue s\'est produite';

@@ -16,7 +16,6 @@ import deckRoutes from './routes/DeckRoute';
 import tournamentRoutes from './routes/TournamentRoute';
 import { ErrorHandler } from './middlewares/errorHandler';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import './models/relations';
 // import { limiter } from './middlewares/rateLimitMiddleware';
 import websiteActionsRoutes from './routes/WebsiteActionsRoute';
@@ -29,8 +28,6 @@ logger.info('✅ Variables d\'environnement validées avec succès');
 
 const app: Express = express();
 const apiRouter = express.Router();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const corsOptions: cors.CorsOptions = {
     origin: [envVars.FRONTEND_URL, 'https://archetype-warfare-reactjs.onrender.com/'],
