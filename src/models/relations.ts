@@ -22,6 +22,8 @@ import ArchetypeSummonMechanic from './ArchetypeSummonMechanicModel';
 import Role from './RoleModel';
 import UserRole from './UserRoleModel';
 import WebsiteActions from './WebsiteActionsModel';
+import PenaltyType from './PenaltyTypeModel';
+import TournamentPlayerPenalty from './TournamentPlayerPenaltyModel';
 
 // Relations User
 User.hasMany(Deck, { foreignKey: 'user_id' });
@@ -53,6 +55,20 @@ TournamentPlayerDeck.hasMany(TournamentPlayerDeckCard, { foreignKey: 'tournament
 TournamentPlayerDeckCard.belongsTo(TournamentPlayerDeck, { foreignKey: 'tournament_player_deck_id' });
 TournamentPlayerDeckCard.belongsTo(Card, { foreignKey: 'card_id', as: 'card' });
 TournamentPlayerDeck.belongsTo(Archetype, { foreignKey: 'archetype_id', as: 'archetype' });
+TournamentPlayerDeck.belongsTo(User, { foreignKey: 'snapshot_by_user_id', as: 'snapshot_by' });
+User.hasMany(TournamentPlayerDeck, { foreignKey: 'snapshot_by_user_id', as: 'snapshotted_decks' });
+
+// Pénalités (KDE / Konami)
+TournamentPlayer.hasMany(TournamentPlayerPenalty, { foreignKey: 'tournament_player_id', as: 'penalties' });
+TournamentPlayerPenalty.belongsTo(TournamentPlayer, { foreignKey: 'tournament_player_id' });
+TournamentPlayerPenalty.belongsTo(PenaltyType, { foreignKey: 'penalty_type_id', as: 'penalty_type' });
+PenaltyType.hasMany(TournamentPlayerPenalty, { foreignKey: 'penalty_type_id' });
+TournamentPlayerPenalty.belongsTo(TournamentRound, { foreignKey: 'round_id', as: 'round' });
+TournamentRound.hasMany(TournamentPlayerPenalty, { foreignKey: 'round_id' });
+TournamentPlayerPenalty.belongsTo(TournamentMatch, { foreignKey: 'tournament_match_id', as: 'tournament_match' });
+TournamentMatch.hasMany(TournamentPlayerPenalty, { foreignKey: 'tournament_match_id' });
+TournamentPlayerPenalty.belongsTo(User, { foreignKey: 'applied_by_user_id', as: 'applied_by' });
+User.hasMany(TournamentPlayerPenalty, { foreignKey: 'applied_by_user_id', as: 'applied_penalties' });
 
 // Relations User-Role (Many-to-Many)
 User.belongsToMany(Role, {
@@ -204,5 +220,7 @@ export {
     TournamentPlayerDeck,
     TournamentPlayerDeckCard,
     TournamentRound,
-    TournamentMatch
+    TournamentMatch,
+    PenaltyType,
+    TournamentPlayerPenalty
 };

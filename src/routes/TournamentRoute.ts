@@ -27,6 +27,7 @@ router.put('/:tournamentId/my-deck', authenticateToken, (req: Request, res: Resp
 router.post('/:tournamentId/drop', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.dropATournament(req, res, next));
 
 router.post('/:tournamentId/players/:userId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.addPlayerToTournament(req, res, next));
+router.put('/:tournamentId/players/:playerId/deck', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.adminSetDeckForTournamentPlayer(req, res, next));
 router.delete('/:tournamentId/players/:playerId/remove', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.removePlayerFromTournament(req, res, next));
 
 router.put('/:tournamentId/start', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.startTournament(req, res, next));

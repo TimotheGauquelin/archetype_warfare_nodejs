@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS tournament (
     event_date TIMESTAMP NULL,
     event_date_end TIMESTAMP NULL,
     is_online BOOLEAN NOT NULL DEFAULT TRUE,
+    allow_penalities BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -259,9 +260,11 @@ CREATE TABLE IF NOT EXISTS tournament_player_deck (
     label VARCHAR(200) NOT NULL,
     archetype_id BIGINT NULL,
     is_playable BOOLEAN NOT NULL DEFAULT FALSE,
+    snapshot_by_user_id BIGINT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_tpd_tournament_player FOREIGN KEY (tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
-    CONSTRAINT fk_tpd_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE SET NULL
+    CONSTRAINT fk_tpd_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE SET NULL,
+    CONSTRAINT fk_tpd_snapshot_by_user FOREIGN KEY (snapshot_by_user_id) REFERENCES "user" (id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS tournament_player_deck_card (
@@ -272,6 +275,42 @@ CREATE TABLE IF NOT EXISTS tournament_player_deck_card (
     CONSTRAINT fk_tpdc_deck FOREIGN KEY (tournament_player_deck_id) REFERENCES tournament_player_deck (id) ON DELETE CASCADE,
     CONSTRAINT fk_tpdc_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE
 );
+
+-- Types de pénalité (référentiel KDE / Konami)
+CREATE TABLE IF NOT EXISTS penalty_type (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(30) NOT NULL UNIQUE,
+    label VARCHAR(100) NOT NULL,
+    severity INT NOT NULL
+);
+
+-- Pénalités appliquées aux joueurs d'un tournoi
+CREATE TABLE IF NOT EXISTS tournament_player_penalty (
+    id SERIAL PRIMARY KEY,
+    tournament_player_id INT NOT NULL,
+    penalty_type_id INT NOT NULL,
+    round_id INT NULL,
+    tournament_match_id INT NULL,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    applied_by_user_id BIGINT NULL,
+    reason TEXT NULL,
+    notes TEXT NULL,
+    disqualification_with_prize BOOLEAN NULL,
+    written_statement_sent_at TIMESTAMP NULL,
+    CONSTRAINT fk_tpp_tournament_player FOREIGN KEY (tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
+    CONSTRAINT fk_tpp_penalty_type FOREIGN KEY (penalty_type_id) REFERENCES penalty_type (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_tpp_round FOREIGN KEY (round_id) REFERENCES tournament_round (id) ON DELETE SET NULL,
+    CONSTRAINT fk_tpp_match FOREIGN KEY (tournament_match_id) REFERENCES tournament_match (id) ON DELETE SET NULL,
+    CONSTRAINT fk_tpp_applied_by FOREIGN KEY (applied_by_user_id) REFERENCES "user" (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_player_penalty_tournament_player ON tournament_player_penalty (tournament_player_id);
+
+-- Colonnes disqualification sur tournament_player (exclusion du tournoi)
+ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS disqualified_at TIMESTAMP NULL;
+ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS disqualified_reason TEXT NULL;
+-- Pénalité pour deck ajouté après la fermeture des inscriptions
+ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS late_deck_penalty BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournament (status);
 CREATE INDEX IF NOT EXISTS idx_tournament_player_tournament ON tournament_player (tournament_id);
@@ -293,6 +332,19 @@ ALTER TABLE deck ADD COLUMN IF NOT EXISTS is_playable BOOLEAN NOT NULL DEFAULT F
 
 -- Colonne require_deck_list sur tournament (deck list obligatoire ou non)
 ALTER TABLE tournament ADD COLUMN IF NOT EXISTS require_deck_list BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Colonne allow_penalities sur tournament (autorise l'ajout de pénalités par un admin)
+ALTER TABLE tournament ADD COLUMN IF NOT EXISTS allow_penalities BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Colonne snapshot_by_user_id sur tournament_player_deck (qui a créé le snapshot)
+ALTER TABLE tournament_player_deck ADD COLUMN IF NOT EXISTS snapshot_by_user_id BIGINT NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tpd_snapshot_by_user') THEN
+        ALTER TABLE tournament_player_deck
+            ADD CONSTRAINT fk_tpd_snapshot_by_user FOREIGN KEY (snapshot_by_user_id) REFERENCES "user" (id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 -- Index sur "user"
 CREATE INDEX IF NOT EXISTS idx_user_email ON "user" (email);

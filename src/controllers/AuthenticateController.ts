@@ -133,14 +133,28 @@ class AuthenticateController {
                 throw new CustomError('Email et mot de passe requis', 400);
             }
 
+            if (!username || typeof username !== 'string' || username.trim().length < 3 || username.trim().length > 30) {
+                throw new CustomError('Un nom d\'utilisateur valide (3 à 30 caractères) est requis', 400);
+            }
+
             if (!hasAcceptedTermsAndConditions) {
                 throw new CustomError('Vous devez accepter les conditions d\'utilisation', 400);
+            }
+
+            const existingEmail = await User.findOne({ where: { email: email.trim() } });
+            const existingUsername = await User.findOne({ where: { username: username.trim() } });
+
+            if (existingEmail) {
+                throw new CustomError('Un utilisateur avec cet email existe déjà.', 400);
+            }
+            if (existingUsername) {
+                throw new CustomError('Ce nom d\'utilisateur est déjà utilisé.', 400);
             }
 
             const registrationResult = await AuthenticateService.register({
                 email,
                 password,
-                username,
+                username: username,
                 hasAcceptedTermsAndConditions
             });
 

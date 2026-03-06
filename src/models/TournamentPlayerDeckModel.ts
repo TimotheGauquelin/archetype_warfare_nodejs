@@ -7,11 +7,12 @@ interface TournamentPlayerDeckAttributes {
     label: string;
     archetype_id: number | null;
     is_playable: boolean;
+    snapshot_by_user_id: number | null;
     created_at?: Date;
 }
 
 interface TournamentPlayerDeckCreationAttributes
-    extends Optional<TournamentPlayerDeckAttributes, 'id' | 'archetype_id' | 'created_at'> {}
+    extends Optional<TournamentPlayerDeckAttributes, 'id' | 'archetype_id' | 'snapshot_by_user_id' | 'created_at'> {}
 
 /**
  * Snapshot du deck d'un joueur au moment du verrouillage des inscriptions.
@@ -23,6 +24,7 @@ class TournamentPlayerDeck extends Model<TournamentPlayerDeckAttributes, Tournam
     declare label: string;
     declare archetype_id: number | null;
     declare is_playable: boolean;
+    declare snapshot_by_user_id: number | null;
     declare created_at?: Date;
 }
 
@@ -52,6 +54,11 @@ TournamentPlayerDeck.init(
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: false
+        },
+        snapshot_by_user_id: {
+            type: DataTypes.BIGINT,
+            allowNull: true,
+            references: { model: 'user', key: 'id' }
         },
         created_at: {
             type: DataTypes.DATE,

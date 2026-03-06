@@ -77,7 +77,7 @@ class DeckService {
 
             const deckId = deck.id;
 
-            let totalCards = 0;
+            let mainDeckCardCount = 0;
             if (body.deck_cards && Array.isArray(body.deck_cards) && body.deck_cards.length > 0) {
                 const cardMap = new Map<string, number>();
 
@@ -120,7 +120,7 @@ class DeckService {
                     where: {
                         id: cardIds
                     },
-                    attributes: ['id'],
+                    attributes: ['id', 'card_type'],
                     transaction
                 });
 
@@ -131,6 +131,23 @@ class DeckService {
                     throw new CustomError(`Les cartes suivantes n'existent pas: ${missingCardIds.join(', ')}`, 404);
                 }
 
+                // Compte uniquement les cartes de main deck (exclut Fusion, Synchro, Link, XYZ)
+                for (const card of existingCards) {
+                    const type = (card as any).card_type || '';
+                    const lower = type.toLowerCase();
+                    const isExtraDeckType =
+                        lower.includes('fusion') ||
+                        lower.includes('synchro') ||
+                        lower.includes('link') ||
+                        lower.includes('xyz');
+                    if (!isExtraDeckType) {
+                        const qty = cardMap.get(card.id);
+                        if (qty) {
+                            mainDeckCardCount += qty;
+                        }
+                    }
+                }
+
                 for (const [cardId, quantity] of cardMap.entries()) {
                     await DeckCard.create({
                         deck_id: deckId,
@@ -138,10 +155,9 @@ class DeckService {
                         quantity: quantity
                     }, { transaction });
                 }
-                totalCards = [...cardMap.values()].reduce((a, b) => a + b, 0);
             }
 
-            const is_playable = totalCards >= 40 && totalCards <= 60;
+            const is_playable = mainDeckCardCount >= 40 && mainDeckCardCount <= 60;
             await deck.update({ is_playable }, { transaction });
 
             await transaction.commit();
@@ -177,6 +193,7 @@ class DeckService {
                 });
 
                 const newCardMap = new Map<string, number>();
+                let mainDeckCardCount = 0;
 
                 if (deck_cards.length > 0) {
                     for (const deckCard of deck_cards) {
@@ -220,7 +237,7 @@ class DeckService {
                         where: {
                             id: cardIds
                         },
-                        attributes: ['id'],
+                        attributes: ['id', 'card_type'],
                         transaction
                     });
 
@@ -229,6 +246,23 @@ class DeckService {
 
                     if (missingCardIds.length > 0) {
                         throw new CustomError(`Les cartes suivantes n'existent pas: ${missingCardIds.join(', ')}`, 404);
+                    }
+
+                    // Compte uniquement les cartes de main deck (exclut Fusion, Synchro, Link, XYZ)
+                    for (const card of existingCards) {
+                        const type = (card as any).card_type || '';
+                        const lower = type.toLowerCase();
+                        const isExtraDeckType =
+                            lower.includes('fusion') ||
+                            lower.includes('synchro') ||
+                            lower.includes('link') ||
+                            lower.includes('xyz');
+                        if (!isExtraDeckType) {
+                            const qty = newCardMap.get(card.id);
+                            if (qty) {
+                                mainDeckCardCount += qty;
+                            }
+                        }
                     }
                 }
 
@@ -272,8 +306,7 @@ class DeckService {
                         }, { transaction });
                     }
                 }
-                const totalCards = [...newCardMap.values()].reduce((a, b) => a + b, 0);
-                const is_playable = totalCards >= 40 && totalCards <= 60;
+                const is_playable = mainDeckCardCount >= 40 && mainDeckCardCount <= 60;
                 await Deck.update({ is_playable }, { where: { id }, transaction });
             }
 

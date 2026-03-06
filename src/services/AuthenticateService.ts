@@ -39,22 +39,11 @@ class AuthenticateService {
         const transaction = await sequelize.transaction();
 
         try {
-            const [existingByEmail, existingByUsername] = await Promise.all([
-                User.findOne({ where: { email: userData.email }, transaction }),
-                userData.username
-                    ? User.findOne({ where: { username: userData.username }, transaction })
-                    : Promise.resolve(null)
-            ]);
-
-            if (existingByEmail) {
-                throw new CustomError('Un utilisateur avec cet email existe déjà.', 400);
-            }
-            if (existingByUsername) {
-                throw new CustomError('Ce nom d\'utilisateur est déjà utilisé.', 400);
-            }
 
             const user = await User.create({
-                ...userData,
+                username: userData.username?.trim(),
+                email: userData.email.trim(),
+                password: userData.password,
                 is_active: false,
                 is_banned: false,
                 has_accepted_terms_and_conditions: userData.hasAcceptedTermsAndConditions ?? false
@@ -86,10 +75,21 @@ class AuthenticateService {
                 }
             }
             if (error instanceof ValidationError && error.errors?.length) {
-                const first = error.errors[0];
-                const msg = first.type === 'unique violation'
-                    ? (first.path === 'email' ? 'Un utilisateur avec cet email existe déjà.' : 'Ce nom d\'utilisateur est déjà utilisé.')
-                    : (first.message || 'Données invalides.');
+                const hasEmailViolation = error.errors.some(e => e.type === 'unique violation' && e.path === 'email');
+                const hasUsernameViolation = error.errors.some(e => e.type === 'unique violation' && e.path === 'username');
+                let msg: string;
+                if (hasEmailViolation) {
+                    msg = 'Un utilisateur avec cet email existe déjà.';
+                }
+                else if (hasUsernameViolation) {
+                    msg = 'Ce nom d\'utilisateur est déjà utilisé.';
+                }
+                else {
+                    const first = error.errors[0];
+                    msg = first.type === 'unique violation'
+                        ? (first.path === 'email' ? 'Un utilisateur avec cet email existe déjà.' : 'Ce nom d\'utilisateur est déjà utilisé.')
+                        : (first.message || 'Données invalides.');
+                }
                 throw new CustomError(msg, 400);
             }
             throw error;

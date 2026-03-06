@@ -135,6 +135,15 @@ INSERT INTO role (id, label) VALUES
     (2, 'User')
 ON CONFLICT (id) DO NOTHING;
 
+-- Types de pénalité (référentiel KDE / Konami)
+INSERT INTO penalty_type (id, code, label, severity) VALUES
+    (1, 'caution', 'Caution', 1),
+    (2, 'warning', 'Warning', 2),
+    (3, 'game_loss', 'Game Loss', 3),
+    (4, 'match_loss', 'Match Loss', 4),
+    (5, 'disqualification', 'Disqualification', 5)
+ON CONFLICT (id) DO NOTHING;
+
 -- Utilisateurs de test
 INSERT INTO "user" (id, username, password, email, is_active, is_banned, has_accepted_terms_and_conditions) VALUES
     (1, 'admin', '$2b$10$example_hash', 'admin@example.com', TRUE, FALSE, TRUE),

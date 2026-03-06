@@ -85,7 +85,43 @@ class TournamentController {
             const includePlayersParam = request.query.includePlayers as string | undefined;
             const includePlayers = includePlayersParam === undefined || includePlayersParam === 'true';
             const tournament = await TournamentService.getById(id, { includePlayers });
-            response.status(200).json(tournament);
+
+            const plain = (tournament as any).get ? (tournament as any).get({ plain: true }) : tournament;
+
+            if (!includePlayers || !plain.players) {
+                response.status(200).json(plain);
+                return;
+            }
+
+            const players = plain.players.map((p: any) => {
+                const deckSnapshot = p.deck_snapshot || null;
+                const snapshotBy = deckSnapshot?.snapshot_by || null;
+
+                if (!deckSnapshot) {
+                    return p;
+                }
+
+                // On reconstruit deck_snapshot sans snapshot_by_user_id ni snapshot_user,
+                // et on ne garde que le username dans snapshot_by.
+                const { snapshot_by_user_id, snapshot_user, snapshot_by, ...restSnapshot } = deckSnapshot;
+
+                return {
+                    ...p,
+                    deck_snapshot: {
+                        ...restSnapshot,
+                        snapshot_by: snapshotBy
+                            ? {
+                                  username: snapshotBy.username
+                              }
+                            : null
+                    }
+                };
+            });
+
+            response.status(200).json({
+                ...plain,
+                players
+            });
         } catch (error) {
             next(error);
         }
@@ -109,7 +145,7 @@ class TournamentController {
     async update(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getIntParam(request.params.tournamentId);
-            const { name, status, max_number_of_rounds, until_winner, max_players, location, event_date, event_date_end, is_online } = request.body;
+            const { name, status, max_number_of_rounds, until_winner, max_players, location, event_date, event_date_end, is_online, allow_penalities } = request.body;
             const tournament = await TournamentService.update(id, {
                 name,
                 status,
@@ -120,7 +156,8 @@ class TournamentController {
                 location,
                 event_date,
                 event_date_end,
-                is_online
+                is_online,
+                allow_penalities
             });
             response.status(200).json(tournament);
         } catch (error) {
@@ -242,6 +279,35 @@ class TournamentController {
             const reason = typeof request.body?.reason === 'string' ? request.body.reason : '';
             const result = await TournamentService.removePlayerFromTournament(tournamentId, playerId, reason);
             response.status(200).json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async adminSetDeckForTournamentPlayer(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const tournamentId = getIntParam(request.params.tournamentId);
+            const playerId = getIntParam(request.params.playerId);
+            const adminUserId = request.user?.id;
+            if (!adminUserId) {
+                response.status(401).json({ message: 'Authentification requise' });
+                return;
+            }
+            const deckId = request.body?.deckId != null ? Number(request.body.deckId) : undefined;
+            if (deckId == null || !Number.isInteger(deckId) || deckId < 1) {
+                response.status(400).json({ message: 'deckId doit être un entier positif dans le body' });
+                return;
+            }
+            const tournamentPlayer = await TournamentService.adminSetDeckForTournamentPlayer(
+                tournamentId,
+                playerId,
+                deckId,
+                adminUserId
+            );
+            response.status(200).json({
+                message: 'Deck assigné au joueur',
+                tournamentPlayer
+            });
         } catch (error) {
             next(error);
         }

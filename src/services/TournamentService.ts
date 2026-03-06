@@ -1,7 +1,21 @@
 import sequelize from '../config/Sequelize';
 import { Op } from 'sequelize';
 import type { Transaction } from 'sequelize';
-import { Tournament, TournamentPlayer, TournamentRound, TournamentMatch, User, Deck, DeckCard, TournamentPlayerDeck, TournamentPlayerDeckCard, Card, Archetype } from '../models/relations';
+import {
+    Tournament,
+    TournamentPlayer,
+    TournamentRound,
+    TournamentMatch,
+    User,
+    Deck,
+    DeckCard,
+    TournamentPlayerDeck,
+    TournamentPlayerDeckCard,
+    Card,
+    Archetype,
+    PenaltyType,
+    TournamentPlayerPenalty
+} from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 
 import type { RoundStatus } from '../models/TournamentRoundModel';
@@ -21,6 +35,40 @@ function isWithinRegistrationWindow(eventDate: Date | null): boolean {
     const start = new Date(eventDate).getTime();
     const deadline = start - REGISTRATION_DEADLINE_HOURS * 60 * 60 * 1000;
     return Date.now() < deadline;
+}
+
+/** Vérifie que l'utilisateur n'est pas déjà inscrit à un autre tournoi dont les dates chevauchent (sans avoir dropped). */
+async function ensureNoOverlappingRegistration(
+    userId: number,
+    tournamentId: number,
+    tournament: Tournament
+): Promise<void> {
+    if (tournament.event_date == null) return;
+
+    const newStart = new Date(tournament.event_date).getTime();
+    const newEnd = tournament.event_date_end
+        ? new Date(tournament.event_date_end).getTime()
+        : newStart;
+
+    const otherParticipations = await TournamentPlayer.findAll({
+        where: { user_id: userId, dropped: false, tournament_id: { [Op.ne]: tournamentId } },
+        include: [{ model: Tournament, as: 'tournament' }]
+    });
+
+    for (const tp of otherParticipations) {
+        const other = (tp as any).tournament as Tournament | undefined;
+        if (!other || other.event_date == null) continue;
+
+        const otherStart = new Date(other.event_date).getTime();
+        const otherEnd = other.event_date_end ? new Date(other.event_date_end).getTime() : otherStart;
+
+        if (newStart <= otherEnd && otherStart <= newEnd) {
+            throw new CustomError(
+                'Vous êtes déjà inscrit à un tournoi sur cette période. Abandonnez l\'autre tournoi pour vous inscrire ici.',
+                400
+            );
+        }
+    }
 }
 
 interface CreateTournamentData {
@@ -248,6 +296,16 @@ class TournamentService {
             throw new CustomError('Vous ne participez pas à ce tournoi', 403);
         }
 
+        const penalties = await TournamentPlayerPenalty.findAll({
+            where: { tournament_player_id: tournamentPlayer.id },
+            include: [
+                { model: PenaltyType, as: 'penalty_type' },
+                { model: TournamentRound, as: 'round' },
+                { model: TournamentMatch, as: 'tournament_match' }
+            ],
+            order: [['applied_at', 'ASC']]
+        });
+
         const tournament = await Tournament.findByPk(tournamentId, {
             include: [
                 {
@@ -338,7 +396,35 @@ class TournamentService {
                 match_draws: tournamentPlayer.match_draws,
                 games_won: tournamentPlayer.games_won,
                 games_played: tournamentPlayer.games_played,
-                dropped: tournamentPlayer.dropped
+                dropped: tournamentPlayer.dropped,
+                penalties: penalties.map((p) => {
+                    const plainPenalty = p.get({ plain: true }) as any;
+                    return {
+                        id: plainPenalty.id,
+                        penalty_type: plainPenalty.penalty_type
+                            ? {
+                                  id: plainPenalty.penalty_type.id,
+                                  code: plainPenalty.penalty_type.code,
+                                  label: plainPenalty.penalty_type.label
+                              }
+                            : null,
+                        round: plainPenalty.round
+                            ? {
+                                  id: plainPenalty.round.id,
+                                  round_number: plainPenalty.round.round_number
+                              }
+                            : null,
+                        tournament_match: plainPenalty.tournament_match
+                            ? {
+                                  id: plainPenalty.tournament_match.id
+                              }
+                            : null,
+                        reason: plainPenalty.reason,
+                        notes: plainPenalty.notes,
+                        disqualification_with_prize: plainPenalty.disqualification_with_prize,
+                        applied_at: plainPenalty.applied_at
+                    };
+                })
             },
             rounds: (plain.rounds || []).map((r) => {
                 const m = (r.matches && r.matches[0]) || null;
@@ -440,6 +526,11 @@ class TournamentService {
                             {
                                 model: Archetype,
                                 as: 'archetype'
+                            },
+                            {
+                                model: User,
+                                as: 'snapshot_by',
+                                attributes: ['id', 'username']
                             }
                         ]
                     }
@@ -464,6 +555,7 @@ class TournamentService {
             event_date?: Date | string | null;
             event_date_end?: Date | string | null;
             is_online?: boolean;
+            allow_penalities?: boolean;
         }
     ) {
         const t = await Tournament.findByPk(id);
@@ -478,6 +570,7 @@ class TournamentService {
         if (updates.event_date !== undefined) t.event_date = updates.event_date != null ? new Date(updates.event_date) : null;
         if (updates.event_date_end !== undefined) t.event_date_end = updates.event_date_end != null ? new Date(updates.event_date_end) : null;
         if (updates.is_online !== undefined) t.is_online = updates.is_online;
+        if (updates.allow_penalities !== undefined) t.allow_penalities = updates.allow_penalities;
         await t.save();
         return t;
     }
@@ -549,7 +642,7 @@ class TournamentService {
     /**
      * Crée ou met à jour le snapshot de deck pour un joueur donné (en fonction de son deck_id actuel).
      */
-    private static async ensureSnapshotForTournamentPlayer(tp: TournamentPlayer): Promise<void> {
+    private static async ensureSnapshotForTournamentPlayer(tp: TournamentPlayer, snapshotByUserId: number | null = null): Promise<void> {
         if (!tp.deck_id) {
             return;
         }
@@ -576,7 +669,8 @@ class TournamentService {
                     tournament_player_id: tp.id,
                     label: deck.label,
                     archetype_id: deck.archetype_id,
-                    is_playable: deck.is_playable
+                    is_playable: deck.is_playable,
+                    snapshot_by_user_id: snapshotByUserId
                 },
                 { transaction }
             );
@@ -628,6 +722,8 @@ class TournamentService {
             throw new CustomError('Vous êtes déjà inscrit à ce tournoi', 400);
         }
 
+        await ensureNoOverlappingRegistration(data.userId, data.tournamentId, tournament);
+
         return TournamentPlayer.create({ tournament_id: data.tournamentId, user_id: data.userId, deck_id: null });
     }
 
@@ -658,6 +754,8 @@ class TournamentService {
                 throw new CustomError('Le tournoi est complet', 400);
             }
         }
+
+        await ensureNoOverlappingRegistration(userId, tournamentId, tournament);
 
         const tournamentPlayer = await TournamentPlayer.create({ tournament_id: tournamentId, user_id: userId, deck_id: deckId ?? null });
 
@@ -721,7 +819,73 @@ class TournamentService {
             throw new CustomError('Deck introuvable ou ne vous appartient pas', 400);
         }
         await tp.update({ deck_id: deckId });
-        await this.ensureSnapshotForTournamentPlayer(tp);
+        await this.ensureSnapshotForTournamentPlayer(tp, userId);
+        return tp;
+    }
+
+    /**
+     * Admin assigne un deck jouable à un joueur déjà inscrit.
+     * Si le statut du tournoi n'est pas "registration_open", le joueur reçoit la pénalité booléenne "late_deck_penalty"
+     * et éventuellement une pénalité KDE/Konami si allow_penalities est activé.
+     */
+    static async adminSetDeckForTournamentPlayer(
+        tournamentId: number,
+        tournamentPlayerId: number,
+        deckId: number,
+        adminUserId: number
+    ): Promise<TournamentPlayer> {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+        const allowedStatuses: TournamentStatus[] = ['registration_open', 'registration_closed', 'tournament_beginning'];
+        const canModifyInProgress =
+            tournament.status === 'tournament_in_progress' && tournament.current_round <= 1;
+        if (!allowedStatuses.includes(tournament.status) && !canModifyInProgress) {
+            throw new CustomError('Il n\'est plus possible de modifier le deck de ce joueur pour ce tournoi', 400);
+        }
+
+        const tp = await TournamentPlayer.findOne({
+            where: { id: tournamentPlayerId, tournament_id: tournamentId }
+        });
+        if (!tp) {
+            throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
+        }
+
+        const deck = await Deck.findByPk(deckId);
+        if (!deck) {
+            throw new CustomError('Deck introuvable', 404);
+        }
+        if (deck.user_id !== tp.user_id) {
+            throw new CustomError('Ce deck n\'appartient pas à ce joueur', 400);
+        }
+        if (!deck.is_playable) {
+            throw new CustomError('Ce deck n\'est pas jouable (40 à 60 cartes requises)', 400);
+        }
+
+        const late_deck_penalty = tournament.status !== 'registration_open';
+        await tp.update({ deck_id: deckId, late_deck_penalty });
+        await this.ensureSnapshotForTournamentPlayer(tp, adminUserId);
+
+        const allowPenalties = (tournament as any).allow_penalities === true;
+        const shouldApplyChecklistPenalty = allowPenalties && tournament.status !== 'registration_open';
+
+        if (shouldApplyChecklistPenalty) {
+            const warningType = await PenaltyType.findOne({ where: { code: 'warning' } });
+            if (warningType) {
+                await TournamentPlayerPenalty.create({
+                    tournament_player_id: tp.id,
+                    penalty_type_id: warningType.id,
+                    round_id: null,
+                    tournament_match_id: null,
+                    applied_by_user_id: adminUserId,
+                    reason: 'Ajout tardif du deck pour le tournoi',
+                    notes: null,
+                    disqualification_with_prize: null,
+                    written_statement_sent_at: null
+                });
+            }
+        }
         return tp;
     }
 
@@ -1062,7 +1226,18 @@ class TournamentService {
             const newCurrentRound = currentRoundNumber - 1;
             tournament.current_round = newCurrentRound;
             if (newCurrentRound === 0 && tournament.status === 'tournament_in_progress') {
+                // Plus aucune ronde en cours : on revient à "tournament_beginning"
                 tournament.status = 'tournament_beginning';
+            } else if (newCurrentRound >= 1) {
+                // On remet la ronde précédente en "in_progress"
+                const previousRound = await TournamentRound.findOne({
+                    where: { tournament_id: tournamentId, round_number: newCurrentRound },
+                    transaction
+                });
+                if (previousRound) {
+                    previousRound.status = 'in_progress';
+                    await previousRound.save({ transaction });
+                }
             }
             await tournament.save({ transaction });
 
@@ -1072,6 +1247,61 @@ class TournamentService {
                 status: tournament.status
             };
         });
+    }
+
+    /** Recalcule les stats d'un joueur (match_wins, match_losses, match_draws, games_won, games_played) à partir de tous ses matchs complétés dans le tournoi. */
+    private static async recomputePlayerStatsFromMatches(
+        tournamentId: number,
+        tournamentPlayerId: number,
+        transaction?: Transaction
+    ): Promise<{ match_wins: number; match_losses: number; match_draws: number; games_won: number; games_played: number }> {
+        const matches = await TournamentMatch.findAll({
+            where: {
+                tournament_id: tournamentId,
+                status: 'completed',
+                [Op.or]: [
+                    { player1_tournament_player_id: tournamentPlayerId },
+                    { player2_tournament_player_id: tournamentPlayerId }
+                ]
+            },
+            transaction
+        });
+        let match_wins = 0;
+        let match_losses = 0;
+        let match_draws = 0;
+        let games_won = 0;
+        let games_played = 0;
+        for (const m of matches) {
+            const p1Games = m.player1_games_won ?? 0;
+            const p2Games = m.player2_games_won ?? 0;
+            const totalGames = p1Games + p2Games;
+            const winnerId = m.winner_tournament_player_id;
+            const isP1 = m.player1_tournament_player_id === tournamentPlayerId;
+
+            if (m.player2_tournament_player_id == null) {
+                if (isP1) {
+                    match_wins += 1;
+                    games_won += p1Games;
+                    games_played += p1Games;
+                }
+                continue;
+            }
+            if (winnerId === tournamentPlayerId) {
+                match_wins += 1;
+            } else if (winnerId != null) {
+                match_losses += 1;
+            } else {
+                match_draws += 1;
+            }
+            if (isP1) {
+                games_won += p1Games;
+                games_played += totalGames;
+            } else {
+                games_won += p2Games;
+                games_played += totalGames;
+            }
+        }
+        return { match_wins, match_losses, match_draws, games_won, games_played };
     }
 
     /** True if there is exactly one leader (strictly better than second on match_wins, match_draws, games_won). */
@@ -1176,6 +1406,7 @@ class TournamentService {
                 : data.player2GamesWon > data.player1GamesWon
                     ? match.player2_tournament_player_id
                     : null;
+
         const transaction = await sequelize.transaction();
         try {
             match.player1_games_won = data.player1GamesWon;
@@ -1186,20 +1417,22 @@ class TournamentService {
             const p1 = await TournamentPlayer.findByPk(match.player1_tournament_player_id, { transaction });
             const p2 = await TournamentPlayer.findByPk(match.player2_tournament_player_id, { transaction });
             if (!p1 || !p2) throw new CustomError('Joueurs du match introuvables', 500);
-            if (winnerId === p1.id) {
-                p1.match_wins += 1;
-                p2.match_losses += 1;
-            } else if (winnerId === p2.id) {
-                p2.match_wins += 1;
-                p1.match_losses += 1;
-            } else {
-                p1.match_draws += 1;
-                p2.match_draws += 1;
-            }
-            p1.games_won += data.player1GamesWon;
-            p1.games_played += data.player1GamesWon + data.player2GamesWon;
-            p2.games_won += data.player2GamesWon;
-            p2.games_played += data.player1GamesWon + data.player2GamesWon;
+
+            const tournamentId = tour.id;
+            const [stats1, stats2] = await Promise.all([
+                this.recomputePlayerStatsFromMatches(tournamentId, p1.id, transaction),
+                this.recomputePlayerStatsFromMatches(tournamentId, p2.id, transaction)
+            ]);
+            p1.match_wins = stats1.match_wins;
+            p1.match_losses = stats1.match_losses;
+            p1.match_draws = stats1.match_draws;
+            p1.games_won = stats1.games_won;
+            p1.games_played = stats1.games_played;
+            p2.match_wins = stats2.match_wins;
+            p2.match_losses = stats2.match_losses;
+            p2.match_draws = stats2.match_draws;
+            p2.games_won = stats2.games_won;
+            p2.games_played = stats2.games_played;
             await p1.save({ transaction });
             await p2.save({ transaction });
             await transaction.commit();
@@ -1284,6 +1517,7 @@ class TournamentService {
                 user_id: player.user_id,
                 username: (player as any).user?.username ?? null,
                 deck: snapshot,
+                late_deck_penalty: player.late_deck_penalty ?? false,
                 matches_breakdown: {
                     wins: {
                         count: player.match_wins,

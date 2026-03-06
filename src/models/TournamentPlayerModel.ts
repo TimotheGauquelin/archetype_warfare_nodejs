@@ -12,11 +12,14 @@ interface TournamentPlayerAttributes {
     games_won: number;
     games_played: number;
     dropped: boolean;
+    disqualified_at: Date | null;
+    disqualified_reason: string | null;
+    late_deck_penalty: boolean;
     created_at?: Date;
     updated_at?: Date;
 }
 
-interface TournamentPlayerCreationAttributes extends Optional<TournamentPlayerAttributes, 'id' | 'deck_id' | 'match_wins' | 'match_losses' | 'match_draws' | 'games_won' | 'games_played' | 'dropped' | 'created_at' | 'updated_at'> {}
+interface TournamentPlayerCreationAttributes extends Optional<TournamentPlayerAttributes, 'id' | 'deck_id' | 'match_wins' | 'match_losses' | 'match_draws' | 'games_won' | 'games_played' | 'dropped' | 'disqualified_at' | 'disqualified_reason' | 'late_deck_penalty' | 'created_at' | 'updated_at'> {}
 
 class TournamentPlayer extends Model<TournamentPlayerAttributes, TournamentPlayerCreationAttributes> implements TournamentPlayerAttributes {
     declare id: number;
@@ -29,6 +32,9 @@ class TournamentPlayer extends Model<TournamentPlayerAttributes, TournamentPlaye
     declare games_won: number;
     declare games_played: number;
     declare dropped: boolean;
+    declare disqualified_at: Date | null;
+    declare disqualified_reason: string | null;
+    declare late_deck_penalty: boolean;
     declare created_at?: Date;
     declare updated_at?: Date;
 }
@@ -80,6 +86,19 @@ TournamentPlayer.init({
         defaultValue: 0
     },
     dropped: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+    },
+    disqualified_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    disqualified_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    late_deck_penalty: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false
