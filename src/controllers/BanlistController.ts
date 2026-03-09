@@ -4,9 +4,13 @@ import BanlistService from '../services/BanlistService';
 import { getIntParam } from '../utils/request';
 
 class BanlistController {
-    async getCurrentBanlist(_request: Request, response: Response, next: NextFunction): Promise<void> {
+    async getCurrentBanlist(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const banlist = await BanlistService.getCurrentBanlist();
+            const includeArchetypeCardsParam = request.query.include_archetype_cards;
+            const includeArchetypeCards = includeArchetypeCardsParam === undefined
+                ? true
+                : includeArchetypeCardsParam === 'true' || includeArchetypeCardsParam === '1';
+            const banlist = await BanlistService.getCurrentBanlist(includeArchetypeCards);
             response.json(banlist);
         } catch (error) {
             next(error);

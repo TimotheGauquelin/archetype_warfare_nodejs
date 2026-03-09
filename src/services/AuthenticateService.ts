@@ -17,7 +17,7 @@ interface RegisterResult {
     success: boolean;
     message: string;
     user: {
-        id: number;
+        id: string;
         email: string;
         is_active: boolean;
     };
@@ -27,7 +27,7 @@ interface ApproveResult {
     success: boolean;
     message: string;
     user: {
-        id: number;
+        id: string;
         email: string;
         is_active: boolean;
         roles: string[];
@@ -96,7 +96,7 @@ class AuthenticateService {
         }
     }
 
-    static async adminApproveUser(userId: number, roleLabels: string[] = []): Promise<ApproveResult> {
+    static async adminApproveUser(userId: string, roleLabels: string[] = []): Promise<ApproveResult> {
         const transaction = await sequelize.transaction();
 
         try {

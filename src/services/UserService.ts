@@ -77,7 +77,7 @@ class UserService {
         return User.findAll();
     }
 
-    static async getUserById(id: number): Promise<User & { roles: string[] }> {
+    static async getUserById(id: string): Promise<User & { roles: string[] }> {
         const user = await User.findOne({
             where: {
                 id: id
@@ -260,7 +260,7 @@ class UserService {
         return user;
     }
 
-    static async updateUserByAdmin(userId: number, userPayload: UserPayload, roleLabels: string[] = []): Promise<User> {
+    static async updateUserByAdmin(userId: string, userPayload: UserPayload, roleLabels: string[] = []): Promise<User> {
         const { username, email } = userPayload;
 
         const updateData: Partial<UserPayload> = {};
@@ -302,7 +302,7 @@ class UserService {
         return updatedUser;
     }
 
-    static async deleteUser(userId: number): Promise<void> {
+    static async deleteUser(userId: string): Promise<void> {
         await User.destroy({ where: { id: userId } });
     }
 }

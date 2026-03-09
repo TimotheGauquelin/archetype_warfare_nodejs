@@ -5,7 +5,7 @@ import envVars from '../config/envValidation';
 import logger from '../utils/logger';
 
 interface DecodedToken extends JwtPayload {
-    id: number;
+    id: string;
     email: string;
     username: string;
     roles: string[];

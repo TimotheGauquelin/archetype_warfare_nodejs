@@ -5,7 +5,7 @@ import envVars from '../config/envValidation';
 import logger from '../utils/logger';
 
 interface User {
-    id: number;
+    id: string;
     email: string;
     username?: string;
 }

@@ -8,7 +8,7 @@ interface TournamentPlayerPenaltyAttributes {
     round_id: number | null;
     tournament_match_id: number | null;
     applied_at: Date;
-    applied_by_user_id: number | null;
+    applied_by_user_id: string | null;
     reason: string | null;
     notes: string | null;
     disqualification_with_prize: boolean | null;
@@ -27,7 +27,7 @@ class TournamentPlayerPenalty extends Model<TournamentPlayerPenaltyAttributes, T
     declare round_id: number | null;
     declare tournament_match_id: number | null;
     declare applied_at: Date;
-    declare applied_by_user_id: number | null;
+    declare applied_by_user_id: string | null;
     declare reason: string | null;
     declare notes: string | null;
     declare disqualification_with_prize: boolean | null;
@@ -66,7 +66,7 @@ TournamentPlayerPenalty.init({
         defaultValue: DataTypes.NOW
     },
     applied_by_user_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
         references: { model: 'user', key: 'id' }
     },

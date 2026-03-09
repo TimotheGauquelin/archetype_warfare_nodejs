@@ -2,11 +2,11 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/Sequelize';
 
 interface DeckAttributes {
-    id: number;
+    id: string;
     label: string;
     comment: string;
     archetype_id: number | null;
-    user_id: number | null;
+    user_id: string | null;
     is_playable: boolean;
     created_at?: Date;
     updated_at?: Date;
@@ -18,11 +18,11 @@ interface DeckCreationAttributes extends Optional<DeckAttributes, 'id' | 'archet
  * Deck model representing user cards deck
  */
 class Deck extends Model<DeckAttributes, DeckCreationAttributes> implements DeckAttributes {
-    declare id: number;
+    declare id: string;
     declare label: string;
     declare comment: string;
     declare archetype_id: number | null;
-    declare user_id: number | null;
+    declare user_id: string | null;
     declare is_playable: boolean;
     declare created_at?: Date;
     declare updated_at?: Date;
@@ -30,9 +30,9 @@ class Deck extends Model<DeckAttributes, DeckCreationAttributes> implements Deck
 
 Deck.init({
     id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true
+        defaultValue: DataTypes.UUIDV4
     },
     label: {
         type: DataTypes.STRING,
@@ -51,7 +51,7 @@ Deck.init({
         }
     },
     user_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'user',

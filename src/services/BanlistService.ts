@@ -49,8 +49,10 @@ class BanlistService {
         });
     }
 
-    static async getCurrentBanlist(): Promise<Banlist | null> {
+    static async getCurrentBanlist(includeArchetypeCards: boolean = true): Promise<Banlist | null> {
         const today = new Date();
+
+        const includeArchetypeCardsCondition = includeArchetypeCards ? {} : { archetype_id: null };
 
         let standardBanlist = await Banlist.findOne({
             order: [['release_date', 'DESC']],
@@ -65,6 +67,8 @@ class BanlistService {
                 {
                     model: BanlistArchetypeCard,
                     as: 'banlist_archetype_cards',
+                    where: includeArchetypeCardsCondition,
+                    required: false,
                     include: [
                         {
                             model: Card,

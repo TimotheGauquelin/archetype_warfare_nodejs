@@ -5,7 +5,7 @@ import UserService from '../services/UserService';
 import envVars from '../config/envValidation';
 
 interface User {
-    id: number;
+    id: string;
     email: string;
 }
 
@@ -21,7 +21,7 @@ export const sendPasswordResetEmail = async (
     htmlContent = htmlContent.replace(/{{resetLink}}/g, resetLink);
 
     // Change token
-    await UserService.updateResetPasswordToken(user as import('../models/UserModel').default, resetToken);
+    await UserService.updateResetPasswordToken(user as unknown as import('../models/UserModel').default, resetToken);
 
     const mailOptions = {
         from: envVars.EMAIL_FROM_EMAILSENDER,

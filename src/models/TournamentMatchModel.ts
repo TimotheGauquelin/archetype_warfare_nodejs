@@ -6,7 +6,7 @@ export type MatchStatus = 'pending' | 'in_progress' | 'completed';
 interface TournamentMatchAttributes {
     id: number;
     round_id: number;
-    tournament_id: number;
+    tournament_id: string;
     player1_tournament_player_id: number;
     player2_tournament_player_id: number | null;
     player1_games_won: number;
@@ -22,7 +22,7 @@ interface TournamentMatchCreationAttributes extends Optional<TournamentMatchAttr
 class TournamentMatch extends Model<TournamentMatchAttributes, TournamentMatchCreationAttributes> implements TournamentMatchAttributes {
     declare id: number;
     declare round_id: number;
-    declare tournament_id: number;
+    declare tournament_id: string;
     declare player1_tournament_player_id: number;
     declare player2_tournament_player_id: number | null;
     declare player1_games_won: number;
@@ -45,7 +45,7 @@ TournamentMatch.init({
         references: { model: 'tournament_round', key: 'id' }
     },
     tournament_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: { model: 'tournament', key: 'id' }
     },

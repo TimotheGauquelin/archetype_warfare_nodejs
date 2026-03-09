@@ -39,8 +39,8 @@ function isWithinRegistrationWindow(eventDate: Date | null): boolean {
 
 /** Vérifie que l'utilisateur n'est pas déjà inscrit à un autre tournoi dont les dates chevauchent (sans avoir dropped). */
 async function ensureNoOverlappingRegistration(
-    userId: number,
-    tournamentId: number,
+    userId: string,
+    tournamentId: string,
     tournament: Tournament
 ): Promise<void> {
     if (tournament.event_date == null) return;
@@ -85,8 +85,8 @@ interface CreateTournamentData {
 }
 
 interface RegisterPlayerData {
-    tournamentId: number;
-    userId: number;
+    tournamentId: string;
+    userId: string;
 }
 
 interface RecordMatchResultData {
@@ -95,12 +95,39 @@ interface RecordMatchResultData {
     player2GamesWon: number;
 }
 
+/** Get the set of tournament_player IDs that have already received a BYE in this tournament
+ *  (in rounds strictly before the given round number).
+ */
+async function getPlayersWhoHadBye(tournamentId: string, beforeRoundNumber: number): Promise<Set<number>> {
+    const rounds = await TournamentRound.findAll({
+        where: { tournament_id: tournamentId, round_number: { [Op.lt]: beforeRoundNumber } },
+        attributes: ['id']
+    });
+    const roundIds = rounds.map((r) => r.id);
+    if (roundIds.length === 0) return new Set();
+
+    const matches = await TournamentMatch.findAll({
+        where: {
+            tournament_id: tournamentId,
+            round_id: { [Op.in]: roundIds },
+            player2_tournament_player_id: null
+        },
+        attributes: ['player1_tournament_player_id']
+    });
+    const ids = new Set<number>();
+    for (const m of matches) {
+        const id = m.player1_tournament_player_id;
+        if (id != null) ids.add(id);
+    }
+    return ids;
+}
+
 /** Get the played pairs for a tournament.
  * 
  * @param tournamentId - The ID of the tournament to get the played pairs for.
  * @returns A promise that resolves to a set of strings representing the played pairs.
  */
-async function getPlayedPairs(tournamentId: number): Promise<Set<string>> {
+async function getPlayedPairs(tournamentId: string): Promise<Set<string>> {
     const matches = await TournamentMatch.findAll({
         where: { tournament_id: tournamentId },
         attributes: ['player1_tournament_player_id', 'player2_tournament_player_id']
@@ -162,7 +189,7 @@ function swissPair(players: { id: number; match_wins: number }[], playedPairs: S
  * @returns A promise that resolves to void.
  */
 async function markRoundAsCompleted(
-    tournamentId: number,
+    tournamentId: string,
     roundNumber: number,
     transaction: Transaction
 ): Promise<void> {
@@ -253,14 +280,14 @@ class TournamentService {
      * @param userId - The ID of the user to get the tournaments for.
      * @returns A promise that resolves to an array of tournaments.
      */
-    static async getTournamentsForUser(userId: number) {
+    static async getTournamentsForUser(userId: string) {
         const userTournamentPlayers = await TournamentPlayer.findAll({
             where: { user_id: userId },
             attributes: ['tournament_id']
         });
 
         const tournamentIds = Array.from(
-            new Set(userTournamentPlayers.map(tp => tp.tournament_id as number))
+            new Set(userTournamentPlayers.map(tp => tp.tournament_id as string))
         );
 
         if (tournamentIds.length === 0) {
@@ -288,7 +315,7 @@ class TournamentService {
     }
 
     /** Get the details of a tournament for a user participating : tournament info + only his matches by round. */
-    static async getTournamentDetailsForUser(tournamentId: number, userId: number) {
+    static async getTournamentDetailsForUser(tournamentId: string, userId: string) {
         const tournamentPlayer = await TournamentPlayer.findOne({
             where: { tournament_id: tournamentId, user_id: userId }
         });
@@ -340,7 +367,7 @@ class TournamentService {
         }
 
         const plain = tournament.get({ plain: true }) as {
-            id: number;
+            id: string;
             name: string;
             status: string;
             max_number_of_rounds: number;
@@ -366,9 +393,9 @@ class TournamentService {
                     player1_games_won: number;
                     player2_games_won: number;
                     winner_tournament_player_id: number | null;
-                    player1?: { user?: { id: number; username: string } } | null;
-                    player2?: { user?: { id: number; username: string } } | null;
-                    winner?: { user?: { id: number; username: string } } | null;
+                    player1?: { user?: { id: string; username: string } } | null;
+                    player2?: { user?: { id: string; username: string } } | null;
+                    winner?: { user?: { id: string; username: string } } | null;
                 }>;
             }>;
         };
@@ -436,14 +463,14 @@ class TournamentService {
                         round_id: number;
                         status: string;
                         player1: {
-                            id: number | null;
+                            id: string | null;
                             username: string | null;
                             isWinner: boolean;
                             gamesWon: number;
                         } | null;
                         player2:
                         | {
-                            id: number;
+                            id: string;
                             username: string;
                             isWinner: boolean;
                             gamesWon: number;
@@ -494,7 +521,7 @@ class TournamentService {
         };
     }
 
-    static async getById(id: number, options?: { includePlayers?: boolean }) {
+    static async getById(id: string, options?: { includePlayers?: boolean }) {
         const includePlayers = options?.includePlayers !== false;
         const include: Array<Record<string, unknown>> = [
             { model: TournamentRound, as: 'rounds', order: [['round_number', 'ASC']], include: [{ model: TournamentMatch, as: 'matches' }] }
@@ -543,7 +570,7 @@ class TournamentService {
     }
 
     static async update(
-        id: number,
+        id: string,
         updates: {
             name?: string;
             status?: TournamentStatus;
@@ -575,7 +602,7 @@ class TournamentService {
         return t;
     }
 
-    static async toggleRegistrationStatus(tournamentId: number) {
+    static async toggleRegistrationStatus(tournamentId: string) {
         const tournament = await Tournament.findByPk(tournamentId);
         if (!tournament) {
             throw new CustomError('Tournoi introuvable', 404);
@@ -599,7 +626,7 @@ class TournamentService {
     /**
      * Crée le snapshot du deck pour chaque joueur inscrit ayant choisi un deck (au verrouillage des inscriptions).
      */
-    static async createDeckSnapshotsForTournament(tournamentId: number): Promise<void> {
+    static async createDeckSnapshotsForTournament(tournamentId: string): Promise<void> {
         const players = await TournamentPlayer.findAll({
             where: { tournament_id: tournamentId, deck_id: { [Op.ne]: null } },
             include: [
@@ -642,7 +669,7 @@ class TournamentService {
     /**
      * Crée ou met à jour le snapshot de deck pour un joueur donné (en fonction de son deck_id actuel).
      */
-    private static async ensureSnapshotForTournamentPlayer(tp: TournamentPlayer, snapshotByUserId: number | null = null): Promise<void> {
+    private static async ensureSnapshotForTournamentPlayer(tp: TournamentPlayer, snapshotByUserId: string | null = null): Promise<void> {
         if (!tp.deck_id) {
             return;
         }
@@ -690,7 +717,7 @@ class TournamentService {
     }
 
     /** Supprime un tournoi (les joueurs, rondes et matchs sont supprimés en cascade). */
-    static async delete(id: number): Promise<void> {
+    static async delete(id: string): Promise<void> {
         const t = await Tournament.findByPk(id);
         if (!t) throw new CustomError('Tournoi introuvable', 404);
         await t.destroy();
@@ -730,7 +757,7 @@ class TournamentService {
     /**
      * Admin ajoute un utilisateur à un tournoi. L'utilisateur ne doit pas déjà y être inscrit.
      */
-    static async addPlayerToTournament(tournamentId: number, userId: number, deckId?: number | null) {
+    static async addPlayerToTournament(tournamentId: string, userId: string, deckId?: string | null) {
         const tournament = await Tournament.findByPk(tournamentId);
         if (!tournament) {
             throw new CustomError('Tournoi introuvable', 404);
@@ -802,7 +829,7 @@ class TournamentService {
      * Définit le deck du joueur connecté pour un tournoi (inscription déjà faite).
      * Autorisé tant que les inscriptions sont ouvertes ou fermées (avant le début du tournoi).
      */
-    static async setMyDeckForTournament(tournamentId: number, userId: number, deckId: number): Promise<TournamentPlayer> {
+    static async setMyDeckForTournament(tournamentId: string, userId: string, deckId: string): Promise<TournamentPlayer> {
         const tournament = await Tournament.findByPk(tournamentId);
         if (!tournament) {
             throw new CustomError('Tournoi introuvable', 404);
@@ -829,10 +856,10 @@ class TournamentService {
      * et éventuellement une pénalité KDE/Konami si allow_penalities est activé.
      */
     static async adminSetDeckForTournamentPlayer(
-        tournamentId: number,
+        tournamentId: string,
         tournamentPlayerId: number,
-        deckId: number,
-        adminUserId: number
+        deckId: string,
+        adminUserId: string
     ): Promise<TournamentPlayer> {
         const tournament = await Tournament.findByPk(tournamentId);
         if (!tournament) {
@@ -892,7 +919,7 @@ class TournamentService {
     /**
      * Admin removes a player from a tournament (sets dropped = true) and sends an email with the reason.
      */
-    static async removePlayerFromTournament(tournamentId: number, playerId: number, reason: string) {
+    static async removePlayerFromTournament(tournamentId: string, playerId: number, reason: string) {
 
         console.log('tournamentId', tournamentId);
         console.log('playerId', playerId);
@@ -986,8 +1013,7 @@ class TournamentService {
         await tournamentPlayer.save();
     }
 
-    /** Met un tournoi en statut "tournament_beginning" (démarrage sans créer de ronde). */
-    static async startTournament(tournamentId: number) {
+    static async startTournament(tournamentId: string) {
         const tournament = await Tournament.findByPk(tournamentId);
 
         if (!tournament) {
@@ -1043,6 +1069,10 @@ class TournamentService {
         const playedPairs = await getPlayedPairs(tournamentId);
         const pairs = swissPair(players.map((p) => ({ id: p.id, match_wins: p.match_wins })), playedPairs);
 
+        const playersWhoHadBye = await getPlayersWhoHadBye(tournamentId, nextRoundNum);
+        const maxRounds = tournament.max_number_of_rounds;
+        const playerCount = players.length;
+
         const nextRoundId = await sequelize.transaction(async (transaction) => {
             if (tournament.current_round >= 1) {
                 await markRoundAsCompleted(tournamentId, tournament.current_round, transaction);
@@ -1076,25 +1106,39 @@ class TournamentService {
             }
 
             const pairedIds = new Set(pairs.flatMap(([a, b]) => [a, b]));
-            for (const p of players) {
-                if (pairedIds.has(p.id)) continue;
-                const byePlayer = await TournamentPlayer.findByPk(p.id, { transaction });
-                if (!byePlayer) continue;
-                await TournamentMatch.create(
-                    {
-                        round_id: nextRound.id,
-                        tournament_id: tournamentId,
-                        player1_tournament_player_id: byePlayer.id,
-                        player2_tournament_player_id: null,
-                        player1_games_won: 0,
-                        player2_games_won: 0,
-                        winner_tournament_player_id: byePlayer.id,
-                        status: 'completed'
-                    },
-                    { transaction }
-                );
-                byePlayer.match_wins += 1;
-                await byePlayer.save({ transaction });
+            const unpaired = players.filter((p) => !pairedIds.has(p.id));
+
+            if (unpaired.length > 0) {
+                const preferNoByeYet = unpaired.filter((p) => !playersWhoHadBye.has(p.id));
+                const canReceiveBye = preferNoByeYet.length > 0
+                    ? preferNoByeYet
+                    : (maxRounds > playerCount ? unpaired : []);
+
+                if (canReceiveBye.length === 0) {
+                    throw new CustomError(
+                        'Impossible d\'attribuer le BYE : tous les joueurs non appariés en ont déjà eu un, et le nombre de rondes ne permet pas d\'en attribuer un second.',
+                        400
+                    );
+                }
+
+                const byePlayer = await TournamentPlayer.findByPk(canReceiveBye[0].id, { transaction });
+                if (byePlayer) {
+                    await TournamentMatch.create(
+                        {
+                            round_id: nextRound.id,
+                            tournament_id: tournamentId,
+                            player1_tournament_player_id: byePlayer.id,
+                            player2_tournament_player_id: null,
+                            player1_games_won: 0,
+                            player2_games_won: 0,
+                            winner_tournament_player_id: byePlayer.id,
+                            status: 'completed'
+                        },
+                        { transaction }
+                    );
+                    byePlayer.match_wins += 1;
+                    await byePlayer.save({ transaction });
+                }
             }
 
             tournament.current_round = nextRoundNum;
@@ -1112,7 +1156,7 @@ class TournamentService {
      * 
      * @param tournamentId - The ID of the tournament.
      */
-    static async rollbackLastRound(tournamentId: number) {
+    static async rollbackLastRound(tournamentId: string) {
         const tournament = await Tournament.findByPk(tournamentId);
 
         if (!tournament) {
@@ -1251,7 +1295,7 @@ class TournamentService {
 
     /** Recalcule les stats d'un joueur (match_wins, match_losses, match_draws, games_won, games_played) à partir de tous ses matchs complétés dans le tournoi. */
     private static async recomputePlayerStatsFromMatches(
-        tournamentId: number,
+        tournamentId: string,
         tournamentPlayerId: number,
         transaction?: Transaction
     ): Promise<{ match_wins: number; match_losses: number; match_draws: number; games_won: number; games_played: number }> {
@@ -1305,7 +1349,7 @@ class TournamentService {
     }
 
     /** True if there is exactly one leader (strictly better than second on match_wins, match_draws, games_won). */
-    private static async hasSingleLeader(tournamentId: number): Promise<boolean> {
+    private static async hasSingleLeader(tournamentId: string): Promise<boolean> {
         const players = await TournamentPlayer.findAll({
             where: { tournament_id: tournamentId, dropped: false },
             attributes: ['id', 'match_wins', 'match_draws', 'games_won']
@@ -1332,7 +1376,7 @@ class TournamentService {
      * @param currentRoundNumber - The number of the current round to finish.
      * @returns A promise that resolves to the message 'Le tournoi est terminé'.
      */
-    private static async finishTournament(tournamentId: number, currentRoundNumber: number) {
+    private static async finishTournament(tournamentId: string, currentRoundNumber: number) {
         return sequelize.transaction(async (transaction) => {
             await markRoundAsCompleted(tournamentId, currentRoundNumber, transaction);
             await Tournament.update(
@@ -1349,7 +1393,7 @@ class TournamentService {
      * @param currentRoundNumber - The number of the current round to check.
      * @returns A promise that resolves to void.
     */
-    private static async ensureCurrentRoundFullyPlayed(tournamentId: number, currentRoundNumber: number): Promise<void> {
+    private static async ensureCurrentRoundFullyPlayed(tournamentId: string, currentRoundNumber: number): Promise<void> {
         if (currentRoundNumber < 1) return;
         const currentRound = await TournamentRound.findOne({
             where: { tournament_id: tournamentId, round_number: currentRoundNumber }
@@ -1481,7 +1525,7 @@ class TournamentService {
         return round;
     }
 
-    static async getStandings(tournamentId: number) {
+    static async getStandings(tournamentId: string) {
         const players = await TournamentPlayer.findAll({
             where: { tournament_id: tournamentId },
             include: [

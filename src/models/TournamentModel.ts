@@ -19,7 +19,7 @@ const TOURNAMENT_STATUSES: TournamentStatus[] = [
 ];
 
 interface TournamentAttributes {
-    id: number;
+    id: string;
     name: string;
     max_number_of_rounds: number;
     matches_per_round: number;
@@ -44,7 +44,7 @@ interface TournamentCreationAttributes
     > {}
 
 class Tournament extends Model<TournamentAttributes, TournamentCreationAttributes> implements TournamentAttributes {
-    declare id: number;
+    declare id: string;
     declare name: string;
     declare max_number_of_rounds: number;
     declare matches_per_round: number;
@@ -65,9 +65,9 @@ class Tournament extends Model<TournamentAttributes, TournamentCreationAttribute
 Tournament.init(
     {
         id: {
-            type: DataTypes.INTEGER,
+            type: DataTypes.UUID,
             primaryKey: true,
-            autoIncrement: true
+            defaultValue: DataTypes.UUIDV4
         },
         name: {
             type: DataTypes.STRING(200),

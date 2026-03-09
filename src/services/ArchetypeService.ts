@@ -6,6 +6,7 @@ import UploadImageService from './UploadImageService';
 import { extractImageIdFromUrl } from '../utils/image';
 import { Request, Response } from 'express';
 import logger from '../utils/logger';
+import { slugify } from '../utils/slugify';
 
 interface SearchFilters {
     name?: string;
@@ -32,6 +33,27 @@ interface PaginatedResult<T> {
 }
 
 class ArchetypeService {
+    /**
+     * Trouve un archétype par ID (numérique) ou par slug.
+     */
+    static async findByIdOrSlug(idOrSlug: string): Promise<Archetype | null> {
+        const trimmed = String(idOrSlug).trim();
+        if (!trimmed) return null;
+        const numericId = parseInt(trimmed, 10);
+        if (!isNaN(numericId) && String(numericId) === trimmed) {
+            return Archetype.findByPk(numericId);
+        }
+        return Archetype.findOne({ where: { slug: trimmed } });
+    }
+
+    /**
+     * Résout un paramètre id ou slug en ID numérique (pour les services qui n'acceptent que l'id).
+     */
+    static async resolveArchetypeId(idOrSlug: string): Promise<number | null> {
+        const archetype = await this.findByIdOrSlug(idOrSlug);
+        return archetype ? archetype.id : null;
+    }
+
     /**
      * Recherche d'archétypes avec filtres et pagination
      */
@@ -309,6 +331,17 @@ class ArchetypeService {
         return archetype;
     }
 
+    /**
+     * Récupère un archétype par son ID ou son slug (détail complet).
+     */
+    static async getArchetypeByIdOrSlug(idOrSlug: string): Promise<Archetype> {
+        const archetype = await this.findByIdOrSlug(idOrSlug);
+        if (!archetype) {
+            throw new CustomError('Archétype non trouvé', 404);
+        }
+        return this.getArchetypeById(archetype.id);
+    }
+
     static async getRandomArchetype(): Promise<Archetype | null> {
         return Archetype.findOne({
             order: sequelize.literal('RANDOM()'),
@@ -316,9 +349,9 @@ class ArchetypeService {
         });
     }
 
-    static async getAllArchetypeNames(): Promise<Array<{ id: number; name: string }>> {
+    static async getAllArchetypeNames(): Promise<Array<{ id: number; name: string; slug?: string | null }>> {
         return Archetype.findAll({
-            attributes: ['id', 'name']
+            attributes: ['id', 'name', 'slug']
         });
     }
 
@@ -401,8 +434,13 @@ class ArchetypeService {
                 summon_mechanics = [],
                 cards = [],
                 slider_img_url,
-                card_img_url
+                card_img_url,
+                slug: slugInput
             } = request.body;
+
+            const slug = slugInput && typeof slugInput === 'string' && slugInput.trim()
+                ? slugInput.trim()
+                : slugify(name);
 
             // Extraction des IDs
             const attributeIds = attributes.map((attr: { id?: number } | number) =>
@@ -496,6 +534,7 @@ class ArchetypeService {
             const result = await sequelize.transaction(async (t) => {
                 const newArchetype = await Archetype.create({
                     name,
+                    slug,
                     main_info,
                     slider_info,
                     is_highlighted,
@@ -590,7 +629,8 @@ class ArchetypeService {
             summon_mechanics = [],
             cards = [],
             slider_img_url,
-            card_img_url
+            card_img_url,
+            slug: slugInput
         } = request.body;
 
         try {
@@ -679,37 +719,64 @@ class ArchetypeService {
                 }
             }
 
+            // Gestion des images : ne ré-upload que si une nouvelle image différente est fournie
+            // et supprime l'ancienne de Cloudinary dans ce cas.
+            const oldSliderUrl = existingArchetype.slider_img_url as string | null;
+            const oldCardUrl = existingArchetype.card_img_url as string | null;
+
             let uploadedSliderUrl: string | null = null;
             let uploadedCardUrl: string | null = null;
 
-            if (slider_img_url) {
-                try {
-                    uploadedSliderUrl = await UploadImageService.uploadImage(slider_img_url, "jumbotron_archetypes");
-                } catch (uploadError) {
-                    const errorMessage = uploadError instanceof Error ? uploadError.message : 'Erreur inconnue';
-                    response.status(400).json({
-                        success: false,
-                        message: 'Erreur lors de l\'upload de l\'image slider: ' + errorMessage
-                    });
-                    return;
+            if (typeof slider_img_url === 'string' && slider_img_url.trim()) {
+                const trimmedSlider = slider_img_url.trim();
+                if (trimmedSlider !== oldSliderUrl) {
+                    try {
+                        // Supprimer l'ancienne image si elle existe
+                        if (oldSliderUrl) {
+                            const oldSliderId = extractImageIdFromUrl(oldSliderUrl);
+                            if (oldSliderId) {
+                                await UploadImageService.deleteImageFromCloudinary(oldSliderId);
+                            }
+                        }
+                        // Uploader la nouvelle image
+                        uploadedSliderUrl = await UploadImageService.uploadImage(trimmedSlider, 'jumbotron_archetypes');
+                    } catch (uploadError) {
+                        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Erreur inconnue';
+                        response.status(400).json({
+                            success: false,
+                            message: 'Erreur lors de l\'upload de l\'image slider: ' + errorMessage
+                        });
+                        return;
+                    }
                 }
             }
 
-            if (card_img_url) {
-                try {
-                    uploadedCardUrl = await UploadImageService.uploadImage(card_img_url, "introduction_archetypes");
-                } catch (uploadError) {
-                    const errorMessage = uploadError instanceof Error ? uploadError.message : 'Erreur inconnue';
-                    response.status(400).json({
-                        success: false,
-                        message: 'Erreur lors de l\'upload de l\'image carte: ' + errorMessage
-                    });
-                    return;
+            if (typeof card_img_url === 'string' && card_img_url.trim()) {
+                const trimmedCard = card_img_url.trim();
+                if (trimmedCard !== oldCardUrl) {
+                    try {
+                        // Supprimer l'ancienne image si elle existe
+                        if (oldCardUrl) {
+                            const oldCardId = extractImageIdFromUrl(oldCardUrl);
+                            if (oldCardId) {
+                                await UploadImageService.deleteImageFromCloudinary(oldCardId);
+                            }
+                        }
+                        // Uploader la nouvelle image
+                        uploadedCardUrl = await UploadImageService.uploadImage(trimmedCard, 'introduction_archetypes');
+                    } catch (uploadError) {
+                        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Erreur inconnue';
+                        response.status(400).json({
+                            success: false,
+                            message: 'Erreur lors de l\'upload de l\'image carte: ' + errorMessage
+                        });
+                        return;
+                    }
                 }
             }
 
             await sequelize.transaction(async (t) => {
-                await existingArchetype.update({
+                const updatePayload: Record<string, unknown> = {
                     name,
                     main_info,
                     slider_info,
@@ -719,10 +786,21 @@ class ArchetypeService {
                     in_aw_date,
                     comment,
                     popularity_poll,
-                    era_id: (era as { id: number }).id,
-                    slider_img_url: uploadedSliderUrl,
-                    card_img_url: uploadedCardUrl,
-                }, { transaction: t });
+                    era_id: (era as { id: number }).id
+                };
+
+                // Mettre à jour les URLs d'images uniquement si de nouvelles images ont été uploadées
+                if (uploadedSliderUrl !== null) {
+                    updatePayload.slider_img_url = uploadedSliderUrl;
+                }
+                if (uploadedCardUrl !== null) {
+                    updatePayload.card_img_url = uploadedCardUrl;
+                }
+
+                if (slugInput !== undefined && typeof slugInput === 'string' && slugInput.trim()) {
+                    updatePayload.slug = slugInput.trim();
+                }
+                await existingArchetype.update(updatePayload, { transaction: t });
 
                 await (existingArchetype as any).setAttributes(attributeIds, { transaction: t });
                 await (existingArchetype as any).setTypes(typeIds, { transaction: t });

@@ -2,7 +2,7 @@ import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/Sequelize';
 
 interface UserRoleAttributes {
-    user_id: number;
+    user_id: string;
     role_id: number;
 }
 
@@ -10,13 +10,13 @@ interface UserRoleAttributes {
  * UserRole model representing the many-to-many relationship between User and Role
  */
 class UserRole extends Model<UserRoleAttributes, UserRoleAttributes> implements UserRoleAttributes {
-    declare user_id: number;
+    declare user_id: string;
     declare role_id: number;
 }
 
 UserRole.init({
     user_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
         references: {
             model: 'user',

@@ -3,9 +3,9 @@ import sequelize from '../config/Sequelize';
 
 interface TournamentPlayerAttributes {
     id: number;
-    tournament_id: number;
-    user_id: number;
-    deck_id: number | null;
+    tournament_id: string;
+    user_id: string;
+    deck_id: string | null;
     match_wins: number;
     match_losses: number;
     match_draws: number;
@@ -23,9 +23,9 @@ interface TournamentPlayerCreationAttributes extends Optional<TournamentPlayerAt
 
 class TournamentPlayer extends Model<TournamentPlayerAttributes, TournamentPlayerCreationAttributes> implements TournamentPlayerAttributes {
     declare id: number;
-    declare tournament_id: number;
-    declare user_id: number;
-    declare deck_id: number | null;
+    declare tournament_id: string;
+    declare user_id: string;
+    declare deck_id: string | null;
     declare match_wins: number;
     declare match_losses: number;
     declare match_draws: number;
@@ -46,17 +46,17 @@ TournamentPlayer.init({
         autoIncrement: true
     },
     tournament_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: { model: 'tournament', key: 'id' }
     },
     user_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: false,
         references: { model: 'user', key: 'id' }
     },
     deck_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         references: { model: 'deck', key: 'id' }
     },

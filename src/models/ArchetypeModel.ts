@@ -4,6 +4,7 @@ import sequelize from '../config/Sequelize';
 interface ArchetypeAttributes {
     id: number;
     name: string;
+    slug?: string | null;
     main_info: string;
     slider_info: string;
     slider_img_url?: string | null;
@@ -19,7 +20,7 @@ interface ArchetypeAttributes {
     updated_at?: Date;
 }
 
-interface ArchetypeCreationAttributes extends Optional<ArchetypeAttributes, 'id' | 'slider_img_url' | 'card_img_url' | 'comment' | 'created_at' | 'updated_at'> {}
+interface ArchetypeCreationAttributes extends Optional<ArchetypeAttributes, 'id' | 'slug' | 'slider_img_url' | 'card_img_url' | 'comment' | 'created_at' | 'updated_at'> {}
 
 /**
  * Archetype model representing a group of card
@@ -27,6 +28,7 @@ interface ArchetypeCreationAttributes extends Optional<ArchetypeAttributes, 'id'
 class Archetype extends Model<ArchetypeAttributes, ArchetypeCreationAttributes> implements ArchetypeAttributes {
     declare id: number;
     declare name: string;
+    declare slug?: string | null;
     declare main_info: string;
     declare slider_info: string;
     declare slider_img_url?: string | null;
@@ -50,6 +52,11 @@ Archetype.init({
     },
     name: {
         type: DataTypes.STRING(50),
+        allowNull: true,
+        unique: true
+    },
+    slug: {
+        type: DataTypes.STRING(80),
         allowNull: true,
         unique: true
     },

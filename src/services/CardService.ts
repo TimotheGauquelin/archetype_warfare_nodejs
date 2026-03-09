@@ -41,7 +41,39 @@ interface CardData {
     card_type?: string;
 }
 
+/** Données modifiables pour une mise à jour manuelle (PUT /api/cards/:id). */
+export interface CardUpdateData {
+    name?: string;
+    description?: string | null;
+    img_url?: string | null;
+    level?: number | null;
+    atk?: number | null;
+    def?: number | null;
+    attribute?: string | null;
+    card_type?: string | null;
+}
+
 class CardService {
+    /** Récupère une carte par son ID (détail). */
+    static async getCardById(id: string): Promise<Card | null> {
+        return Card.findByPk(id);
+    }
+
+    /**
+     * Met à jour une carte (détails) et positionne manual_update à true.
+     * À utiliser pour les modifications manuelles ; les imports POST ne pourront plus écraser cette carte.
+     */
+    static async updateCard(id: string, data: CardUpdateData): Promise<Card | null> {
+        const card = await Card.findByPk(id);
+        if (!card) return null;
+        const updates: Record<string, unknown> = { manual_update: true };
+        for (const [key, value] of Object.entries(data)) {
+            if (value !== undefined) updates[key] = value;
+        }
+        await card.update(updates);
+        return card;
+    }
+
     static async getAllCards(): Promise<Card[]> {
         return Card.findAll({
             include: [
@@ -286,12 +318,15 @@ class CardService {
         };
     }
 
-    static async addCards(cards: CardData[]): Promise<{ results: Array<{ index: number; success: boolean; card: Card }>; errors: Array<{ index: number; cardId?: string; error: string }> }> {
+    static async addCards(cards: CardData[]): Promise<{
+        results: Array<{ index: number; success: boolean; created: boolean; updated?: boolean; skipped?: boolean; card: Card }>;
+        errors: Array<{ index: number; cardId?: string; error: string }>;
+    }> {
         if (!cards || !Array.isArray(cards) || cards.length === 0) {
             throw new Error('Les données des cartes sont requises et doivent être un tableau non vide');
         }
 
-        const results: Array<{ index: number; success: boolean; card: Card }> = [];
+        const results: Array<{ index: number; success: boolean; created: boolean; updated?: boolean; skipped?: boolean; card: Card }> = [];
         const errors: Array<{ index: number; cardId?: string; error: string }> = [];
 
         for (let i = 0; i < cards.length; i++) {
@@ -308,35 +343,49 @@ class CardService {
 
                 const cardId = String(cardData.id);
 
-                const existingCard = await Card.findByPk(cardId);
-                if (existingCard) {
-                    errors.push({
-                        index: i,
-                        cardId: cardData.id,
-                        error: 'Une carte avec cet ID existe déjà'
-                    });
-                    continue;
-                }
-
-                const cardToCreate = {
-                    id: cardId,
+                const payload = {
                     name: cardData.name,
-                    description: cardData.description || null,
-                    img_url: cardData.img_url || null,
-                    level: cardData.level || 0,
-                    atk: cardData.atk || 0,
-                    def: cardData.def || 0,
-                    attribute: cardData.attribute || null,
-                    card_type: cardData.card_type || null
+                    description: cardData.description ?? null,
+                    img_url: cardData.img_url ?? null,
+                    level: cardData.level ?? null,
+                    atk: cardData.atk ?? null,
+                    def: cardData.def ?? null,
+                    attribute: cardData.attribute ?? null,
+                    card_type: cardData.card_type ?? null
                 };
 
-                const newCard = await Card.create(cardToCreate);
-                results.push({
-                    index: i,
-                    success: true,
-                    card: newCard
-                });
-
+                const existingCard = await Card.findByPk(cardId);
+                if (existingCard) {
+                    if (existingCard.manual_update) {
+                        results.push({
+                            index: i,
+                            success: true,
+                            created: false,
+                            skipped: true,
+                            card: existingCard
+                        });
+                    } else {
+                        await existingCard.update(payload);
+                        results.push({
+                            index: i,
+                            success: true,
+                            created: false,
+                            updated: true,
+                            card: existingCard
+                        });
+                    }
+                } else {
+                    const newCard = await Card.create({
+                        id: cardId,
+                        ...payload
+                    });
+                    results.push({
+                        index: i,
+                        success: true,
+                        created: true,
+                        card: newCard
+                    });
+                }
             } catch (cardError) {
                 const errorMessage = cardError instanceof Error ? cardError.message : 'Erreur inconnue';
                 errors.push({

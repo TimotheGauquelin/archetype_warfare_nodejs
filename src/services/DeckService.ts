@@ -1,4 +1,4 @@
-import { Deck, DeckCard, Card } from '../models/relations';
+import { Deck, DeckCard, Card, Archetype } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import sequelize from '../config/Sequelize';
 
@@ -23,14 +23,20 @@ interface UpdateDeckData {
 }
 
 class DeckService {
-    static async getAllDecksByUserId(userId: number, isPlayable?: boolean | null): Promise<Deck[]> {
-        const where: { user_id: number; is_playable?: boolean } = { user_id: userId };
+    static async getAllDecksByUserId(userId: string, isPlayable?: boolean | null): Promise<Deck[]> {
+        const where: { user_id: string; is_playable?: boolean } = { user_id: userId };
         if (isPlayable !== undefined && isPlayable !== null) {
             where.is_playable = isPlayable;
         }
         return Deck.findAll({
             where,
             include: [
+                {
+                    model: Archetype,
+                    as: 'archetype',
+                    attributes: ['id', 'name', 'card_img_url'],
+                    required: false
+                },
                 {
                     model: DeckCard,
                     as: 'deck_cards',
@@ -46,7 +52,7 @@ class DeckService {
         });
     }
 
-    static async getDeckById(id: number): Promise<Deck | null> {
+    static async getDeckById(id: string): Promise<Deck | null> {
         return Deck.findByPk(id, {
             include: [
                 {
@@ -64,7 +70,7 @@ class DeckService {
         });
     }
 
-    static async createDeck(body: CreateDeckData, userId: number): Promise<void> {
+    static async createDeck(body: CreateDeckData, userId: string): Promise<void> {
         const transaction = await sequelize.transaction();
 
         try {
@@ -167,7 +173,7 @@ class DeckService {
         }
     }
 
-    static async updateMyDeck(id: number, body: UpdateDeckData, existingDeck: Deck): Promise<Deck> {
+    static async updateMyDeck(id: string, body: UpdateDeckData, existingDeck: Deck): Promise<Deck> {
         const { label, comment, archetype_id, deck_cards } = body;
         const transaction = await sequelize.transaction();
 
@@ -339,7 +345,7 @@ class DeckService {
         }
     }
 
-    static async deleteMyDeck(id: number): Promise<number> {
+    static async deleteMyDeck(id: string): Promise<number> {
         return Deck.destroy({
             where: { id }
         });

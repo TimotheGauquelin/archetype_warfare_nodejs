@@ -7,7 +7,7 @@ interface TournamentPlayerDeckAttributes {
     label: string;
     archetype_id: number | null;
     is_playable: boolean;
-    snapshot_by_user_id: number | null;
+    snapshot_by_user_id: string | null;
     created_at?: Date;
 }
 
@@ -24,7 +24,7 @@ class TournamentPlayerDeck extends Model<TournamentPlayerDeckAttributes, Tournam
     declare label: string;
     declare archetype_id: number | null;
     declare is_playable: boolean;
-    declare snapshot_by_user_id: number | null;
+    declare snapshot_by_user_id: string | null;
     declare created_at?: Date;
 }
 
@@ -56,7 +56,7 @@ TournamentPlayerDeck.init(
             defaultValue: false
         },
         snapshot_by_user_id: {
-            type: DataTypes.BIGINT,
+            type: DataTypes.UUID,
             allowNull: true,
             references: { model: 'user', key: 'id' }
         },

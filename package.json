@@ -12,7 +12,7 @@
     "start:clean": "start.bat",
     "test": "jest",
     "dev": "nodemon",
-    "build": "tsc",
+    "build": "tsc && copyfiles -u 1 \"src/mailing/templates/**/*\" dist",
     "start": "node dist/server.js",
     "type-check": "tsc --noEmit",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
@@ -22,9 +22,9 @@
     "db:seed": "psql -U postgres -d archetype_warfare -f ./docker-init/01-schema.sql && psql -U postgres -d archetype_warfare -f ./docker-init/02-data.sql",
     "db:setup": "npm run db:disconnect && npm run db:recreate && npm run db:seed",
     "db:recreate:docker": "docker compose down -v && docker compose up -d",
-    "db:seed:docker": "docker compose exec -T database psql -U admin -d aw -f /docker-entrypoint-initdb.d/01-schema.sql && docker compose exec -T database psql -U admin -d aw -f /docker-entrypoint-initdb.d/02-data.sql",
+    "db:seed:docker": "docker compose exec -T database psql -U admin -d aw -f /docker-entrypoint-initdb.d/01-schema.sql && docker compose exec -T database psql -U admin -d aw -f /docker-entrypoint-initdb.d/02-data-dbeaver.sql",
     "db:setup:docker": "npm run db:recreate:docker && npm run db:seed:docker",
-    "db:restore:docker": "docker compose exec -T database psql -U admin -d aw -f /scripts/dump-aw-202510272032.sql",
+    "db:restore:docker": "docker compose exec -T database psql -U admin -d aw -f /scripts/02-data-dbeaver.sql",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -61,6 +61,7 @@
     "@types/node": "^25.0.10",
     "@types/nodemailer": "^7.0.5",
     "@types/pg": "^8.16.0",
+    "copyfiles": "^2.4.1",
     "eslint": "^8.56.0",
     "husky": "^8.0.3",
     "jest": "^29.7.0",

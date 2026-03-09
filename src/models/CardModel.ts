@@ -6,14 +6,15 @@ interface CardAttributes {
     name: string;
     description?: string | null;
     img_url?: string | null;
-    level: number;
-    atk: number;
-    def: number;
+    level?: number | null;
+    atk?: number | null;
+    def?: number | null;
     attribute?: string | null;
     card_type?: string | null;
+    manual_update: boolean;
 }
 
-interface CardCreationAttributes extends Optional<CardAttributes, 'description' | 'img_url' | 'level' | 'atk' | 'def' | 'attribute' | 'card_type'> {}
+interface CardCreationAttributes extends Optional<CardAttributes, 'description' | 'img_url' | 'level' | 'atk' | 'def' | 'attribute' | 'card_type' | 'manual_update'> { }
 
 /**
  * Card model representing game cards
@@ -23,11 +24,12 @@ class Card extends Model<CardAttributes, CardCreationAttributes> implements Card
     declare name: string;
     declare description?: string | null;
     declare img_url?: string | null;
-    declare level: number;
-    declare atk: number;
-    declare def: number;
+    declare level?: number | null;
+    declare atk?: number | null;
+    declare def?: number | null;
     declare attribute?: string | null;
     declare card_type?: string | null;
+    declare manual_update: boolean;
 }
 
 Card.init(
@@ -51,17 +53,14 @@ Card.init(
         level: {
             type: DataTypes.INTEGER,
             allowNull: true,
-            defaultValue: 0
         },
         atk: {
             type: DataTypes.INTEGER,
             allowNull: true,
-            defaultValue: 0
         },
         def: {
             type: DataTypes.INTEGER,
             allowNull: true,
-            defaultValue: 0
         },
         attribute: {
             type: DataTypes.STRING(15),
@@ -70,6 +69,11 @@ Card.init(
         card_type: {
             type: DataTypes.STRING(50),
             allowNull: true
+        },
+        manual_update: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
         }
     },
     {

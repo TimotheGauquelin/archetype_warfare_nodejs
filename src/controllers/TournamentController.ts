@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import TournamentService from '../services/TournamentService';
-import { getIntParam } from '../utils/request';
+import { getIntParam, getUuidParam } from '../utils/request';
 import Tournament from '../models/TournamentModel';
 import { CustomError } from '../errors/CustomError';
 
@@ -81,7 +81,7 @@ class TournamentController {
 
     async getById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.tournamentId);
+            const id = getUuidParam(request.params.tournamentId);
             const includePlayersParam = request.query.includePlayers as string | undefined;
             const includePlayers = includePlayersParam === undefined || includePlayersParam === 'true';
             const tournament = await TournamentService.getById(id, { includePlayers });
@@ -134,7 +134,7 @@ class TournamentController {
                 response.status(401).json({ message: 'Authentification requise' });
                 return;
             }
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const details = await TournamentService.getTournamentDetailsForUser(tournamentId, userId);
             response.status(200).json(details);
         } catch (error) {
@@ -144,7 +144,7 @@ class TournamentController {
 
     async update(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.tournamentId);
+            const id = getUuidParam(request.params.tournamentId);
             const { name, status, max_number_of_rounds, until_winner, max_players, location, event_date, event_date_end, is_online, allow_penalities } = request.body;
             const tournament = await TournamentService.update(id, {
                 name,
@@ -167,7 +167,7 @@ class TournamentController {
 
     async deleteTournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.tournamentId);
+            const id = getUuidParam(request.params.tournamentId);
             await TournamentService.delete(id);
             response.status(204).send();
         } catch (error) {
@@ -177,7 +177,7 @@ class TournamentController {
 
     async toggleRegistrationStatus(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const tournament = await TournamentService.toggleRegistrationStatus(tournamentId);
             response.status(200).json(tournament);
         } catch (error) {
@@ -187,7 +187,7 @@ class TournamentController {
 
     async registerToATournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
 
             const userId = request.user?.id;
 
@@ -210,7 +210,7 @@ class TournamentController {
 
     async unregisterToATournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
 
             const userId = request.user?.id;
 
@@ -231,23 +231,18 @@ class TournamentController {
 
     async setMyDeckForTournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const userId = request.user?.id;
             if (!userId) {
                 response.status(401).json({ message: 'Authentification requise' });
                 return;
             }
             const deckId = request.body?.deckId;
-            if (deckId == null || (typeof deckId !== 'number' && typeof deckId !== 'string')) {
-                response.status(400).json({ message: 'deckId est requis dans le body' });
+            if (deckId == null || typeof deckId !== 'string' || !deckId.trim()) {
+                response.status(400).json({ message: 'deckId est requis dans le body (UUID)' });
                 return;
             }
-            const deckIdNum = Number(deckId);
-            if (!Number.isInteger(deckIdNum) || deckIdNum < 1) {
-                response.status(400).json({ message: 'deckId doit être un entier positif' });
-                return;
-            }
-            const tp = await TournamentService.setMyDeckForTournament(tournamentId, userId, deckIdNum);
+            const tp = await TournamentService.setMyDeckForTournament(tournamentId, userId, deckId);
             response.status(200).json({
                 message: 'Deck enregistré pour le tournoi',
                 tournamentPlayer: tp
@@ -259,9 +254,9 @@ class TournamentController {
 
     async addPlayerToTournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
-            const userId = getIntParam(request.params.userId);
-            const deckId = request.body?.deckId != null ? Number(request.body.deckId) : undefined;
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const userId = getUuidParam(request.params.userId);
+            const deckId = request.body?.deckId != null ? (typeof request.body.deckId === 'string' ? request.body.deckId : String(request.body.deckId)) : undefined;
             const tournamentPlayer = await TournamentService.addPlayerToTournament(tournamentId, userId, deckId);
             response.status(201).json({
                 message: 'Joueur ajouté au tournoi',
@@ -274,7 +269,7 @@ class TournamentController {
 
     async removePlayerFromTournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const playerId = getIntParam(request.params.playerId);
             const reason = typeof request.body?.reason === 'string' ? request.body.reason : '';
             const result = await TournamentService.removePlayerFromTournament(tournamentId, playerId, reason);
@@ -286,22 +281,22 @@ class TournamentController {
 
     async adminSetDeckForTournamentPlayer(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const playerId = getIntParam(request.params.playerId);
             const adminUserId = request.user?.id;
             if (!adminUserId) {
                 response.status(401).json({ message: 'Authentification requise' });
                 return;
             }
-            const deckId = request.body?.deckId != null ? Number(request.body.deckId) : undefined;
-            if (deckId == null || !Number.isInteger(deckId) || deckId < 1) {
-                response.status(400).json({ message: 'deckId doit être un entier positif dans le body' });
+            const deckIdRaw = request.body?.deckId;
+            if (deckIdRaw == null || typeof deckIdRaw !== 'string' || !deckIdRaw.trim()) {
+                response.status(400).json({ message: 'deckId doit être un UUID dans le body' });
                 return;
             }
             const tournamentPlayer = await TournamentService.adminSetDeckForTournamentPlayer(
                 tournamentId,
                 playerId,
-                deckId,
+                deckIdRaw,
                 adminUserId
             );
             response.status(200).json({
@@ -315,7 +310,7 @@ class TournamentController {
 
     async dropATournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const userId = request.user?.id;
 
             if (!userId) {
@@ -335,7 +330,7 @@ class TournamentController {
 
     async startTournament(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const tournament = await TournamentService.startTournament(tournamentId);
             response.status(200).json(tournament);
         } catch (error) {
@@ -345,7 +340,7 @@ class TournamentController {
 
     async startNextRound(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
 
             const tournament = await Tournament.findByPk(tournamentId);
 
@@ -397,7 +392,7 @@ class TournamentController {
 
     async completeRound(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const roundId = getIntParam(request.params.tournamentId);
+            const roundId = getIntParam(request.params.roundId);
 
             const round = await TournamentService.completeRound(roundId);
             response.status(200).json(round);
@@ -408,7 +403,7 @@ class TournamentController {
 
     async getStandings(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const standings = await TournamentService.getStandings(tournamentId);
             response.status(200).json(standings);
         } catch (error) {
@@ -428,7 +423,7 @@ class TournamentController {
 
     async rollbackLastRound(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const result = await TournamentService.rollbackLastRound(tournamentId);
             response.status(200).json(result);
         } catch (error) {

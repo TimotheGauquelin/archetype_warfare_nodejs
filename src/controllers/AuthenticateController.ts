@@ -5,7 +5,7 @@ import { sendPasswordResetEmail } from '../mailing/sendPasswordResetMail';
 import AuthenticateService from '../services/AuthenticateService';
 import { generateRandomToken } from '../utils/token';
 import envVars from '../config/envValidation';
-import { getIntParam } from '../utils/request';
+import { getUuidParam } from '../utils/request';
 
 class AuthenticateController {
     async login(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -82,7 +82,11 @@ class AuthenticateController {
 
                 const resetLink = `${envVars.FRONTEND_URL}/password-reset/${resetToken}`;
 
-                await sendPasswordResetEmail(user as User & { email: string }, resetToken, resetLink);
+                await sendPasswordResetEmail(
+                    { id: user.id, email: user.email ?? '' },
+                    resetToken,
+                    resetLink
+                );
             }
 
             response.status(200).json({
@@ -97,7 +101,7 @@ class AuthenticateController {
 
     async updatePassword(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = getIntParam(request.params.userId);
+            const userId = getUuidParam(request.params.userId);
             const { password, confirmPassword } = request.body;
 
             if (!password || !confirmPassword) {
@@ -166,7 +170,7 @@ class AuthenticateController {
 
     async adminApproveUser(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = getIntParam(request.params.userId);
+            const userId = getUuidParam(request.params.userId);
             const { roleLabels } = request.body;
 
             if (!roleLabels || !Array.isArray(roleLabels)) {

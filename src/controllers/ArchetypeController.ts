@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import Archetype from '../models/ArchetypeModel';
 import Era from '../models/EraModel';
 import ArchetypeService from '../services/ArchetypeService';
-import { getIntParam } from '../utils/request';
+import { getStringParam } from '../utils/request';
 
 class ArchetypeController {
     async searchArchetypes(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -26,8 +26,8 @@ class ArchetypeController {
 
     async getArchetypeById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
-            const archetype = await ArchetypeService.getArchetypeById(id);
+            const idOrSlug = getStringParam(request.params.id);
+            const archetype = await ArchetypeService.getArchetypeByIdOrSlug(idOrSlug);
             response.status(200).json(archetype);
         } catch (error) {
             next(error);
@@ -156,6 +156,18 @@ class ArchetypeController {
 
     // PUT
     async updateArchetype(request: Request, response: Response, next: NextFunction): Promise<void> {
+        const archetypeIdParam = getStringParam(request.params.archetypeId);
+        try {
+            const resolvedId = await ArchetypeService.resolveArchetypeId(archetypeIdParam);
+            if (resolvedId == null) {
+                response.status(404).json({ success: false, message: 'Archétype non trouvé' });
+                return;
+            }
+            request.body.id = resolvedId;
+        } catch (e) {
+            response.status(404).json({ success: false, message: 'Archétype non trouvé' });
+            return;
+        }
         const {
             id,
             name,
@@ -202,13 +214,15 @@ class ArchetypeController {
 
     async switchIsHighlighted(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypeId = getIntParam(request.params.archetypeId);
-            const isExist = await Archetype.findByPk(archetypeId);
-            if (isExist) {
-                await ArchetypeService.switchIsHighlighted(archetypeId);
+            const idOrSlug = getStringParam(request.params.archetypeId);
+            const archetype = await ArchetypeService.findByIdOrSlug(idOrSlug);
+            if (archetype) {
+                await ArchetypeService.switchIsHighlighted(archetype.id);
                 response.status(200).json({
                     message: 'Archétype modifié !'
                 });
+            } else {
+                response.status(404).json({ success: false, message: 'Archétype non trouvé' });
             }
         } catch (error) {
             next(error);
@@ -217,13 +231,15 @@ class ArchetypeController {
 
     async switchIsActive(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypeId = getIntParam(request.params.archetypeId);
-            const isExist = await Archetype.findByPk(archetypeId);
-            if (isExist) {
-                await ArchetypeService.switchIsActive(archetypeId);
+            const idOrSlug = getStringParam(request.params.archetypeId);
+            const archetype = await ArchetypeService.findByIdOrSlug(idOrSlug);
+            if (archetype) {
+                await ArchetypeService.switchIsActive(archetype.id);
                 response.status(200).json({
                     message: 'Archétype modifié !'
                 });
+            } else {
+                response.status(404).json({ success: false, message: 'Archétype non trouvé' });
             }
         } catch (error) {
             next(error);
@@ -267,13 +283,15 @@ class ArchetypeController {
     // DELETE
     async deleteArchetype(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypeId = getIntParam(request.params.archetypeId);
-            const isExist = await Archetype.findByPk(archetypeId);
-            if (isExist) {
-                await ArchetypeService.deleteArchetype(archetypeId);
+            const idOrSlug = getStringParam(request.params.archetypeId);
+            const archetype = await ArchetypeService.findByIdOrSlug(idOrSlug);
+            if (archetype) {
+                await ArchetypeService.deleteArchetype(archetype.id);
                 response.status(200).json({
                     message: 'Archétype supprimé !'
                 });
+            } else {
+                response.status(404).json({ success: false, message: 'Archétype non trouvé' });
             }
         } catch (error) {
             next(error);

@@ -3,18 +3,28 @@ import { CustomError } from '../errors/CustomError';
 import Archetype from '../models/ArchetypeModel';
 import Deck from '../models/DeckModel';
 import DeckService from '../services/DeckService';
-import { getIntParam } from '../utils/request';
+import { getUuidParam } from '../utils/request';
 
 class DeckController {
     async getAllDecksByUserId(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = getIntParam(request.params.userId);
+            const userId = getUuidParam(request.params.userId);
             const isPlayableParam = request.query.is_playable;
             let isPlayable: boolean | undefined;
             if (isPlayableParam === 'true') isPlayable = true;
             else if (isPlayableParam === 'false') isPlayable = false;
             const decks = await DeckService.getAllDecksByUserId(userId, isPlayable);
-            response.status(200).json(decks);
+            const payload = decks.map((deck) => {
+                const plain = deck.get({ plain: true }) as any;
+                const { archetype_id, archetype: arch, ...rest } = plain;
+                return {
+                    ...rest,
+                    archetype: arch
+                        ? { id: arch.id, label: arch.name, card_img_url: arch.card_img_url ?? null }
+                        : null
+                };
+            });
+            response.status(200).json(payload);
         } catch (error) {
             next(error);
         }
@@ -22,7 +32,7 @@ class DeckController {
 
     async getDeckById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const deck = await DeckService.getDeckById(id);
             if (!deck) {
                 throw new CustomError('Deck non trouvé', 404);
@@ -61,7 +71,7 @@ class DeckController {
 
     async updateMyDeck(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const userDeck = await DeckService.getDeckById(id);
 
             if (!userDeck) {
@@ -96,7 +106,7 @@ class DeckController {
 
     async deleteMyDeck(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const deck = await Deck.findByPk(id);
             if (!deck) {
                 throw new CustomError('Le deck n\'existe pas', 404);

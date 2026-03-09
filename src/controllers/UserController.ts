@@ -6,7 +6,7 @@ import User from '../models/UserModel';
 import UserService from '../services/UserService';
 import { generateRandomToken } from '../utils/token';
 import envVars from '../config/envValidation';
-import { getIntParam, getStringParam } from '../utils/request';
+import { getStringParam, getUuidParam } from '../utils/request';
 
 class UserController {
     async searchUsers(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -34,7 +34,7 @@ class UserController {
 
     async getUserById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const user = await UserService.getUserById(id);
             response.status(200).json(user);
         } catch (error) {
@@ -134,7 +134,7 @@ class UserController {
 
     async switchIsActive(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const existingUser = await User.findByPk(id);
 
             if (existingUser) {
@@ -150,7 +150,7 @@ class UserController {
 
     async switchIsBanned(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const existingUser = await User.findByPk(id);
 
             if (existingUser) {
@@ -166,7 +166,7 @@ class UserController {
 
     async updateUserByAdmin(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const { username, email, roles } = request.body;
 
             if (!username && !email && !roles) {
@@ -207,7 +207,7 @@ class UserController {
 
     async updateMyProfile(request: Request, _response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const { myBelovedArchetype: _myBelovedArchetype } = request.body;
 
             const existingUser = await User.findByPk(id);
@@ -228,7 +228,7 @@ class UserController {
 
     async deleteUser(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const id = getIntParam(request.params.id);
+            const id = getUuidParam(request.params.id);
             const existingUser = await User.findByPk(id);
             if (!existingUser) {
                 throw new CustomError('Utilisateur non trouvé', 404);

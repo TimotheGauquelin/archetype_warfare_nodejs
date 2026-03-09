@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import ArchetypeRankingService from '../services/ArchetypeRankingService';
-import { getIntParam } from '../utils/request';
+import ArchetypeService from '../services/ArchetypeService';
+import { getStringParam, getUuidParam } from '../utils/request';
 
 class ArchetypeRankingController {
     async getTournamentWinner(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const tournamentId = getIntParam(request.params.tournamentId);
+            const tournamentId = getUuidParam(request.params.tournamentId);
             const winner = await ArchetypeRankingService.getTournamentWinner(tournamentId);
             if (!winner) {
                 response.status(404).json({ message: 'Tournoi introuvable ou pas encore terminé' });
@@ -19,7 +20,12 @@ class ArchetypeRankingController {
 
     async getArchetypeRanking(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypeId = getIntParam(request.params.archetypeId);
+            const idOrSlug = getStringParam(request.params.archetypeId);
+            const archetypeId = await ArchetypeService.resolveArchetypeId(idOrSlug);
+            if (archetypeId == null) {
+                response.status(404).json({ message: 'Archétype introuvable' });
+                return;
+            }
             const result = await ArchetypeRankingService.getArchetypeRanking(archetypeId);
             if (!result) {
                 response.status(404).json({ message: 'Archétype introuvable' });

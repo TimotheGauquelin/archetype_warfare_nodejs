@@ -9,15 +9,15 @@ import {
 
 export interface TournamentWinnerResult {
     tournamentPlayerId: number;
-    userId: number;
+    userId: string;
     username: string | null;
-    deckId: number | null;
+    deckId: string | null;
     archetypeId: number | null;
     archetypeName: string | null;
 }
 
 export interface PlayerRankingEntry {
-    userId: number;
+    userId: string;
     username: string | null;
     tournamentWins: number;
 }
@@ -39,7 +39,7 @@ class ArchetypeRankingService {
      * Détermine le vainqueur d'un tournoi terminé (suisse) : joueur avec le plus de match_wins,
      * puis games_won en cas d'égalité.
      */
-    static async getTournamentWinner(tournamentId: number): Promise<TournamentWinnerResult | null> {
+    static async getTournamentWinner(tournamentId: string): Promise<TournamentWinnerResult | null> {
         const tournament = await Tournament.findByPk(tournamentId);
         if (!tournament || tournament.status !== 'tournament_finished') {
             return null;
@@ -92,13 +92,13 @@ class ArchetypeRankingService {
     /**
      * Construit la map (archetypeId -> userId -> nombre de victoires en tournoi).
      */
-    private static async computeWinsByArchetypeAndUser(): Promise<Map<number, Map<number, number>>> {
+    private static async computeWinsByArchetypeAndUser(): Promise<Map<number, Map<string, number>>> {
         const tournaments = await Tournament.findAll({
             where: { status: 'tournament_finished' },
             attributes: ['id']
         });
 
-        const winsByArchetypeAndUser = new Map<number, Map<number, number>>();
+        const winsByArchetypeAndUser = new Map<number, Map<string, number>>();
 
         for (const t of tournaments) {
             const winner = await this.getTournamentWinner(t.id);
@@ -158,7 +158,7 @@ class ArchetypeRankingService {
             attributes: ['id', 'name']
         });
 
-        const allUserIds = new Set<number>();
+        const allUserIds = new Set<string>();
         winsByArchetypeAndUser.forEach(userMap => userMap.forEach((_, userId) => allUserIds.add(userId)));
         const users = await User.findAll({
             where: { id: [...allUserIds] },

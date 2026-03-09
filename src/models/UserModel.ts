@@ -11,7 +11,7 @@ interface Role {
 }
 
 interface UserAttributes {
-    id: number;
+    id: string;
     username: string | null;
     password: string | null;
     reset_password_token: string | null;
@@ -33,7 +33,7 @@ interface UserWithRoles extends UserAttributes {
  * User model representing application users
  */
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-    declare id: number;
+    declare id: string;
     declare username: string | null;
     declare password: string | null;
     declare reset_password_token: string | null;
@@ -84,9 +84,9 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
 
 User.init({
     id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true
+        defaultValue: DataTypes.UUIDV4
     },
     username: {
         type: DataTypes.STRING(255),

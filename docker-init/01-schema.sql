@@ -17,6 +17,7 @@ CREATE SEQUENCE IF NOT EXISTS archetype_id_seq
 CREATE TABLE IF NOT EXISTS archetype (
     id BIGINT DEFAULT nextval('archetype_id_seq') PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
+    slug VARCHAR(80) UNIQUE,
     main_info TEXT,
     slider_info TEXT,
     is_highlighted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -32,6 +33,9 @@ CREATE TABLE IF NOT EXISTS archetype (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_era FOREIGN KEY (era_id) REFERENCES era (id) ON DELETE CASCADE
 );
+
+ALTER TABLE IF EXISTS archetype
+    ADD COLUMN IF NOT EXISTS slug VARCHAR(80) UNIQUE;
 
 CREATE TABLE IF NOT EXISTS attribute (
     id SERIAL PRIMARY KEY,
@@ -53,13 +57,9 @@ CREATE TABLE IF NOT EXISTS role (
     label VARCHAR(50) NOT NULL UNIQUE
 );
 
-CREATE SEQUENCE IF NOT EXISTS user_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    MINVALUE 1;
-
+-- User avec UUID (non énumérable)
 CREATE TABLE IF NOT EXISTS "user" (
-    id BIGINT DEFAULT nextval('user_id_seq') PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NULL,
     reset_password_token TEXT NULL,
@@ -76,18 +76,19 @@ CREATE TABLE IF NOT EXISTS "user" (
 );
 
 CREATE TABLE IF NOT EXISTS user_role (
-    user_id BIGINT NOT NULL,
+    user_id UUID NOT NULL,
     role_id BIGINT NOT NULL,
     CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "user" (id) ON DELETE CASCADE,
     CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES role (id) ON DELETE CASCADE
 );
 
+-- Deck avec UUID
 CREATE TABLE IF NOT EXISTS deck (
-    id SERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     label VARCHAR(200) NOT NULL,
     comment TEXT,
     archetype_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
+    user_id UUID NOT NULL,
     is_playable BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -114,6 +115,9 @@ CREATE TABLE IF NOT EXISTS card (
     card_type VARCHAR(200) NULL
 );
 
+ALTER TABLE IF EXISTS card
+    ADD COLUMN IF NOT EXISTS manual_update BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS banlist (
     id SERIAL PRIMARY KEY,
     label VARCHAR(200) NOT NULL UNIQUE,
@@ -134,7 +138,7 @@ CREATE TABLE IF NOT EXISTS card_status (
 );
 
 CREATE TABLE IF NOT EXISTS deck_card (
-    deck_id BIGINT NOT NULL,
+    deck_id UUID NOT NULL,
     card_id VARCHAR(8) NOT NULL,
     quantity INT NOT NULL,
     CONSTRAINT fk_deck_card_deck FOREIGN KEY (deck_id) REFERENCES deck (id) ON DELETE CASCADE,
@@ -183,9 +187,9 @@ CREATE TABLE IF NOT EXISTS website_actions (
     registration_enabled BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- Tournois (système suisse)
+-- Tournois (système suisse) — tournament en UUID
 CREATE TABLE IF NOT EXISTS tournament (
-    id SERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(200) NOT NULL,
     max_number_of_rounds INT NOT NULL CHECK (max_number_of_rounds >= 1),
     matches_per_round INT NOT NULL CHECK (matches_per_round IN (1, 3)),
@@ -205,9 +209,9 @@ CREATE TABLE IF NOT EXISTS tournament (
 
 CREATE TABLE IF NOT EXISTS tournament_player (
     id SERIAL PRIMARY KEY,
-    tournament_id INT NOT NULL,
-    user_id BIGINT NOT NULL,
-    deck_id INT NULL,
+    tournament_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    deck_id UUID NULL,
     match_wins INT NOT NULL DEFAULT 0,
     match_losses INT NOT NULL DEFAULT 0,
     match_draws INT NOT NULL DEFAULT 0,
@@ -224,7 +228,7 @@ CREATE TABLE IF NOT EXISTS tournament_player (
 
 CREATE TABLE IF NOT EXISTS tournament_round (
     id SERIAL PRIMARY KEY,
-    tournament_id INT NOT NULL,
+    tournament_id UUID NOT NULL,
     round_number INT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -236,7 +240,7 @@ CREATE TABLE IF NOT EXISTS tournament_round (
 CREATE TABLE IF NOT EXISTS tournament_match (
     id SERIAL PRIMARY KEY,
     round_id INT NOT NULL,
-    tournament_id INT NOT NULL,
+    tournament_id UUID NOT NULL,
     player1_tournament_player_id INT NOT NULL,
     player2_tournament_player_id INT NULL,
     player1_games_won INT NOT NULL DEFAULT 0,
@@ -260,7 +264,7 @@ CREATE TABLE IF NOT EXISTS tournament_player_deck (
     label VARCHAR(200) NOT NULL,
     archetype_id BIGINT NULL,
     is_playable BOOLEAN NOT NULL DEFAULT FALSE,
-    snapshot_by_user_id BIGINT NULL,
+    snapshot_by_user_id UUID NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_tpd_tournament_player FOREIGN KEY (tournament_player_id) REFERENCES tournament_player (id) ON DELETE CASCADE,
     CONSTRAINT fk_tpd_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE SET NULL,
@@ -292,7 +296,7 @@ CREATE TABLE IF NOT EXISTS tournament_player_penalty (
     round_id INT NULL,
     tournament_match_id INT NULL,
     applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    applied_by_user_id BIGINT NULL,
+    applied_by_user_id UUID NULL,
     reason TEXT NULL,
     notes TEXT NULL,
     disqualification_with_prize BOOLEAN NULL,
@@ -318,15 +322,6 @@ CREATE INDEX IF NOT EXISTS idx_tournament_round_tournament ON tournament_round (
 CREATE INDEX IF NOT EXISTS idx_tournament_match_round ON tournament_match (round_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_match_tournament ON tournament_match (tournament_id);
 
--- Colonne deck_id sur tournament_player (pour classement par archétype)
-ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS deck_id INT NULL;
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tp_deck') THEN
-        ALTER TABLE tournament_player ADD CONSTRAINT fk_tp_deck FOREIGN KEY (deck_id) REFERENCES deck (id) ON DELETE SET NULL;
-    END IF;
-END $$;
-
 -- Colonne is_playable sur deck (40-60 cartes = jouable)
 ALTER TABLE deck ADD COLUMN IF NOT EXISTS is_playable BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -335,16 +330,6 @@ ALTER TABLE tournament ADD COLUMN IF NOT EXISTS require_deck_list BOOLEAN NOT NU
 
 -- Colonne allow_penalities sur tournament (autorise l'ajout de pénalités par un admin)
 ALTER TABLE tournament ADD COLUMN IF NOT EXISTS allow_penalities BOOLEAN NOT NULL DEFAULT FALSE;
-
--- Colonne snapshot_by_user_id sur tournament_player_deck (qui a créé le snapshot)
-ALTER TABLE tournament_player_deck ADD COLUMN IF NOT EXISTS snapshot_by_user_id BIGINT NULL;
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_tpd_snapshot_by_user') THEN
-        ALTER TABLE tournament_player_deck
-            ADD CONSTRAINT fk_tpd_snapshot_by_user FOREIGN KEY (snapshot_by_user_id) REFERENCES "user" (id) ON DELETE SET NULL;
-    END IF;
-END $$;
 
 -- Index sur "user"
 CREATE INDEX IF NOT EXISTS idx_user_email ON "user" (email);
@@ -424,3 +409,17 @@ CREATE TRIGGER update_user_updated_at
     BEFORE UPDATE ON "user"
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Slugs des archétypes (à exécuter après chargement de données si des lignes existent sans slug)
+UPDATE archetype SET slug = 'dragon-arme' WHERE name = 'Dragon Armé' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'batosushi' WHERE name = 'Batosushi' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 't-g' WHERE name = 'T.G' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'guepe-de-bataille' WHERE name = 'Guêpe de Bataille' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'vaylantz' WHERE name = 'Vaylantz' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'spadassin-des-flammes' WHERE name = 'Spadassin des Flammes' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'amazonesse' WHERE name = 'Amazonesse' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'chevalier-etoile' WHERE name = 'Chevalier Etoilé' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'ferique' WHERE name = 'Féérique' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'nouvelles' WHERE name = 'Nouvelles' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'cendre' WHERE name = 'Cendré' AND (slug IS NULL OR slug = '');
+UPDATE archetype SET slug = 'gardien-de-la-porte' WHERE name = 'Gardien de la Porte' AND (slug IS NULL OR slug = '');

@@ -5,7 +5,7 @@ export type RoundStatus = 'pending' | 'in_progress' | 'completed';
 
 interface TournamentRoundAttributes {
     id: number;
-    tournament_id: number;
+    tournament_id: string;
     round_number: number;
     status: RoundStatus;
     created_at?: Date;
@@ -16,7 +16,7 @@ interface TournamentRoundCreationAttributes extends Optional<TournamentRoundAttr
 
 class TournamentRound extends Model<TournamentRoundAttributes, TournamentRoundCreationAttributes> implements TournamentRoundAttributes {
     declare id: number;
-    declare tournament_id: number;
+    declare tournament_id: string;
     declare round_number: number;
     declare status: RoundStatus;
     declare created_at?: Date;
@@ -30,7 +30,7 @@ TournamentRound.init({
         autoIncrement: true
     },
     tournament_id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: { model: 'tournament', key: 'id' }
     },

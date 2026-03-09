@@ -15,9 +15,9 @@ export const validateSearchArchetypes: ValidationChain[] = [
     query('size').optional().isInt({ min: 1, max: 100 }).toInt(),
 ];
 
-// GET /:id
+// GET /:id — id peut être un entier (ID) ou une chaîne (slug)
 export const validateGetArchetypeById: ValidationChain[] = [
-    param('id').isInt({ min: 1 }).withMessage('L\'ID doit être un nombre entier positif'),
+    param('id').notEmpty().withMessage('L\'ID ou le slug est requis').isString().trim(),
 ];
 
 // POST /
@@ -26,6 +26,7 @@ export const validateCreateArchetype: ValidationChain[] = [
         .notEmpty().withMessage('Le nom est requis')
         .isString().trim()
         .isLength({ min: 1, max: 50 }).withMessage('Le nom doit contenir entre 1 et 50 caractères'),
+    body('slug').optional().isString().trim().isLength({ min: 1, max: 80 }),
     body('main_info').optional().isString(),
     body('slider_info').optional().isString(),
     body('in_tcg_date').isISO8601().withMessage('La date TCG doit être au format ISO 8601'),
@@ -37,10 +38,11 @@ export const validateCreateArchetype: ValidationChain[] = [
     body('card_img_url').optional().isURL().withMessage('L\'URL de l\'image de carte doit être valide'),
 ];
 
-// PUT /:archetypeId/update
+// PUT /:archetypeId/update — archetypeId peut être ID ou slug
 export const validateUpdateArchetype: ValidationChain[] = [
-    param('archetypeId').isInt({ min: 1 }).withMessage('L\'ID de l\'archétype doit être un nombre entier positif'),
+    param('archetypeId').notEmpty().withMessage('L\'ID ou le slug de l\'archétype est requis').isString().trim(),
     body('name').optional().isString().trim().isLength({ min: 1, max: 50 }),
+    body('slug').optional().isString().trim().isLength({ min: 1, max: 80 }),
     body('main_info').optional().isString(),
     body('slider_info').optional().isString(),
     body('in_tcg_date').optional().isISO8601(),
@@ -52,7 +54,7 @@ export const validateUpdateArchetype: ValidationChain[] = [
     body('card_img_url').optional().isURL(),
 ];
 
-// DELETE /:archetypeId
+// DELETE /:archetypeId — archetypeId peut être ID ou slug
 export const validateDeleteArchetype: ValidationChain[] = [
-    param('archetypeId').isInt({ min: 1 }).withMessage('L\'ID de l\'archétype doit être un nombre entier positif'),
+    param('archetypeId').notEmpty().withMessage('L\'ID ou le slug de l\'archétype est requis').isString().trim(),
 ];
