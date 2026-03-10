@@ -16,6 +16,7 @@ interface SearchFilters {
     summonmechanic?: string;
     page?: number;
     size?: number;
+    is_active?: boolean;
 }
 
 interface PaginatedResult<T> {
@@ -58,7 +59,7 @@ class ArchetypeService {
      * Recherche d'archétypes avec filtres et pagination
      */
     static async searchArchetypes(filters: SearchFilters = {}): Promise<PaginatedResult<Archetype>> {
-        const { name, era, type, attribute, summonmechanic, page = 1, size = 10 } = filters;
+        const { name, era, type, attribute, summonmechanic, page = 1, size = 10, is_active } = filters;
 
         const limit = parseInt(String(size));
         const offset = (parseInt(String(page)) - 1) * limit;
@@ -69,6 +70,10 @@ class ArchetypeService {
             where.name = {
                 [Op.iLike]: `%${name}%`
             };
+        }
+
+        if (is_active) {
+            where.is_active = is_active;
         }
 
         if (era) {
@@ -212,7 +217,8 @@ class ArchetypeService {
     static async getFiveRandomHighlightedArchetypes(): Promise<Archetype[]> {
         return Archetype.findAll({
             where: {
-                is_highlighted: true
+                is_highlighted: true,
+                is_active: true
             },
             limit: 5,
             order: sequelize.literal('RANDOM()'),
@@ -351,6 +357,9 @@ class ArchetypeService {
 
     static async getAllArchetypeNames(): Promise<Array<{ id: number; name: string; slug?: string | null }>> {
         return Archetype.findAll({
+            where: {
+                is_active: true
+            },
             attributes: ['id', 'name', 'slug']
         });
     }

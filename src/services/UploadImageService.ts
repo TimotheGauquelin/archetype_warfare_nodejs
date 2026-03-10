@@ -240,7 +240,6 @@ class UploadImageService {
 
     static async deleteImageFromCloudinary(imageId: string): Promise<unknown> {
         logger.logDebug('Tentative de suppression d\'image', { imageId });
-
         return new Promise((resolve, reject) => {
             const deleteOptions = {
                 resource_type: 'image' as const,

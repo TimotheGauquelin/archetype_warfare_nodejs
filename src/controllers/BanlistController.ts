@@ -29,7 +29,12 @@ class BanlistController {
     async getBanlistById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getIntParam(request.params.id);
-            const banlist = await BanlistService.getBanlistById(id);
+            const showArchetypeCardsParam = request.query.showArchetypeCards;
+            const showArchetypeCards = showArchetypeCardsParam === undefined
+                ? false
+                : showArchetypeCardsParam === 'true' || showArchetypeCardsParam === '1';
+
+            const banlist = await BanlistService.getBanlistById(id, showArchetypeCards);
             response.status(200).json(banlist);
         } catch (error) {
             next(error);

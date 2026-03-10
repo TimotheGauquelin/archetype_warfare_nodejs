@@ -1,9 +1,3 @@
--- ==========================================
--- SCHÉMA : tables, séquences, fonctions, triggers, index
--- Exécuté à l'initialisation Docker (après 00-init.sql)
--- ==========================================
-
--- Tables
 CREATE TABLE IF NOT EXISTS era (
     id SERIAL PRIMARY KEY,
     label VARCHAR(50) NOT NULL UNIQUE
@@ -124,12 +118,10 @@ CREATE TABLE IF NOT EXISTS banlist (
     release_date TIMESTAMP NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
     description TEXT,
+    is_event_banlist BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-ALTER TABLE IF EXISTS banlist
-    ADD COLUMN IF NOT EXISTS is_event_banlist BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS card_status (
     id SERIAL PRIMARY KEY,
@@ -257,7 +249,6 @@ CREATE TABLE IF NOT EXISTS tournament_match (
     CONSTRAINT chk_tm_players_different CHECK (player2_tournament_player_id IS NULL OR player1_tournament_player_id != player2_tournament_player_id)
 );
 
--- Snapshot du deck au verrouillage des inscriptions (liste figée pour le tournoi)
 CREATE TABLE IF NOT EXISTS tournament_player_deck (
     id SERIAL PRIMARY KEY,
     tournament_player_id INT NOT NULL UNIQUE,
@@ -280,7 +271,6 @@ CREATE TABLE IF NOT EXISTS tournament_player_deck_card (
     CONSTRAINT fk_tpdc_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE
 );
 
--- Types de pénalité (référentiel KDE / Konami)
 CREATE TABLE IF NOT EXISTS penalty_type (
     id SERIAL PRIMARY KEY,
     code VARCHAR(30) NOT NULL UNIQUE,
@@ -288,7 +278,6 @@ CREATE TABLE IF NOT EXISTS penalty_type (
     severity INT NOT NULL
 );
 
--- Pénalités appliquées aux joueurs d'un tournoi
 CREATE TABLE IF NOT EXISTS tournament_player_penalty (
     id SERIAL PRIMARY KEY,
     tournament_player_id INT NOT NULL,
@@ -310,10 +299,8 @@ CREATE TABLE IF NOT EXISTS tournament_player_penalty (
 
 CREATE INDEX IF NOT EXISTS idx_tournament_player_penalty_tournament_player ON tournament_player_penalty (tournament_player_id);
 
--- Colonnes disqualification sur tournament_player (exclusion du tournoi)
 ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS disqualified_at TIMESTAMP NULL;
 ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS disqualified_reason TEXT NULL;
--- Pénalité pour deck ajouté après la fermeture des inscriptions
 ALTER TABLE tournament_player ADD COLUMN IF NOT EXISTS late_deck_penalty BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_tournament_status ON tournament (status);
@@ -322,23 +309,16 @@ CREATE INDEX IF NOT EXISTS idx_tournament_round_tournament ON tournament_round (
 CREATE INDEX IF NOT EXISTS idx_tournament_match_round ON tournament_match (round_id);
 CREATE INDEX IF NOT EXISTS idx_tournament_match_tournament ON tournament_match (tournament_id);
 
--- Colonne is_playable sur deck (40-60 cartes = jouable)
 ALTER TABLE deck ADD COLUMN IF NOT EXISTS is_playable BOOLEAN NOT NULL DEFAULT FALSE;
-
--- Colonne require_deck_list sur tournament (deck list obligatoire ou non)
 ALTER TABLE tournament ADD COLUMN IF NOT EXISTS require_deck_list BOOLEAN NOT NULL DEFAULT FALSE;
-
--- Colonne allow_penalities sur tournament (autorise l'ajout de pénalités par un admin)
 ALTER TABLE tournament ADD COLUMN IF NOT EXISTS allow_penalities BOOLEAN NOT NULL DEFAULT FALSE;
 
--- Index sur "user"
 CREATE INDEX IF NOT EXISTS idx_user_email ON "user" (email);
 CREATE INDEX IF NOT EXISTS idx_user_username ON "user" (username);
 CREATE INDEX IF NOT EXISTS idx_user_is_active ON "user" (is_active);
 CREATE INDEX IF NOT EXISTS idx_user_is_banned ON "user" (is_banned);
 CREATE INDEX IF NOT EXISTS idx_user_created_at ON "user" (created_at);
 
--- Fonctions
 CREATE OR REPLACE FUNCTION check_username_constraints()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -409,17 +389,3 @@ CREATE TRIGGER update_user_updated_at
     BEFORE UPDATE ON "user"
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
-
--- Slugs des archétypes (à exécuter après chargement de données si des lignes existent sans slug)
-UPDATE archetype SET slug = 'dragon-arme' WHERE name = 'Dragon Armé' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'batosushi' WHERE name = 'Batosushi' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 't-g' WHERE name = 'T.G' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'guepe-de-bataille' WHERE name = 'Guêpe de Bataille' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'vaylantz' WHERE name = 'Vaylantz' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'spadassin-des-flammes' WHERE name = 'Spadassin des Flammes' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'amazonesse' WHERE name = 'Amazonesse' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'chevalier-etoile' WHERE name = 'Chevalier Etoilé' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'ferique' WHERE name = 'Féérique' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'nouvelles' WHERE name = 'Nouvelles' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'cendre' WHERE name = 'Cendré' AND (slug IS NULL OR slug = '');
-UPDATE archetype SET slug = 'gardien-de-la-porte' WHERE name = 'Gardien de la Porte' AND (slug IS NULL OR slug = '');

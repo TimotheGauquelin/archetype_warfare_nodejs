@@ -10,21 +10,16 @@ class DeckController {
         try {
             const userId = getUuidParam(request.params.userId);
             const isPlayableParam = request.query.is_playable;
+            const isActiveParam = request.query.is_active;
             let isPlayable: boolean | undefined;
-            if (isPlayableParam === 'true') isPlayable = true;
+            let isActive: boolean | undefined;
+            if (isPlayableParam === 'true') isPlayable = true
             else if (isPlayableParam === 'false') isPlayable = false;
-            const decks = await DeckService.getAllDecksByUserId(userId, isPlayable);
-            const payload = decks.map((deck) => {
-                const plain = deck.get({ plain: true }) as any;
-                const { archetype_id, archetype: arch, ...rest } = plain;
-                return {
-                    ...rest,
-                    archetype: arch
-                        ? { id: arch.id, label: arch.name, card_img_url: arch.card_img_url ?? null }
-                        : null
-                };
-            });
-            response.status(200).json(payload);
+            if (isActiveParam === 'true') isActive = true;
+            else if (isActiveParam === 'false') isActive = false;
+            const decks = await DeckService.getAllDecksByUserId(userId, isPlayable, isActive);
+
+            response.status(200).json(decks);
         } catch (error) {
             next(error);
         }

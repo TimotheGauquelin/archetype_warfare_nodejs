@@ -163,6 +163,7 @@ function swissPair(players: { id: number; match_wins: number }[], playedPairs: S
     const sorted = [...players].sort((a, b) => b.match_wins - a.match_wins);
     const used = new Set<number>();
     const result: [number, number][] = [];
+
     for (let i = 0; i < sorted.length; i++) {
         if (used.has(sorted[i].id)) continue;
         let found = false;
@@ -176,8 +177,22 @@ function swissPair(players: { id: number; match_wins: number }[], playedPairs: S
                 break;
             }
         }
-        if (!found) used.add(sorted[i].id);
+        if (!found) { /* laissé pour le fallback */ }
     }
+
+    // Fallback : s'il reste des joueurs non appariés, autoriser les rematches
+    const remaining = sorted.filter(p => !used.has(p.id));
+    for (let i = 0; i < remaining.length; i++) {
+        if (used.has(remaining[i].id)) continue;
+        for (let j = i + 1; j < remaining.length; j++) {
+            if (used.has(remaining[j].id)) continue;
+            result.push([remaining[i].id, remaining[j].id]);
+            used.add(remaining[i].id);
+            used.add(remaining[j].id);
+            break;
+        }
+    }
+
     return result;
 }
 
@@ -430,21 +445,21 @@ class TournamentService {
                         id: plainPenalty.id,
                         penalty_type: plainPenalty.penalty_type
                             ? {
-                                  id: plainPenalty.penalty_type.id,
-                                  code: plainPenalty.penalty_type.code,
-                                  label: plainPenalty.penalty_type.label
-                              }
+                                id: plainPenalty.penalty_type.id,
+                                code: plainPenalty.penalty_type.code,
+                                label: plainPenalty.penalty_type.label
+                            }
                             : null,
                         round: plainPenalty.round
                             ? {
-                                  id: plainPenalty.round.id,
-                                  round_number: plainPenalty.round.round_number
-                              }
+                                id: plainPenalty.round.id,
+                                round_number: plainPenalty.round.round_number
+                            }
                             : null,
                         tournament_match: plainPenalty.tournament_match
                             ? {
-                                  id: plainPenalty.tournament_match.id
-                              }
+                                id: plainPenalty.tournament_match.id
+                            }
                             : null,
                         reason: plainPenalty.reason,
                         notes: plainPenalty.notes,
@@ -837,17 +852,62 @@ class TournamentService {
         if (tournament.status !== 'registration_open' && tournament.status !== 'registration_closed') {
             throw new CustomError('Il n\'est plus possible de modifier votre deck pour ce tournoi', 400);
         }
-        const tp = await TournamentPlayer.findOne({ where: { tournament_id: tournamentId, user_id: userId } });
-        if (!tp) {
-            throw new CustomError('Vous n\'êtes pas inscrit à ce tournoi', 404);
+
+        const transaction = await sequelize.transaction();
+        try {
+            const tp = await TournamentPlayer.findOne({ where: { tournament_id: tournamentId, user_id: userId }, transaction });
+            if (!tp) {
+                throw new CustomError('Vous n\'êtes pas inscrit à ce tournoi', 404);
+            }
+
+            const deck = await Deck.findByPk(deckId, { transaction });
+            if (!deck || deck.user_id !== userId) {
+                throw new CustomError('Deck introuvable ou ne vous appartient pas', 400);
+            }
+
+            const oldDeckId = tp.deck_id as string | null;
+
+            await tp.update({ deck_id: deckId }, { transaction });
+
+            const newDeckArchetypeId = deck.archetype_id;
+            let oldDeckArchetypeId: number | null = null;
+
+            if (oldDeckId) {
+                const oldDeck = await Deck.findByPk(oldDeckId, { transaction });
+                if (oldDeck) {
+                    oldDeckArchetypeId = oldDeck.archetype_id;
+                }
+            }
+
+            if (newDeckArchetypeId != null) {
+                await Archetype.increment(
+                    { popularity_poll: 3 },
+                    {
+                        where: { id: newDeckArchetypeId },
+                        transaction
+                    }
+                );
+            }
+
+            if (oldDeckArchetypeId != null) {
+                await Archetype.increment(
+                    { popularity_poll: -3 },
+                    {
+                        where: { id: oldDeckArchetypeId },
+                        transaction
+                    }
+                );
+            }
+
+            await transaction.commit();
+
+            // ensureSnapshotForTournamentPlayer crée sa propre transaction, on l'appelle après commit
+            await this.ensureSnapshotForTournamentPlayer(tp, userId);
+            return tp;
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
         }
-        const deck = await Deck.findByPk(deckId);
-        if (!deck || deck.user_id !== userId) {
-            throw new CustomError('Deck introuvable ou ne vous appartient pas', 400);
-        }
-        await tp.update({ deck_id: deckId });
-        await this.ensureSnapshotForTournamentPlayer(tp, userId);
-        return tp;
     }
 
     /**
@@ -872,48 +932,92 @@ class TournamentService {
             throw new CustomError('Il n\'est plus possible de modifier le deck de ce joueur pour ce tournoi', 400);
         }
 
-        const tp = await TournamentPlayer.findOne({
-            where: { id: tournamentPlayerId, tournament_id: tournamentId }
-        });
-        if (!tp) {
-            throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
-        }
-
-        const deck = await Deck.findByPk(deckId);
-        if (!deck) {
-            throw new CustomError('Deck introuvable', 404);
-        }
-        if (deck.user_id !== tp.user_id) {
-            throw new CustomError('Ce deck n\'appartient pas à ce joueur', 400);
-        }
-        if (!deck.is_playable) {
-            throw new CustomError('Ce deck n\'est pas jouable (40 à 60 cartes requises)', 400);
-        }
-
-        const late_deck_penalty = tournament.status !== 'registration_open';
-        await tp.update({ deck_id: deckId, late_deck_penalty });
-        await this.ensureSnapshotForTournamentPlayer(tp, adminUserId);
-
-        const allowPenalties = (tournament as any).allow_penalities === true;
-        const shouldApplyChecklistPenalty = allowPenalties && tournament.status !== 'registration_open';
-
-        if (shouldApplyChecklistPenalty) {
-            const warningType = await PenaltyType.findOne({ where: { code: 'warning' } });
-            if (warningType) {
-                await TournamentPlayerPenalty.create({
-                    tournament_player_id: tp.id,
-                    penalty_type_id: warningType.id,
-                    round_id: null,
-                    tournament_match_id: null,
-                    applied_by_user_id: adminUserId,
-                    reason: 'Ajout tardif du deck pour le tournoi',
-                    notes: null,
-                    disqualification_with_prize: null,
-                    written_statement_sent_at: null
-                });
+        const transaction = await sequelize.transaction();
+        try {
+            const tp = await TournamentPlayer.findOne({
+                where: { id: tournamentPlayerId, tournament_id: tournamentId },
+                transaction
+            });
+            if (!tp) {
+                throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
             }
+
+            const deck = await Deck.findByPk(deckId, { transaction });
+            if (!deck) {
+                throw new CustomError('Deck introuvable', 404);
+            }
+            if (deck.user_id !== tp.user_id) {
+                throw new CustomError('Ce deck n\'appartient pas à ce joueur', 400);
+            }
+            if (!deck.is_playable) {
+                throw new CustomError('Ce deck n\'est pas jouable (40 à 60 cartes requises)', 400);
+            }
+
+            const oldDeckId = tp.deck_id as string | null;
+
+            const late_deck_penalty = tournament.status !== 'registration_open';
+            await tp.update({ deck_id: deckId, late_deck_penalty }, { transaction });
+
+            // Popularité des archetypes : +3 pour le nouveau, -3 pour l'ancien
+            const newDeckArchetypeId = deck.archetype_id;
+            let oldDeckArchetypeId: number | null = null;
+
+            if (oldDeckId) {
+                const oldDeck = await Deck.findByPk(oldDeckId, { transaction });
+                if (oldDeck) {
+                    oldDeckArchetypeId = oldDeck.archetype_id;
+                }
+            }
+
+            if (newDeckArchetypeId != null) {
+                await Archetype.increment(
+                    { popularity_poll: 3 },
+                    {
+                        where: { id: newDeckArchetypeId },
+                        transaction
+                    }
+                );
+            }
+
+            if (oldDeckArchetypeId != null) {
+                await Archetype.increment(
+                    { popularity_poll: -3 },
+                    {
+                        where: { id: oldDeckArchetypeId },
+                        transaction
+                    }
+                );
+            }
+
+            const allowPenalties = (tournament as any).allow_penalities === true;
+            const shouldApplyChecklistPenalty = allowPenalties && tournament.status !== 'registration_open';
+
+            if (shouldApplyChecklistPenalty) {
+                const warningType = await PenaltyType.findOne({ where: { code: 'warning' }, transaction });
+                if (warningType) {
+                    await TournamentPlayerPenalty.create({
+                        tournament_player_id: tp.id,
+                        penalty_type_id: warningType.id,
+                        round_id: null,
+                        tournament_match_id: null,
+                        applied_by_user_id: adminUserId,
+                        reason: 'Ajout tardif du deck pour le tournoi',
+                        notes: null,
+                        disqualification_with_prize: null,
+                        written_statement_sent_at: null
+                    }, { transaction });
+                }
+            }
+
+            await transaction.commit();
+
+            // ensureSnapshotForTournamentPlayer crée sa propre transaction, on l'appelle après commit
+            await this.ensureSnapshotForTournamentPlayer(tp, adminUserId);
+            return tp;
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
         }
-        return tp;
     }
 
     /**

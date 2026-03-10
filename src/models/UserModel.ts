@@ -23,7 +23,7 @@ interface UserAttributes {
     updated_at?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'created_at' | 'updated_at'> {}
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'created_at' | 'updated_at'> { }
 
 interface UserWithRoles extends UserAttributes {
     roles?: Role[];
@@ -84,9 +84,9 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
 
 User.init({
     id: {
-        type: DataTypes.UUID,
+        type: DataTypes.BIGINT,
         primaryKey: true,
-        defaultValue: DataTypes.UUIDV4
+        autoIncrement: true
     },
     username: {
         type: DataTypes.STRING(255),
