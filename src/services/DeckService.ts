@@ -166,6 +166,17 @@ class DeckService {
             const is_playable = mainDeckCardCount >= 40 && mainDeckCardCount <= 60;
             await deck.update({ is_playable }, { transaction });
 
+            console.log('deck.archetype_id', deck.archetype_id);
+            if (deck.archetype_id != null) {
+                await Archetype.increment(
+                    { popularity_poll: 5 },
+                    {
+                        where: { id: deck.archetype_id },
+                        transaction
+                    }
+                );
+            }
+
             await transaction.commit();
         } catch (error) {
             await transaction.rollback();
@@ -346,9 +357,39 @@ class DeckService {
     }
 
     static async deleteMyDeck(id: string): Promise<number> {
-        return Deck.destroy({
-            where: { id }
-        });
+        const transaction = await sequelize.transaction();
+        try {
+            const deck = await Deck.findByPk(id, { transaction });
+
+            if (!deck) {
+                await transaction.rollback();
+                return 0;
+            }
+
+            const archetypeId = deck.archetype_id;
+
+            const deletedCount = await Deck.destroy({
+                where: { id },
+                transaction
+            });
+
+            // Popularité de l'archetype : -5 points à la suppression d'un deck associé
+            if (deletedCount > 0 && archetypeId != null) {
+                await Archetype.increment(
+                    { popularity_poll: -5 },
+                    {
+                        where: { id: archetypeId },
+                        transaction
+                    }
+                );
+            }
+
+            await transaction.commit();
+            return deletedCount;
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 }
 

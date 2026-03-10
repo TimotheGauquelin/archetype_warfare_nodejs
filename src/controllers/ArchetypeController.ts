@@ -14,7 +14,8 @@ class ArchetypeController {
                 attribute: request.query.attribute as string | undefined,
                 summonmechanic: request.query.summonmechanic as string | undefined,
                 page: request.query.page ? parseInt(request.query.page as string) : 1,
-                size: request.query.size ? parseInt(request.query.size as string) : 10
+                size: request.query.size ? parseInt(request.query.size as string) : 10,
+                is_active: request.query.is_active !== undefined ? request.query.is_active === 'true' : undefined,
             };
 
             const result = await ArchetypeService.searchArchetypes(filters);

@@ -2,6 +2,7 @@ import { User, Role } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import { Op, WhereOptions } from 'sequelize';
 import sequelize from '../config/Sequelize';
+import { hashToken } from '../utils/token';
 
 interface SearchFilters {
     username?: string;
@@ -104,9 +105,10 @@ class UserService {
     }
 
     static async getUserByResetPassword(token: string): Promise<User> {
+        const hashedToken = hashToken(token);
         const user = await User.findOne({
             where: {
-                reset_password_token: token
+                reset_password_token: hashedToken
             }
         });
 
@@ -147,8 +149,9 @@ class UserService {
     }
 
     static async updateResetPasswordToken(user: User, resetToken: string): Promise<User> {
+        const hashedToken = hashToken(resetToken);
         const [updatedCount] = await User.update(
-            { reset_password_token: resetToken },
+            { reset_password_token: hashedToken },
             {
                 where: {
                     id: user.id

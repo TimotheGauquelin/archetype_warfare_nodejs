@@ -1,9 +1,9 @@
-/**
- * Génère un token aléatoire avec un préfixe
- * @returns Token aléatoire avec préfixe 'aw'
- */
+import crypto from 'crypto';
+
 export function generateRandomToken(): string {
-    const prefix = 'aw';
-    const randomString = Math.random().toString(36).substring(2, 20);
-    return prefix + randomString;
+    return crypto.randomBytes(32).toString('hex');
+}
+
+export function hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
 }

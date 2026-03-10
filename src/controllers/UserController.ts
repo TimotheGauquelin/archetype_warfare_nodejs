@@ -4,7 +4,7 @@ import { CustomError } from '../errors/CustomError';
 import { sendCreateUserByAdminEmail } from '../mailing/sendCreateUserByAdminMail';
 import User from '../models/UserModel';
 import UserService from '../services/UserService';
-import { generateRandomToken } from '../utils/token';
+import { generateRandomToken, hashToken } from '../utils/token';
 import envVars from '../config/envValidation';
 import { getStringParam, getUuidParam } from '../utils/request';
 
@@ -77,7 +77,7 @@ class UserController {
                 email,
                 username,
                 is_active: true,
-                reset_password_token: createToken
+                reset_password_token: hashToken(createToken)
             };
 
             await UserService.createUser(userPayload);
@@ -110,7 +110,7 @@ class UserController {
                 username,
                 is_active: true,
                 has_accepted_terms_and_conditions: false,
-                reset_password_token: resetToken
+                reset_password_token: hashToken(resetToken)
             };
 
             const createdUser = await UserService.createUserByAdmin(userPayload, roles || []);

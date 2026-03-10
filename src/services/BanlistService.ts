@@ -73,14 +73,19 @@ class BanlistService {
                         {
                             model: Card,
                             as: 'card',
-                            attributes: ['id', 'name', 'img_url']
+                            attributes: ['id', 'name', 'img_url', 'level', 'atk', 'def', 'card_type']
                         },
                         {
                             model: CardStatus,
                             as: 'card_status',
                             attributes: ['id', 'label']
+                        },
+                        {
+                            model: Archetype,
+                            as: 'archetype',
+                            attributes: ['id', 'name']
                         }
-                    ]
+                    ],
                 }
             ]
         });
