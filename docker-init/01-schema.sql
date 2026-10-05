@@ -112,6 +112,17 @@ CREATE TABLE IF NOT EXISTS card (
 ALTER TABLE IF EXISTS card
     ADD COLUMN IF NOT EXISTS manual_update BOOLEAN NOT NULL DEFAULT FALSE;
 
+CREATE TABLE IF NOT EXISTS card_translation (
+    card_id VARCHAR(8) NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    locale VARCHAR(5) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    PRIMARY KEY (card_id, locale)
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_translation_locale ON card_translation(locale);
+CREATE INDEX IF NOT EXISTS idx_card_translation_name ON card_translation(name);
+
 CREATE TABLE IF NOT EXISTS banlist (
     id SERIAL PRIMARY KEY,
     label VARCHAR(200) NOT NULL UNIQUE,

@@ -102,7 +102,11 @@ class AuthenticateController {
     async updatePassword(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const userId = getUuidParam(request.params.userId);
-            const { password, confirmPassword } = request.body;
+            const {
+                password,
+                confirmPassword,
+                has_accepted_terms_and_conditions: hasAcceptedTermsAndConditions,
+            } = request.body;
 
             if (!password || !confirmPassword) {
                 throw new CustomError('Le mot de passe et la confirmation du mot de passe sont requis.', 400);
@@ -112,13 +116,17 @@ class AuthenticateController {
                 throw new CustomError('Les mots de passe ne correspondent pas.', 400);
             }
 
+            if (!hasAcceptedTermsAndConditions) {
+                throw new CustomError('Vous devez accepter les conditions d\'utilisation', 400);
+            }
+
             const user = await User.findByPk(userId);
 
             if (!user) {
                 throw new CustomError('L\'utilisateur n\'a pas été trouvé.', 404);
             }
 
-            await AuthenticateService.updatePassword(user, password);
+            await AuthenticateService.updatePassword(user, password, true);
 
             response.status(200).json({
                 success: true,

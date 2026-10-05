@@ -176,7 +176,8 @@ describe('AuthenticateController', () => {
             mockRequest.params = { userId: '1' };
             mockRequest.body = {
                 password: 'password123',
-                confirmationPassword: 'differentPassword'
+                confirmPassword: 'differentPassword',
+                has_accepted_terms_and_conditions: true
             };
             await AuthenticateController.updatePassword(mockRequest, mockResponse, mockNext);
 
@@ -185,11 +186,29 @@ describe('AuthenticateController', () => {
             );
         });
 
+        it('devrait retourner une erreur si les conditions d\'utilisation ne sont pas acceptées', async () => {
+            mockRequest.params = { userId: '1' };
+            mockRequest.body = {
+                password: 'password123',
+                confirmPassword: 'password123',
+                has_accepted_terms_and_conditions: false
+            };
+            await AuthenticateController.updatePassword(mockRequest, mockResponse, mockNext);
+
+            expect(mockNext).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    message: 'Vous devez accepter les conditions d\'utilisation',
+                    statusCode: 400
+                })
+            );
+        });
+
         it('devrait retourner une erreur si l\'utilisateur n\'existe pas', async () => {
             mockRequest.params = { userId: '1' };
             mockRequest.body = {
                 password: 'password123',
-                confirmationPassword: 'password123'
+                confirmPassword: 'password123',
+                has_accepted_terms_and_conditions: true
             };
             User.findByPk.mockResolvedValue(null);
 
@@ -209,7 +228,8 @@ describe('AuthenticateController', () => {
             mockRequest.params = { userId: '1' };
             mockRequest.body = {
                 password: 'newPassword123',
-                confirmationPassword: 'newPassword123'
+                confirmPassword: 'newPassword123',
+                has_accepted_terms_and_conditions: true
             };
             User.findByPk.mockResolvedValue(mockUser);
 

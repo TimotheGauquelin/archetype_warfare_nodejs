@@ -35,6 +35,31 @@ interface PaginatedResult<T> {
 
 class ArchetypeService {
     /**
+     * Retire les entrées banlist génériques (archetype_id NULL ou 0)
+     * pour des cartes désormais liées à un archétype.
+     */
+    static async removeGenericBanlistEntriesForCards(
+        cardIds: string[],
+        transaction?: import('sequelize').Transaction
+    ): Promise<void> {
+        const uniqueIds = [...new Set(cardIds.map(String).filter(Boolean))];
+        if (uniqueIds.length === 0) {
+            return;
+        }
+
+        await BanlistArchetypeCard.destroy({
+            where: {
+                card_id: { [Op.in]: uniqueIds },
+                [Op.or]: [
+                    { archetype_id: null },
+                    { archetype_id: 0 },
+                ],
+            },
+            transaction,
+        });
+    }
+
+    /**
      * Trouve un archétype par ID (numérique) ou par slug.
      */
     static async findByIdOrSlug(idOrSlug: string): Promise<Archetype | null> {
@@ -583,6 +608,11 @@ class ArchetypeService {
                     }));
 
                     await BanlistArchetypeCard.bulkCreate(banlistCardData, { transaction: t });
+
+                    const assignedCardIds = banlistCardData
+                        .map((row: { card_id?: string }) => row.card_id)
+                        .filter((cardId: string | undefined): cardId is string => Boolean(cardId));
+                    await ArchetypeService.removeGenericBanlistEntriesForCards(assignedCardIds, t);
                 }
 
                 const archetypeWithRelations = await Archetype.findByPk(newArchetype.id, {
@@ -830,6 +860,10 @@ class ArchetypeService {
                     }));
 
                     await BanlistArchetypeCard.bulkCreate(banlistCardData, { transaction: t });
+                    await ArchetypeService.removeGenericBanlistEntriesForCards(
+                        validCards.map((card) => card.card_id),
+                        t
+                    );
                 }
             });
 

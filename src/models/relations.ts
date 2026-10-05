@@ -8,6 +8,7 @@ import TournamentPlayerDeck from './TournamentPlayerDeckModel';
 import TournamentPlayerDeckCard from './TournamentPlayerDeckCardModel';
 import DeckCard from './DeckCardModel';
 import Card from './CardModel';
+import CardTranslation from './CardTranslationModel';
 import Archetype from './ArchetypeModel';
 import Era from './EraModel';
 import Attribute from './AttributeModel';
@@ -186,6 +187,15 @@ BanlistArchetypeCard.belongsTo(Card, {
     as: 'card'
 });
 
+Card.hasMany(CardTranslation, {
+    foreignKey: 'card_id',
+    as: 'translations'
+});
+CardTranslation.belongsTo(Card, {
+    foreignKey: 'card_id',
+    as: 'card'
+});
+
 // Relations CardStatus et BanlistArchetypeCard
 CardStatus.hasMany(BanlistArchetypeCard, {
     foreignKey: 'card_status_id',
@@ -201,6 +211,7 @@ export {
     Deck,
     DeckCard,
     Card,
+    CardTranslation,
     Archetype,
     Era,
     Attribute,

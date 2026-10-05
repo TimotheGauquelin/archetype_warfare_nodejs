@@ -158,9 +158,17 @@ class AuthenticateService {
         }
     }
 
-    static async updatePassword(user: User, password: string): Promise<User> {
+    static async updatePassword(
+        user: User,
+        password: string,
+        hasAcceptedTermsAndConditions = false
+    ): Promise<User> {
         user.password = password;
         user.reset_password_token = null;
+
+        if (hasAcceptedTermsAndConditions) {
+            user.has_accepted_terms_and_conditions = true;
+        }
 
         await user.save();
 

@@ -10,7 +10,7 @@ class CardController {
                 response.status(400).json({ success: false, message: 'ID de la carte requis' });
                 return;
             }
-            const card = await CardService.getCardById(id);
+            const card = await CardService.getCardById(id, request.query.locale as string | undefined);
             if (!card) {
                 response.status(404).json({ success: false, message: 'Carte introuvable' });
                 return;
@@ -38,7 +38,8 @@ class CardController {
                 atk: body.atk !== undefined ? (body.atk as number | null) : undefined,
                 def: body.def !== undefined ? (body.def as number | null) : undefined,
                 attribute: body.attribute !== undefined ? (body.attribute as string | null) : undefined,
-                card_type: body.card_type !== undefined ? (body.card_type as string | null) : undefined
+                card_type: body.card_type !== undefined ? (body.card_type as string | null) : undefined,
+                locale: (body.locale as string | undefined) ?? (request.query.locale as string | undefined)
             };
             const card = await CardService.updateCard(id, data);
             if (!card) {
@@ -63,7 +64,8 @@ class CardController {
                 max_def: request.query.max_def ? parseInt(request.query.max_def as string) : undefined,
                 attribute: request.query.attribute as string | undefined,
                 page: request.query.page ? parseInt(request.query.page as string) : 1,
-                size: request.query.size ? parseInt(request.query.size as string) : 10
+                size: request.query.size ? parseInt(request.query.size as string) : 10,
+                locale: request.query.locale as string | undefined
             };
 
             const cards = await CardService.searchCards(filters);
@@ -90,10 +92,14 @@ class CardController {
             const createdCount = result.results.filter(r => r.created).length;
             const updatedCount = result.results.filter(r => r.updated).length;
             const skippedCount = result.results.filter(r => r.skipped).length;
+            const banlistEntriesCreatedCount = result.results.filter(r => r.banlistEntryCreated).length;
             const parts: string[] = [];
             if (createdCount > 0) parts.push(`${createdCount} carte(s) créée(s)`);
             if (updatedCount > 0) parts.push(`${updatedCount} mise(s) à jour`);
             if (skippedCount > 0) parts.push(`${skippedCount} non modifiée(s) (manual_update)`);
+            if (banlistEntriesCreatedCount > 0) {
+                parts.push(`${banlistEntriesCreatedCount} entrée(s) banlist créée(s)`);
+            }
             const summary = parts.length > 0 ? parts.join(', ') : 'Aucune carte traitée';
             const message = result.errors.length > 0
                 ? `Traitement terminé. ${summary}, ${result.errors.length} erreur(s)`
@@ -148,7 +154,8 @@ class CardController {
                 max_def: request.query.max_def ? parseInt(request.query.max_def as string) : undefined,
                 attribute: request.query.attribute as string | undefined,
                 page: request.query.page ? parseInt(request.query.page as string) : 1,
-                size: request.query.size ? parseInt(request.query.size as string) : 10
+                size: request.query.size ? parseInt(request.query.size as string) : 10,
+                locale: request.query.locale as string | undefined
             };
 
             const cards = await CardService.searchCardsByArchetypeBanlist(archetypeId, filters);
