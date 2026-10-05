@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
+exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.ArchetypeTranslation = exports.CardTranslation = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
 const UserModel_1 = __importDefault(require("./UserModel"));
 exports.User = UserModel_1.default;
 const DeckModel_1 = __importDefault(require("./DeckModel"));
@@ -24,6 +24,10 @@ const DeckCardModel_1 = __importDefault(require("./DeckCardModel"));
 exports.DeckCard = DeckCardModel_1.default;
 const CardModel_1 = __importDefault(require("./CardModel"));
 exports.Card = CardModel_1.default;
+const CardTranslationModel_1 = __importDefault(require("./CardTranslationModel"));
+exports.CardTranslation = CardTranslationModel_1.default;
+const ArchetypeTranslationModel_1 = __importDefault(require("./ArchetypeTranslationModel"));
+exports.ArchetypeTranslation = ArchetypeTranslationModel_1.default;
 const ArchetypeModel_1 = __importDefault(require("./ArchetypeModel"));
 exports.Archetype = ArchetypeModel_1.default;
 const EraModel_1 = __importDefault(require("./EraModel"));
@@ -200,6 +204,22 @@ CardModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {
 BanlistArchetypeCardModel_1.default.belongsTo(CardModel_1.default, {
     foreignKey: 'card_id',
     as: 'card'
+});
+CardModel_1.default.hasMany(CardTranslationModel_1.default, {
+    foreignKey: 'card_id',
+    as: 'translations'
+});
+CardTranslationModel_1.default.belongsTo(CardModel_1.default, {
+    foreignKey: 'card_id',
+    as: 'card'
+});
+ArchetypeModel_1.default.hasMany(ArchetypeTranslationModel_1.default, {
+    foreignKey: 'archetype_id',
+    as: 'translations'
+});
+ArchetypeTranslationModel_1.default.belongsTo(ArchetypeModel_1.default, {
+    foreignKey: 'archetype_id',
+    as: 'archetype'
 });
 // Relations CardStatus et BanlistArchetypeCard
 CardStatusModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {

@@ -1,5 +1,5 @@
 import { Op, WhereOptions } from 'sequelize';
-import { Archetype, Era, Type, Attribute, SummonMechanic, Card, Banlist, CardStatus, BanlistArchetypeCard } from '../models/relations';
+import { Archetype, Era, Type, Attribute, SummonMechanic, Card, Banlist, CardStatus, BanlistArchetypeCard, ArchetypeTranslation } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import sequelize from '../config/Sequelize';
 import UploadImageService from './UploadImageService';
@@ -7,6 +7,9 @@ import { extractImageIdFromUrl } from '../utils/image';
 import { Request, Response } from 'express';
 import logger from '../utils/logger';
 import { slugify } from '../utils/slugify';
+import CardService from './CardService';
+
+type ArchetypeLocale = 'fr' | 'en';
 
 interface SearchFilters {
     name?: string;
@@ -17,6 +20,15 @@ interface SearchFilters {
     page?: number;
     size?: number;
     is_active?: boolean;
+    locale?: string;
+}
+
+interface ArchetypeTranslationInput {
+    locale: string;
+    name: string;
+    main_info?: string | null;
+    slider_info?: string | null;
+    comment?: string | null;
 }
 
 interface PaginatedResult<T> {
@@ -34,6 +46,121 @@ interface PaginatedResult<T> {
 }
 
 class ArchetypeService {
+    static normalizeLocale(locale?: string | null): ArchetypeLocale {
+        const value = String(locale || 'fr').trim().toLowerCase();
+        return value === 'en' ? 'en' : 'fr';
+    }
+
+    /**
+     * Remplace name/main_info/slider_info/comment par la traduction demandée (fallback: champs de `archetype`).
+     */
+    static async applyLocaleToArchetypeRecords<
+        T extends {
+            id: number;
+            name?: string;
+            main_info?: string | null;
+            slider_info?: string | null;
+            comment?: string | null;
+        }
+    >(records: T[], locale?: string | null): Promise<T[]> {
+        if (!records.length) {
+            return records;
+        }
+
+        const normalizedLocale = ArchetypeService.normalizeLocale(locale);
+        const ids = records.map((record) => Number(record.id));
+        const translations = await ArchetypeTranslation.findAll({
+            where: {
+                archetype_id: { [Op.in]: ids },
+                locale: normalizedLocale,
+            },
+        });
+
+        const byArchetypeId = new Map(
+            translations.map((translation) => [Number(translation.archetype_id), translation])
+        );
+
+        return records.map((record) => {
+            const translation = byArchetypeId.get(Number(record.id));
+            if (!translation) {
+                return record;
+            }
+
+            return {
+                ...record,
+                name: translation.name,
+                main_info: translation.main_info ?? record.main_info ?? null,
+                slider_info: translation.slider_info ?? record.slider_info ?? null,
+                comment: translation.comment ?? record.comment ?? null,
+            };
+        });
+    }
+
+    static buildNameSearchWhere(name: string, locale?: string | null): WhereOptions {
+        const normalizedLocale = ArchetypeService.normalizeLocale(locale);
+        const pattern = `%${name}%`;
+
+        return {
+            [Op.or]: [
+                { name: { [Op.iLike]: pattern } },
+                sequelize.literal(`EXISTS (
+                    SELECT 1
+                    FROM archetype_translation at
+                    WHERE at.archetype_id = "Archetype"."id"
+                      AND at.locale = ${sequelize.escape(normalizedLocale)}
+                      AND at.name ILIKE ${sequelize.escape(pattern)}
+                )`),
+            ],
+        };
+    }
+
+    static async upsertArchetypeTranslations(
+        archetypeId: number,
+        fields: {
+            name?: string;
+            main_info?: string | null;
+            slider_info?: string | null;
+            comment?: string | null;
+            translations?: ArchetypeTranslationInput[];
+            locale?: string | null;
+        },
+        transaction?: import('sequelize').Transaction
+    ): Promise<void> {
+        const translations: ArchetypeTranslationInput[] =
+            fields.translations && fields.translations.length > 0
+                ? fields.translations
+                : fields.name
+                  ? [
+                        {
+                            locale: ArchetypeService.normalizeLocale(fields.locale),
+                            name: fields.name,
+                            main_info: fields.main_info ?? null,
+                            slider_info: fields.slider_info ?? null,
+                            comment: fields.comment ?? null,
+                        },
+                    ]
+                  : [];
+
+        for (const translation of translations) {
+            const locale = translation.locale?.trim().toLowerCase();
+            if (!locale || !translation.name) {
+                continue;
+            }
+
+            await ArchetypeTranslation.upsert(
+                {
+                    archetype_id: archetypeId,
+                    locale,
+                    name: translation.name,
+                    main_info: translation.main_info ?? null,
+                    slider_info: translation.slider_info ?? null,
+                    comment: translation.comment ?? null,
+                },
+                { transaction }
+            );
+        }
+    }
+
     /**
      * Retire les entrées banlist génériques (archetype_id NULL ou 0)
      * pour des cartes désormais liées à un archétype.
@@ -83,8 +210,8 @@ class ArchetypeService {
     /**
      * Recherche d'archétypes avec filtres et pagination
      */
-    static async searchArchetypes(filters: SearchFilters = {}): Promise<PaginatedResult<Archetype>> {
-        const { name, era, type, attribute, summonmechanic, page = 1, size = 10, is_active } = filters;
+    static async searchArchetypes(filters: SearchFilters = {}): Promise<PaginatedResult<Record<string, unknown>>> {
+        const { name, era, type, attribute, summonmechanic, page = 1, size = 10, is_active, locale } = filters;
 
         const limit = parseInt(String(size));
         const offset = (parseInt(String(page)) - 1) * limit;
@@ -92,9 +219,7 @@ class ArchetypeService {
         const where: WhereOptions = {};
 
         if (name) {
-            where.name = {
-                [Op.iLike]: `%${name}%`
-            };
+            Object.assign(where, ArchetypeService.buildNameSearchWhere(name, locale));
         }
 
         if (is_active) {
@@ -221,8 +346,11 @@ class ArchetypeService {
         const hasNextPage = parseInt(String(page)) < totalPages;
         const hasPreviousPage = parseInt(String(page)) > 1;
 
+        const rowsJson = result.rows.map((row) => row.toJSON() as unknown as Record<string, unknown> & { id: number });
+        const localizedRows = await ArchetypeService.applyLocaleToArchetypeRecords(rowsJson, locale);
+
         return {
-            data: result.rows,
+            data: localizedRows,
             pagination: {
                 total: result.count,
                 totalPages: totalPages,
@@ -239,8 +367,8 @@ class ArchetypeService {
     /**
      * Récupère 5 archétypes aléatoires mis en avant
      */
-    static async getFiveRandomHighlightedArchetypes(): Promise<Archetype[]> {
-        return Archetype.findAll({
+    static async getFiveRandomHighlightedArchetypes(locale?: string): Promise<Record<string, unknown>[]> {
+        const archetypes = await Archetype.findAll({
             where: {
                 is_highlighted: true,
                 is_active: true
@@ -254,13 +382,17 @@ class ArchetypeService {
                 { model: Era, as: 'era' }
             ]
         });
+        return ArchetypeService.applyLocaleToArchetypeRecords(
+            archetypes.map((a) => a.toJSON() as unknown as Record<string, unknown> & { id: number }),
+            locale
+        );
     }
 
     /**
      * Récupère les 8 archétypes les plus populaires
      */
-    static async getEightMostFamousArchetypes(): Promise<Archetype[]> {
-        return Archetype.findAll({
+    static async getEightMostFamousArchetypes(locale?: string): Promise<Record<string, unknown>[]> {
+        const archetypes = await Archetype.findAll({
             where: {
                 is_active: true
             },
@@ -273,13 +405,17 @@ class ArchetypeService {
                 { model: Era, as: 'era' }
             ]
         });
+        return ArchetypeService.applyLocaleToArchetypeRecords(
+            archetypes.map((a) => a.toJSON() as unknown as Record<string, unknown> & { id: number }),
+            locale
+        );
     }
 
     /**
      * Récupère les 8 archétypes les plus récents
      */
-    static async getEightMostRecentArchetypes(): Promise<Archetype[]> {
-        return Archetype.findAll({
+    static async getEightMostRecentArchetypes(locale?: string): Promise<Record<string, unknown>[]> {
+        const archetypes = await Archetype.findAll({
             where: {
                 is_active: true
             },
@@ -292,12 +428,16 @@ class ArchetypeService {
                 { model: Era, as: 'era' }
             ]
         });
+        return ArchetypeService.applyLocaleToArchetypeRecords(
+            archetypes.map((a) => a.toJSON() as unknown as Record<string, unknown> & { id: number }),
+            locale
+        );
     }
 
     /**
      * Récupère un archétype par son ID
      */
-    static async getArchetypeById(id: number): Promise<Archetype> {
+    static async getArchetypeById(id: number, locale?: string): Promise<Record<string, unknown>> {
         const archetype = await Archetype.findOne({
             where: {
                 id: id
@@ -359,34 +499,68 @@ class ArchetypeService {
             throw new CustomError('Archétype non trouvé', 404);
         }
 
-        return archetype;
+        const json = archetype.toJSON() as unknown as Record<string, unknown> & {
+            id: number;
+            cards?: Array<{ card?: { id: string; name?: string; description?: string | null } }>;
+        };
+
+        const [localized] = await ArchetypeService.applyLocaleToArchetypeRecords([json], locale);
+
+        if (Array.isArray(localized.cards) && localized.cards.length > 0) {
+            const nestedCards = localized.cards
+                .map((entry) => entry.card)
+                .filter((card): card is { id: string; name?: string; description?: string | null } => Boolean(card?.id));
+            const localizedCards = await CardService.applyLocaleToCardRecords(nestedCards, locale);
+            const byId = new Map(localizedCards.map((card) => [String(card.id), card]));
+            localized.cards = localized.cards.map((entry) => ({
+                ...entry,
+                card: entry.card?.id ? byId.get(String(entry.card.id)) ?? entry.card : entry.card,
+            }));
+        }
+
+        const translations = await ArchetypeTranslation.findAll({
+            where: { archetype_id: id },
+        });
+        localized.translations = translations.map((t) => t.toJSON());
+
+        return localized;
     }
 
     /**
      * Récupère un archétype par son ID ou son slug (détail complet).
      */
-    static async getArchetypeByIdOrSlug(idOrSlug: string): Promise<Archetype> {
+    static async getArchetypeByIdOrSlug(idOrSlug: string, locale?: string): Promise<Record<string, unknown>> {
         const archetype = await this.findByIdOrSlug(idOrSlug);
         if (!archetype) {
             throw new CustomError('Archétype non trouvé', 404);
         }
-        return this.getArchetypeById(archetype.id);
+        return this.getArchetypeById(archetype.id, locale);
     }
 
-    static async getRandomArchetype(): Promise<Archetype | null> {
-        return Archetype.findOne({
+    static async getRandomArchetype(locale?: string): Promise<Record<string, unknown> | null> {
+        const archetype = await Archetype.findOne({
             order: sequelize.literal('RANDOM()'),
             attributes: ['id', 'name']
         });
+        if (!archetype) return null;
+        const [localized] = await ArchetypeService.applyLocaleToArchetypeRecords(
+            [archetype.toJSON() as { id: number; name?: string }],
+            locale
+        );
+        return localized;
     }
 
-    static async getAllArchetypeNames(): Promise<Array<{ id: number; name: string; slug?: string | null }>> {
-        return Archetype.findAll({
+    static async getAllArchetypeNames(locale?: string): Promise<Array<{ id: number; name: string; slug?: string | null }>> {
+        const archetypes = await Archetype.findAll({
             where: {
                 is_active: true
             },
             attributes: ['id', 'name', 'slug']
         });
+        return ArchetypeService.applyLocaleToArchetypeRecords(
+            archetypes.map((a) => a.toJSON() as { id: number; name: string; slug?: string | null }),
+            locale
+        );
     }
 
     static async switchIsHighlighted(id: number): Promise<Archetype> {
@@ -469,7 +643,8 @@ class ArchetypeService {
                 cards = [],
                 slider_img_url,
                 card_img_url,
-                slug: slugInput
+                slug: slugInput,
+                translations = []
             } = request.body;
 
             const slug = slugInput && typeof slugInput === 'string' && slugInput.trim()
@@ -594,6 +769,28 @@ class ArchetypeService {
                     await (newArchetype as any).setSummon_mechanics(summonMechanicIds, { transaction: t });
                 }
 
+                await ArchetypeService.upsertArchetypeTranslations(
+                    newArchetype.id,
+                    {
+                        name,
+                        main_info,
+                        slider_info,
+                        comment,
+                        locale: 'fr',
+                        translations: [
+                            {
+                                locale: 'fr',
+                                name,
+                                main_info,
+                                slider_info,
+                                comment,
+                            },
+                            ...(Array.isArray(translations) ? translations : []),
+                        ],
+                    },
+                    t
+                );
+
                 if (cards.length > 0) {
                     const currentBanlist = await Banlist.findOne({
                         order: [['release_date', 'DESC']]
@@ -669,7 +866,8 @@ class ArchetypeService {
             cards = [],
             slider_img_url,
             card_img_url,
-            slug: slugInput
+            slug: slugInput,
+            translations = []
         } = request.body;
 
         try {
@@ -840,6 +1038,28 @@ class ArchetypeService {
                     updatePayload.slug = slugInput.trim();
                 }
                 await existingArchetype.update(updatePayload, { transaction: t });
+
+                await ArchetypeService.upsertArchetypeTranslations(
+                    Number(id),
+                    {
+                        name,
+                        main_info,
+                        slider_info,
+                        comment,
+                        locale: 'fr',
+                        translations: [
+                            {
+                                locale: 'fr',
+                                name,
+                                main_info,
+                                slider_info,
+                                comment,
+                            },
+                            ...(Array.isArray(translations) ? translations : []),
+                        ],
+                    },
+                    t
+                );
 
                 await (existingArchetype as any).setAttributes(attributeIds, { transaction: t });
                 await (existingArchetype as any).setTypes(typeIds, { transaction: t });

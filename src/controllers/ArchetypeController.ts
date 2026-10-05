@@ -16,6 +16,7 @@ class ArchetypeController {
                 page: request.query.page ? parseInt(request.query.page as string) : 1,
                 size: request.query.size ? parseInt(request.query.size as string) : 10,
                 is_active: request.query.is_active !== undefined ? request.query.is_active === 'true' : undefined,
+                locale: request.query.locale as string | undefined,
             };
 
             const result = await ArchetypeService.searchArchetypes(filters);
@@ -28,52 +29,65 @@ class ArchetypeController {
     async getArchetypeById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const idOrSlug = getStringParam(request.params.id);
-            const archetype = await ArchetypeService.getArchetypeByIdOrSlug(idOrSlug);
+            const archetype = await ArchetypeService.getArchetypeByIdOrSlug(
+                idOrSlug,
+                request.query.locale as string | undefined
+            );
             response.status(200).json(archetype);
         } catch (error) {
             next(error);
         }
     }
 
-    async getEightMostFamousArchetypes(_request: Request, response: Response, next: NextFunction): Promise<void> {
+    async getEightMostFamousArchetypes(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypes = await ArchetypeService.getEightMostFamousArchetypes();
+            const archetypes = await ArchetypeService.getEightMostFamousArchetypes(
+                request.query.locale as string | undefined
+            );
             response.status(200).json(archetypes);
         } catch (error) {
             next(error);
         }
     }
 
-    async getEightMostRecentArchetypes(_request: Request, response: Response, next: NextFunction): Promise<void> {
+    async getEightMostRecentArchetypes(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypes = await ArchetypeService.getEightMostRecentArchetypes();
+            const archetypes = await ArchetypeService.getEightMostRecentArchetypes(
+                request.query.locale as string | undefined
+            );
             response.status(200).json(archetypes);
         } catch (error) {
             next(error);
         }
     }
 
-    async getFiveRandomHighlightedArchetypes(_request: Request, response: Response, next: NextFunction): Promise<void> {
+    async getFiveRandomHighlightedArchetypes(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypes = await ArchetypeService.getFiveRandomHighlightedArchetypes();
+            const archetypes = await ArchetypeService.getFiveRandomHighlightedArchetypes(
+                request.query.locale as string | undefined
+            );
             response.status(200).json(archetypes);
         } catch (error) {
             next(error);
         }
     }
 
-    async getRandomArchetype(_request: Request, response: Response, next: NextFunction): Promise<void> {
+    async getRandomArchetype(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetype = await ArchetypeService.getRandomArchetype();
+            const archetype = await ArchetypeService.getRandomArchetype(
+                request.query.locale as string | undefined
+            );
             response.status(200).json(archetype);
         } catch (error) {
             next(error);
         }
     }
 
-    async getAllArchetypeNames(_request: Request, response: Response, next: NextFunction): Promise<void> {
+    async getAllArchetypeNames(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const archetypeNames = await ArchetypeService.getAllArchetypeNames();
+            const archetypeNames = await ArchetypeService.getAllArchetypeNames(
+                request.query.locale as string | undefined
+            );
             response.status(200).json(archetypeNames);
         } catch (error) {
             next(error);

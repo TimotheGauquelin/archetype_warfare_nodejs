@@ -10,6 +10,7 @@ declare module 'express-validator' {
         // Méthodes de type
         isString(): ValidationChain;
         isInt(options?: { min?: number; max?: number }): ValidationChain;
+        isIn(values: readonly unknown[]): ValidationChain;
         isBoolean(): ValidationChain;
         isURL(options?: { protocols?: string[]; require_tld?: boolean; require_protocol?: boolean }): ValidationChain;
         isISO8601(): ValidationChain;

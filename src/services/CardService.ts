@@ -242,7 +242,7 @@ class CardService {
                 a.name.localeCompare(b.name)
             ),
             is_generic: isGeneric,
-        } as Card & Record<string, unknown>;
+        } as unknown as Card & Record<string, unknown>;
     }
 
     /**

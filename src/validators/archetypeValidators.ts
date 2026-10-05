@@ -13,11 +13,13 @@ export const validateSearchArchetypes: ValidationChain[] = [
     query('summonmechanic').optional().isString().trim().escape(),
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('size').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('locale').optional().isIn(['fr', 'en']),
 ];
 
 // GET /:id — id peut être un entier (ID) ou une chaîne (slug)
 export const validateGetArchetypeById: ValidationChain[] = [
     param('id').notEmpty().withMessage('L\'ID ou le slug est requis').isString().trim(),
+    query('locale').optional().isIn(['fr', 'en']),
 ];
 
 // POST /

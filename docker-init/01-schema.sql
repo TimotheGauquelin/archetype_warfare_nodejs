@@ -123,6 +123,19 @@ CREATE TABLE IF NOT EXISTS card_translation (
 CREATE INDEX IF NOT EXISTS idx_card_translation_locale ON card_translation(locale);
 CREATE INDEX IF NOT EXISTS idx_card_translation_name ON card_translation(name);
 
+CREATE TABLE IF NOT EXISTS archetype_translation (
+    archetype_id BIGINT NOT NULL REFERENCES archetype(id) ON DELETE CASCADE,
+    locale VARCHAR(5) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    main_info TEXT NULL,
+    slider_info TEXT NULL,
+    comment TEXT NULL,
+    PRIMARY KEY (archetype_id, locale)
+);
+
+CREATE INDEX IF NOT EXISTS idx_archetype_translation_locale ON archetype_translation(locale);
+CREATE INDEX IF NOT EXISTS idx_archetype_translation_name ON archetype_translation(name);
+
 CREATE TABLE IF NOT EXISTS banlist (
     id SERIAL PRIMARY KEY,
     label VARCHAR(200) NOT NULL UNIQUE,
