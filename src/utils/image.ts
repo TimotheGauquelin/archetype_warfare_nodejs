@@ -11,7 +11,8 @@ export const extractImageIdFromUrl = (imageUrl: string): string | null => {
     }
 
     try {
-        const regex = /\/upload\/[^\/]+\/(.+)$/;
+        // Accepte /upload/v123/... ou /upload/f_auto,q_auto,.../v123/...
+        const regex = /\/upload\/(?:[^/]+\/)*?(?:v\d+\/)?(.+)$/;
         const match = imageUrl.match(regex);
 
         if (!match) {
@@ -20,7 +21,7 @@ export const extractImageIdFromUrl = (imageUrl: string): string | null => {
 
         const fullPath = match[1];
 
-        const imageIdWithoutExtension = fullPath.replace(/\.(png|jpg|jpeg|gif|webp|svg|bmp|tiff)$/i, '');
+        const imageIdWithoutExtension = fullPath.replace(/\.(png|jpg|jpeg|gif|webp|avif|svg|bmp|tiff)$/i, '');
 
         return imageIdWithoutExtension;
 

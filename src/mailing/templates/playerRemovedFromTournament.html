@@ -1,11 +1,10 @@
 <!-- src/mailing/templates/playerRemovedFromTournament.html -->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{lang}}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Retrait d'un tournoi</title>
     <style>
         body {
             margin: 0;
@@ -72,19 +71,20 @@
 
 <body>
     <div class="container">
-        <h2>Vous avez été retiré du tournoi</h2>
+        <h2>{{t.heading}}</h2>
         <div class="content">
-            <p>Bonjour <strong>{{username}}</strong>,</p>
+            <p>{{t.greeting}} <strong>{{username}}</strong>,</p>
             <div class="card">
-                <p>Un administrateur vous a retiré du tournoi <strong>{{tournamentName}}</strong>.</p>
-                <p>Motif communiqué :</p>
+                <p>{{t.body}}</p>
+                <p>{{t.reasonLabel}}</p>
                 <div class="reason">{{reason}}</div>
             </div>
-            <p>Pour toute question, vous pouvez contacter l'équipe d'organisation.</p>
-            <p>L'équipe Archetype Battle</p>
+            <p>{{t.contact}}</p>
+            <p>{{t.common.team}}</p>
         </div>
         <div class="footer">
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
+            <p>{{t.common.autoFooter}}</p>
+            <p>&copy; {{year}} Archetype Battle. {{t.common.copyright}}</p>
         </div>
     </div>
 </body>

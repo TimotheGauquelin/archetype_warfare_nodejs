@@ -1,11 +1,10 @@
 <!-- src/mailing/templates/accountApproved.html -->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{lang}}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Compte approuvé</title>
     <style>
         body {
             margin: 0;
@@ -62,25 +61,6 @@
             margin: 16px 0
         }
 
-        .cta {
-            display: flex;
-            justify-content: center;
-            margin: 12px 0
-        }
-
-        .btn {
-            display: inline-block;
-            background: #667eea;
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 8px;
-            text-decoration: none
-        }
-
-        .btn:hover {
-            opacity: .95
-        }
-
         .footer {
             margin-top: 24px;
             padding-top: 16px;
@@ -104,19 +84,16 @@
                 alt="Archetype Battle">
         </div>
 
-        <h2>Compte approuvé</h2>
+        <h2>{{t.heading}}</h2>
 
         <div class="content">
-            <div class="success">
-                <p>Votre compte a été approuvé. Vous pouvez maintenant vous connecter et profiter d’Archetype Battle.
-                </p>
-            </div>
-            <p>L'équipe d'Archetype Battle</p>
+            <p>{{t.success}}</p>
+            <p>{{t.common.team}}</p>
         </div>
 
         <div class="footer">
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
-            <p>&copy; 2024 Archetype Battle. Tous droits réservés.</p>
+            <p>{{t.common.autoFooter}}</p>
+            <p>&copy; {{year}} Archetype Battle. {{t.common.copyright}}</p>
         </div>
     </div>
 </body>

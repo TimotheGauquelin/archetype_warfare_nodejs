@@ -1,11 +1,10 @@
 <!-- src/mailing/templates/playerAddedToTournament.html -->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{lang}}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inscription à un tournoi</title>
     <style>
         body {
             margin: 0;
@@ -63,17 +62,18 @@
 
 <body>
     <div class="container">
-        <h2>Vous avez été inscrit à un tournoi</h2>
+        <h2>{{t.heading}}</h2>
         <div class="content">
-            <p>Bonjour <strong>{{username}}</strong>,</p>
+            <p>{{t.greeting}} <strong>{{username}}</strong>,</p>
             <div class="card">
-                <p>Un administrateur vous a inscrit au tournoi <strong>{{tournamentName}}</strong>.</p>
-                <p>Vous pouvez consulter les détails du tournoi et vos matchs depuis votre espace.</p>
+                <p>{{t.body}}</p>
+                <p>{{t.followUp}}</p>
             </div>
-            <p>L'équipe Archetype Battle</p>
+            <p>{{t.common.team}}</p>
         </div>
         <div class="footer">
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
+            <p>{{t.common.autoFooter}}</p>
+            <p>&copy; {{year}} Archetype Battle. {{t.common.copyright}}</p>
         </div>
     </div>
 </body>

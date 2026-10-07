@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { usernameRuler } from '../middlewares/usernameRuler';
+import { authenticateToken } from '../middlewares/authMiddleware';
 import UserController from '../controllers/UserController';
 
 const router = Router();
@@ -18,7 +19,7 @@ router.post('/admin/create', (request: Request, response: Response, next: NextFu
 router.put('/:id/switchIsActive', (request: Request, response: Response, next: NextFunction) => UserController.switchIsActive(request, response, next));
 router.put('/:id/switchIsBanned', (request: Request, response: Response, next: NextFunction) => UserController.switchIsBanned(request, response, next));
 router.put('/:id/updateUserByAdmin', (request: Request, response: Response, next: NextFunction) => UserController.updateUserByAdmin(request, response, next));
-router.patch('/:id', (request: Request, response: Response, next: NextFunction) => UserController.updateMyProfile(request, response, next));
+router.patch('/:id', authenticateToken, (request: Request, response: Response, next: NextFunction) => UserController.updateMyProfile(request, response, next));
 // DELETE
 router.delete('/:id', (request: Request, response: Response, next: NextFunction) => UserController.deleteUser(request, response, next));
 

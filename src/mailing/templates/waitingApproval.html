@@ -1,11 +1,10 @@
 <!-- src/mailing/templates/waitingApproval.html -->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{lang}}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inscription en attente d'approbation</title>
     <style>
         body {
             margin: 0;
@@ -53,14 +52,6 @@
             color: #374151
         }
 
-        .card {
-            background: #f8fafc;
-            border: 1px solid #eef2f7;
-            border-radius: 8px;
-            padding: 16px;
-            margin: 16px 0
-        }
-
         .highlight {
             color: #d14343;
             font-weight: 700
@@ -89,21 +80,18 @@
                 alt="Archetype Battle">
         </div>
 
-        <h2>Inscription réussie ! Votre compte est en attente d'approbation</h2>
+        <h2>{{t.heading}}</h2>
 
         <div class="content">
-            <p>Bonjour <strong>{{username}}</strong>,</p>
-            <div class="card">
-                <p><span class="highlight">Félicitations ! Vous êtes bien Inscrit. Votre compte est en attente
-                        d’approbation par un administrateur.</span></p>
-                <p>Vous recevrez un email dès que votre compte sera validé.</p>
-            </div>
-            <p>L'équipe d'Archetype Battle</p>
+            <p>{{t.greeting}} <strong>{{username}}</strong>,</p>
+            <p><span class="highlight">{{t.highlight}}</span></p>
+            <p>{{t.followUp}}</p>
+            <p>{{t.common.team}}</p>
         </div>
 
         <div class="footer">
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
-            <p>&copy; 2025 Archetype Battle. Tous droits réservés.</p>
+            <p>{{t.common.autoFooter}}</p>
+            <p>&copy; {{year}} Archetype Battle. {{t.common.copyright}}</p>
         </div>
     </div>
 </body>

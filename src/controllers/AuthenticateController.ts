@@ -67,7 +67,7 @@ class AuthenticateController {
 
     async requestNewPassword(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const { email } = request.body;
+            const { email, locale: bodyLocale } = request.body;
 
             if (!email) {
                 throw new CustomError('Un email est requis.', 400);
@@ -79,11 +79,16 @@ class AuthenticateController {
 
             if (user) {
                 const resetToken = generateRandomToken();
-
                 const resetLink = `${envVars.FRONTEND_URL}/password-reset/${resetToken}`;
+                const locale =
+                    bodyLocale === 'en' || bodyLocale === 'fr' ? bodyLocale : user.locale;
+
+                if (locale && locale !== user.locale) {
+                    await user.update({ locale });
+                }
 
                 await sendPasswordResetEmail(
-                    { id: user.id, email: user.email ?? '' },
+                    { id: user.id, email: user.email ?? '', locale },
                     resetToken,
                     resetLink
                 );
@@ -139,7 +144,7 @@ class AuthenticateController {
 
     async register(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const { email, password, username, hasAcceptedTermsAndConditions } = request.body;
+            const { email, password, username, hasAcceptedTermsAndConditions, locale } = request.body;
 
             if (!email || !password) {
                 throw new CustomError('Email et mot de passe requis', 400);
@@ -167,7 +172,8 @@ class AuthenticateController {
                 email,
                 password,
                 username: username,
-                hasAcceptedTermsAndConditions
+                hasAcceptedTermsAndConditions,
+                locale,
             });
 
             response.status(201).json(registrationResult);

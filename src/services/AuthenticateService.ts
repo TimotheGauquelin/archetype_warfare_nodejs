@@ -4,6 +4,7 @@ import sequelize from '../config/Sequelize';
 import { CustomError } from '../errors/CustomError';
 import { sendWaitingApprovalEmail } from '../mailing/sendWaitingApprovalMail';
 import { sendAccountApprovedEmail } from '../mailing/sendAccountApprovedMail';
+import { normalizeMailLocale } from '../mailing/mailLocale';
 import logger from '../utils/logger';
 
 interface UserData {
@@ -11,6 +12,7 @@ interface UserData {
     email: string;
     password: string;
     hasAcceptedTermsAndConditions?: boolean;
+    locale?: string | null;
 }
 
 interface RegisterResult {
@@ -40,22 +42,34 @@ class AuthenticateService {
 
         try {
 
+            const locale = normalizeMailLocale(userData.locale);
+
             const user = await User.create({
                 username: userData.username?.trim(),
                 email: userData.email.trim(),
                 password: userData.password,
                 is_active: false,
                 is_banned: false,
-                has_accepted_terms_and_conditions: userData.hasAcceptedTermsAndConditions ?? false
+                has_accepted_terms_and_conditions: userData.hasAcceptedTermsAndConditions ?? false,
+                locale,
             }, { transaction });
 
-            await sendWaitingApprovalEmail({
-                id: user.id,
-                email: user.email || '',
-                username: user.username || undefined
-            });
-
             await transaction.commit();
+
+            try {
+                await sendWaitingApprovalEmail({
+                    id: user.id,
+                    email: user.email || '',
+                    username: user.username || undefined,
+                    locale: user.locale,
+                });
+            } catch (emailError) {
+                logger.logError(
+                    'Inscription OK mais échec envoi email d\'attente',
+                    emailError instanceof Error ? emailError : null,
+                    { userId: user.id, email: user.email }
+                );
+            }
 
             return {
                 success: true,
@@ -130,7 +144,8 @@ class AuthenticateService {
                 await sendAccountApprovedEmail({
                     id: user.id,
                     email: user.email || '',
-                    username: user.username || undefined
+                    username: user.username || undefined,
+                    locale: user.locale,
                 }, roleLabels);
             } catch (emailError) {
                 logger.logError('Erreur lors de l\'envoi de l\'email de confirmation', emailError instanceof Error ? emailError : null);

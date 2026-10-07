@@ -809,7 +809,8 @@ class TournamentService {
             await sendPlayerAddedToTournamentMail({
                 email: user.email,
                 username: user.username ?? 'Joueur',
-                tournamentName: tournament.name
+                tournamentName: tournament.name,
+                locale: user.locale,
             });
         }
 
@@ -1034,7 +1035,7 @@ class TournamentService {
 
         const tournamentPlayer = await TournamentPlayer.findOne({
             where: { tournament_id: tournamentId, id: playerId },
-            include: [{ model: User, as: 'user', attributes: ['id', 'username', 'email'] }]
+            include: [{ model: User, as: 'user', attributes: ['id', 'username', 'email', 'locale'] }]
         });
 
         if (!tournamentPlayer) {
@@ -1049,7 +1050,8 @@ class TournamentService {
                 email: user.email,
                 username: user.username ?? 'Joueur',
                 tournamentName: tournament.name,
-                reason: reason?.trim() || 'Non précisé.'
+                reason: reason?.trim() || 'Non précisé.',
+                locale: user.locale,
             });
         }
 

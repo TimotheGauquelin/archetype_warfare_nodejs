@@ -3,6 +3,8 @@ import { CustomError } from '../errors/CustomError';
 import { Op, WhereOptions } from 'sequelize';
 import sequelize from '../config/Sequelize';
 import { hashToken } from '../utils/token';
+import { sendAccountApprovedEmail } from '../mailing/sendAccountApprovedMail';
+import logger from '../utils/logger';
 
 interface SearchFilters {
     username?: string;
@@ -194,6 +196,24 @@ class UserService {
             if (!alreadyHas) {
                 await (updatedUser as any).addRole(role);
             }
+
+            // Activation admin (toggle) : même mail que la route approve-user
+            if (!existingUser.is_active && updatedUser.email) {
+                try {
+                    await sendAccountApprovedEmail({
+                        id: updatedUser.id,
+                        email: updatedUser.email,
+                        username: updatedUser.username || undefined,
+                        locale: updatedUser.locale,
+                    }, ['User']);
+                } catch (emailError) {
+                    logger.logError(
+                        'Compte activé mais échec envoi email d\'approbation',
+                        emailError instanceof Error ? emailError : null,
+                        { userId: updatedUser.id, email: updatedUser.email }
+                    );
+                }
+            }
         }
 
         return updatedUser;
@@ -210,15 +230,20 @@ class UserService {
         }
     }
 
-    static async updateMyProfile(_existingUser: User, _myBelovedArchetype: number): Promise<void> {
-        // const [updatedCount] = await User.update(
-        //     { beloved_archetype_id: myBelovedArchetype },
-        //     { where: { id: existingUser.id } }
-        // );
+    static async updateMyProfile(
+        existingUser: User,
+        data: { locale?: string }
+    ): Promise<User> {
+        if (data.locale !== undefined) {
+            const locale = String(data.locale).trim().toLowerCase();
+            if (locale !== 'fr' && locale !== 'en') {
+                throw new CustomError('Locale must be fr or en', 400);
+            }
+            existingUser.locale = locale;
+        }
 
-        // if (updatedCount === 0) {
-        //     throw new CustomError('User not found', 404);
-        // }
+        await existingUser.save();
+        return existingUser;
     }
 
 

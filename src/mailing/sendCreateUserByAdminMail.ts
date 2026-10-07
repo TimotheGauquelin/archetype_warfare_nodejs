@@ -1,35 +1,30 @@
 import { sendMail } from '../utils/nodemailer';
-import fs from 'fs';
-import path from 'path';
 import envVars from '../config/envValidation';
+import { getMailSubject, loadMailTemplate, normalizeMailLocale } from './mailLocale';
 
 /**
  * Admin send an email to alert user that his account is created
- * @param email - Email de l'utilisateur
- * @param username - Nom d'utilisateur
- * @param resetToken - Token de réinitialisation
- * @param termsLink - Lien vers les conditions (optionnel)
  */
 export const sendCreateUserByAdminEmail = async (
     email: string,
     username: string,
     resetToken: string,
-    termsLink?: string
+    termsLink?: string,
+    locale?: string | null
 ): Promise<void> => {
-    const templatePath = path.join(__dirname, 'templates', 'createUserByAdmin.html');
-    let htmlContent = fs.readFileSync(templatePath, 'utf8');
+    const normalized = normalizeMailLocale(locale);
+    const resetLink = `${envVars.FRONTEND_URL}/password-reset/${resetToken}`;
+    const htmlContent = loadMailTemplate('createUserByAdmin', normalized, {
+        username,
+        email,
+        resetLink,
+        termsLink: termsLink || `${envVars.FRONTEND_URL}/terms-and-conditions`,
+    });
 
-    htmlContent = htmlContent.replace(/{{username}}/g, username);
-    htmlContent = htmlContent.replace(/{{email}}/g, email);
-    htmlContent = htmlContent.replace(/{{resetLink}}/g, `${envVars.FRONTEND_URL}/password-reset/${resetToken}`);
-    htmlContent = htmlContent.replace(/{{termsLink}}/g, termsLink || `${envVars.FRONTEND_URL}/terms-and-conditions`);
-
-    const mailOptions = {
+    await sendMail({
         from: envVars.EMAIL_FROM_EMAILSENDER,
         to: email,
-        subject: 'Création de votre compte',
-        html: htmlContent
-    };
-
-    await sendMail(mailOptions);
+        subject: getMailSubject('createUserByAdmin', normalized),
+        html: htmlContent,
+    });
 };

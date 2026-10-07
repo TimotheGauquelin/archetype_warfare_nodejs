@@ -19,11 +19,12 @@ interface UserAttributes {
     is_active: boolean;
     is_banned: boolean;
     has_accepted_terms_and_conditions: boolean;
+    locale: string;
     created_at?: Date;
     updated_at?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'created_at' | 'updated_at'> { }
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'created_at' | 'updated_at'> { }
 
 interface UserWithRoles extends UserAttributes {
     roles?: Role[];
@@ -41,6 +42,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     declare is_active: boolean;
     declare is_banned: boolean;
     declare has_accepted_terms_and_conditions: boolean;
+    declare locale: string;
     declare created_at?: Date;
     declare updated_at?: Date;
 
@@ -129,6 +131,17 @@ User.init({
         type: DataTypes.BOOLEAN,
         allowNull: true,
         defaultValue: false
+    },
+    locale: {
+        type: DataTypes.STRING(5),
+        allowNull: false,
+        defaultValue: 'fr',
+        validate: {
+            isIn: {
+                args: [['fr', 'en']],
+                msg: 'Locale must be fr or en'
+            }
+        }
     },
     created_at: {
         type: DataTypes.DATE,

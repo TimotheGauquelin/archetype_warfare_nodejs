@@ -31,7 +31,7 @@ const apiRouter = express.Router();
 
 const corsOptions: cors.CorsOptions = {
     origin: [envVars.FRONTEND_URL, 'https://archetype-warfare-reactjs.onrender.com/'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
 };
 

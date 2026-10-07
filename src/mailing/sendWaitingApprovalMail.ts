@@ -1,13 +1,13 @@
-import fs from 'fs';
-import path from 'path';
 import { sendMail } from '../utils/nodemailer';
 import envVars from '../config/envValidation';
 import logger from '../utils/logger';
+import { getMailCommon, getMailSubject, loadMailTemplate, normalizeMailLocale } from './mailLocale';
 
 interface User {
     id: string;
     email: string;
     username?: string;
+    locale?: string | null;
 }
 
 interface EmailResult {
@@ -17,34 +17,25 @@ interface EmailResult {
 
 export const sendWaitingApprovalEmail = async (user: User): Promise<EmailResult> => {
     try {
-        const templatePath = path.join(__dirname, 'templates', 'waitingApproval.html');
-        let htmlContent = fs.readFileSync(templatePath, 'utf8');
+        const locale = normalizeMailLocale(user.locale);
+        const common = getMailCommon(locale);
+        const htmlContent = loadMailTemplate('waitingApproval', locale, {
+            username: user.username || common.defaultUsername,
+            email: user.email,
+        });
 
-        htmlContent = htmlContent
-            .replace(/{{username}}/g, user.username || 'Utilisateur')
-            .replace(/{{email}}/g, user.email)
-            .replace(/{{registrationDate}}/g, new Date().toLocaleDateString('fr-FR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            }));
-
-        const mailOptions = {
+        await sendMail({
             from: envVars.EMAIL_FROM_EMAILSENDER,
             to: user.email,
-            subject: 'Inscription en attente d\'approbation - Archetype Warfare',
-            html: htmlContent
-        };
-
-        await sendMail(mailOptions);
+            subject: getMailSubject('waitingApproval', locale),
+            html: htmlContent,
+        });
 
         return { success: true, message: 'Email d\'attente envoyé avec succès' };
     } catch (error) {
         logger.logError('Erreur lors de l\'envoi de l\'email d\'attente', error instanceof Error ? error : null, {
             userId: user.id,
-            email: user.email
+            email: user.email,
         });
         throw error;
     }

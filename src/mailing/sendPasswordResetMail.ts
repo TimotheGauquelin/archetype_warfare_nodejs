@@ -1,12 +1,12 @@
 import { sendMail } from '../utils/nodemailer';
-import fs from 'fs';
-import path from 'path';
 import UserService from '../services/UserService';
 import envVars from '../config/envValidation';
+import { getMailSubject, loadMailTemplate, normalizeMailLocale } from './mailLocale';
 
 interface User {
     id: string;
     email: string;
+    locale?: string | null;
 }
 
 export const sendPasswordResetEmail = async (
@@ -14,21 +14,17 @@ export const sendPasswordResetEmail = async (
     resetToken: string,
     resetLink: string
 ): Promise<void> => {
-    const templatePath = path.join(__dirname, 'templates', 'resetPassword.html');
-    let htmlContent = fs.readFileSync(templatePath, 'utf8');
+    const locale = normalizeMailLocale(user.locale);
+    const htmlContent = loadMailTemplate('resetPassword', locale, {
+        resetLink,
+    });
 
-    // Remplacer les variables dans le template
-    htmlContent = htmlContent.replace(/{{resetLink}}/g, resetLink);
-
-    // Change token
     await UserService.updateResetPasswordToken(user as unknown as import('../models/UserModel').default, resetToken);
 
-    const mailOptions = {
+    await sendMail({
         from: envVars.EMAIL_FROM_EMAILSENDER,
         to: user.email,
-        subject: 'Réinitialisation de votre mot de passe',
-        html: htmlContent
-    };
-
-    await sendMail(mailOptions);
+        subject: getMailSubject('resetPassword', locale),
+        html: htmlContent,
+    });
 };

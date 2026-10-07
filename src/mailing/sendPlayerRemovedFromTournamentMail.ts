@@ -1,32 +1,31 @@
 import { sendMail } from '../utils/nodemailer';
-import fs from 'fs';
-import path from 'path';
 import envVars from '../config/envValidation';
+import { getMailCommon, getMailSubject, loadMailTemplate, normalizeMailLocale } from './mailLocale';
 
 export interface PlayerRemovedFromTournamentParams {
     email: string;
     username: string;
     tournamentName: string;
     reason: string;
+    locale?: string | null;
 }
 
 export const sendPlayerRemovedFromTournamentMail = async (
     params: PlayerRemovedFromTournamentParams
 ): Promise<void> => {
-    const templatePath = path.join(__dirname, 'templates', 'playerRemovedFromTournament.html');
-    let htmlContent = fs.readFileSync(templatePath, 'utf8');
+    const locale = normalizeMailLocale(params.locale);
+    const common = getMailCommon(locale);
+    const vars = { tournamentName: params.tournamentName };
+    const htmlContent = loadMailTemplate('playerRemovedFromTournament', locale, {
+        username: params.username,
+        reason: params.reason || common.defaultReason,
+        ...vars,
+    });
 
-    htmlContent = htmlContent
-        .replace(/{{username}}/g, params.username)
-        .replace(/{{tournamentName}}/g, params.tournamentName)
-        .replace(/{{reason}}/g, params.reason || 'Non précisé.');
-
-    const mailOptions = {
+    await sendMail({
         from: envVars.EMAIL_FROM_EMAILSENDER,
         to: params.email,
-        subject: `Retrait du tournoi : ${params.tournamentName}`,
-        html: htmlContent
-    };
-
-    await sendMail(mailOptions);
+        subject: getMailSubject('playerRemovedFromTournament', locale, vars),
+        html: htmlContent,
+    });
 };

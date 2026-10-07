@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
     is_banned BOOLEAN NOT NULL DEFAULT FALSE,
     has_accepted_terms_and_conditions BOOLEAN NOT NULL DEFAULT FALSE,
+    locale VARCHAR(5) NOT NULL DEFAULT 'fr',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT username_length_check CHECK (length(username) >= 3 AND length(username) <= 30),
@@ -68,6 +69,9 @@ CREATE TABLE IF NOT EXISTS "user" (
         email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
     )
 );
+
+ALTER TABLE IF EXISTS "user"
+    ADD COLUMN IF NOT EXISTS locale VARCHAR(5) NOT NULL DEFAULT 'fr';
 
 CREATE TABLE IF NOT EXISTS user_role (
     user_id UUID NOT NULL,

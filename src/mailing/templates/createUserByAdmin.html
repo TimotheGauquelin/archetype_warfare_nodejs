@@ -1,10 +1,9 @@
 <!-- src/mailing/templates/createUserByAdmin.html -->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{lang}}">
 
 <head>
     <meta charset="UTF-8">
-    <title>Compte créé par un administrateur</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -112,30 +111,30 @@
                 alt="Archetype Battle">
         </div>
 
-        <h2>Votre compte a été créé</h2>
+        <h2>{{t.heading}}</h2>
 
         <div class="content">
-            <p>Bonjour,</p>
-            <p>Un compte a été créé pour vous par un administrateur. Voici vos informations :</p>
+            <p>{{t.greeting}}</p>
+            <p>{{t.intro}}</p>
 
             <div class="card">
-                <p><strong class="label">Pseudo :</strong> {{username}}</p>
-                <p><strong class="label">Email :</strong> {{email}}</p>
+                <p><strong class="label">{{t.usernameLabel}}</strong> {{username}}</p>
+                <p><strong class="label">{{t.emailLabel}}</strong> {{email}}</p>
             </div>
 
-            <p>Avant de vous connecter, définissez votre mot de passe via le lien ci-dessous :</p>
+            <p>{{t.setPasswordIntro}}</p>
             <div class="cta">
-                <a href="{{resetLink}}" class="button">Définir mon mot de passe</a>
+                <a href="{{resetLink}}" class="button">{{t.cta}}</a>
             </div>
-            <p>Si le bouton ne fonctionne pas, copiez-collez ce lien :</p>
+            <p>{{t.fallbackLink}}</p>
             <p class="link">{{resetLink}}</p>
-            <p>Ce lien expirera dans 1 heure.</p>
-            <p>L'équipe d'Archetype Battle</p>
+            <p>{{t.expiry}}</p>
+            <p>{{t.common.team}}</p>
         </div>
 
         <div class="footer">
-            <p>Cet email a été envoyé automatiquement, merci de ne pas y répondre.</p>
-            <p>&copy; 2024 Archetype Battle. Tous droits réservés.</p>
+            <p>{{t.common.autoFooter}}</p>
+            <p>&copy; {{year}} Archetype Battle. {{t.common.copyright}}</p>
         </div>
     </div>
 </body>

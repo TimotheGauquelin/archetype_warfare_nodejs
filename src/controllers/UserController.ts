@@ -205,10 +205,14 @@ class UserController {
         }
     }
 
-    async updateMyProfile(request: Request, _response: Response, next: NextFunction): Promise<void> {
+    async updateMyProfile(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getUuidParam(request.params.id);
-            const { myBelovedArchetype: _myBelovedArchetype } = request.body;
+            const authUser = (request as Request & { user?: { id?: string } }).user;
+
+            if (!authUser?.id || authUser.id !== id) {
+                throw new CustomError('Non autorisé', 403);
+            }
 
             const existingUser = await User.findByPk(id);
 
@@ -216,11 +220,17 @@ class UserController {
                 throw new CustomError('Utilisateur non trouvé', 404);
             }
 
-            // await UserService.updateMyProfile(myBelovedArchetype);
-            // response.status(200).json({
-            //     message: 'Utilisateur modifié !'
-            // });
+            const { locale } = request.body;
+            const updated = await UserService.updateMyProfile(existingUser, { locale });
 
+            response.status(200).json({
+                success: true,
+                message: 'Profil mis à jour',
+                user: {
+                    id: updated.id,
+                    locale: updated.locale,
+                },
+            });
         } catch (error) {
             next(error);
         }
