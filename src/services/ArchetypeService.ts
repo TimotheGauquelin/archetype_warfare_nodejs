@@ -375,7 +375,18 @@ class ArchetypeService {
         const archetypes = await Archetype.findAll({
             where: {
                 is_highlighted: true,
-                is_active: true
+                is_active: true,
+                // Affichable dans le slider uniquement avec une image slider http(s) valide
+                [Op.and]: [
+                    { slider_img_url: { [Op.ne]: null } },
+                    { slider_img_url: { [Op.ne]: '' } },
+                    {
+                        [Op.or]: [
+                            { slider_img_url: { [Op.iLike]: 'http://%' } },
+                            { slider_img_url: { [Op.iLike]: 'https://%' } },
+                        ],
+                    },
+                ],
             },
             limit: 5,
             order: sequelize.literal('RANDOM()'),
@@ -567,6 +578,49 @@ class ArchetypeService {
         );
     }
 
+    static readonly MIN_CARDS_TO_GO_ONLINE = 5;
+
+    static hasValidSliderImgUrl(url?: string | null): boolean {
+        if (!url || typeof url !== 'string') {
+            return false;
+        }
+        const trimmed = url.trim();
+        if (!trimmed) {
+            return false;
+        }
+        return /^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed);
+    }
+
+    static async countArchetypeCards(
+        archetypeId: number,
+        transaction?: import('sequelize').Transaction
+    ): Promise<number> {
+        return BanlistArchetypeCard.count({
+            where: {
+                archetype_id: archetypeId,
+            },
+            transaction,
+        });
+    }
+
+    static assertCanGoOnline(cardCount: number): void {
+        if (cardCount < ArchetypeService.MIN_CARDS_TO_GO_ONLINE) {
+            throw new CustomError(
+                `Un archétype doit contenir au moins ${ArchetypeService.MIN_CARDS_TO_GO_ONLINE} cartes pour être mis en ligne (actuellement ${cardCount}).`,
+                400
+            );
+        }
+    }
+
+    static assertCanBeHighlighted(sliderImgUrl?: string | null): void {
+        if (!ArchetypeService.hasValidSliderImgUrl(sliderImgUrl)) {
+            throw new CustomError(
+                'Un archétype ne peut être mis en avant que s\'il possède une image slider valide (slider_img_url).',
+                400
+            );
+        }
+    }
+
     static async switchIsHighlighted(id: number): Promise<Archetype> {
         const archetype = await Archetype.findByPk(id);
 
@@ -574,7 +628,12 @@ class ArchetypeService {
             throw new CustomError('Archetype not found', 404);
         }
 
-        archetype.is_highlighted = !archetype.is_highlighted;
+        const nextHighlighted = !archetype.is_highlighted;
+        if (nextHighlighted) {
+            ArchetypeService.assertCanBeHighlighted(archetype.slider_img_url);
+        }
+
+        archetype.is_highlighted = nextHighlighted;
         await archetype.save();
 
         return archetype;
@@ -587,7 +646,13 @@ class ArchetypeService {
             throw new CustomError('Archetype not found', 404);
         }
 
-        archetype.is_active = !archetype.is_active;
+        const nextActive = !archetype.is_active;
+        if (nextActive) {
+            const cardCount = await ArchetypeService.countArchetypeCards(id);
+            ArchetypeService.assertCanGoOnline(cardCount);
+        }
+
+        archetype.is_active = nextActive;
         await archetype.save();
 
         return archetype;
@@ -742,6 +807,14 @@ class ArchetypeService {
                     });
                     return;
                 }
+            }
+
+            const finalSliderUrl = uploadedSliderUrl || (typeof slider_img_url === 'string' ? slider_img_url : null);
+            if (is_highlighted) {
+                ArchetypeService.assertCanBeHighlighted(finalSliderUrl || uploadedSliderUrl);
+            }
+            if (is_active) {
+                ArchetypeService.assertCanGoOnline(Array.isArray(cards) ? cards.length : 0);
             }
 
             const result = await sequelize.transaction(async (t) => {
@@ -1015,6 +1088,17 @@ class ArchetypeService {
                         return;
                     }
                 }
+            }
+
+            const nextSliderUrl =
+                uploadedSliderUrl
+                ?? (typeof existingArchetype.slider_img_url === 'string' ? existingArchetype.slider_img_url : null);
+            if (is_highlighted) {
+                ArchetypeService.assertCanBeHighlighted(nextSliderUrl);
+            }
+            if (is_active) {
+                // L'update remplace les cartes BAC : on valide sur le payload final
+                ArchetypeService.assertCanGoOnline(validCards.length);
             }
 
             await sequelize.transaction(async (t) => {
