@@ -454,20 +454,26 @@ class CardService {
 
         const selectedArchetypeId = Number(archetypeId);
 
-        const excludeCardsWithOtherArchetypes = sequelize.literal(`(
+        // Cartes de l'archétype (BAC avec cet archetype_id)
+        // OU cartes hors archétype (aucune liaison BAC vers un archétype)
+        // — ne dépend plus des lignes BAC Unlimited génériques
+        const cardsForDeckBuilder = sequelize.literal(`(
             EXISTS (
                 SELECT 1
                 FROM banlist_archetype_card bac
                 WHERE bac.card_id = "Card"."id"
-                AND (
-                    bac.archetype_id = ${selectedArchetypeId}
-                    OR bac.archetype_id IS NULL
-                    OR bac.archetype_id = 0
-                )
+                AND bac.archetype_id = ${selectedArchetypeId}
+            )
+            OR NOT EXISTS (
+                SELECT 1
+                FROM banlist_archetype_card bac
+                WHERE bac.card_id = "Card"."id"
+                AND bac.archetype_id IS NOT NULL
+                AND bac.archetype_id <> 0
             )
         )`);
 
-        const whereConditions = [excludeCardsWithOtherArchetypes];
+        const whereConditions = [cardsForDeckBuilder];
         // Object.keys ignore les Symboles (ex. Op.or du filtre nom) → utiliser aussi getOwnPropertySymbols
         const hasCardFilters =
             Object.keys(cardWhere).length > 0 ||
@@ -511,12 +517,23 @@ class CardService {
             const cardData = card.toJSON() as Card & { banlist_archetype_cards?: Array<BanlistArchetypeCard & { card_status?: CardStatus }> };
 
             let banlistCard: (BanlistArchetypeCard & { card_status?: CardStatus }) | null = null;
+            const bacArchetypeId = (bac: BanlistArchetypeCard) =>
+                bac.archetype_id == null ? null : Number(bac.archetype_id);
+
+            const isArchetypeCard = !!(
+                cardData.banlist_archetype_cards?.some(
+                    (bac) => bacArchetypeId(bac) === selectedArchetypeId
+                )
+            );
+
             if (cardData.banlist_archetype_cards && cardData.banlist_archetype_cards.length > 0) {
-                banlistCard = cardData.banlist_archetype_cards.find(bac => bac.archetype_id === selectedArchetypeId) || null;
+                banlistCard = cardData.banlist_archetype_cards.find(
+                    (bac) => bacArchetypeId(bac) === selectedArchetypeId
+                ) || null;
 
                 if (!banlistCard) {
                     banlistCard = cardData.banlist_archetype_cards.find(
-                        (bac) => bac.archetype_id === null || bac.archetype_id === 0
+                        (bac) => bacArchetypeId(bac) === null || bacArchetypeId(bac) === 0
                     ) || null;
                 }
             }
@@ -527,8 +544,9 @@ class CardService {
 
             return {
                 ...cardData,
-                card_status: cardStatusData
-            } as Card & { card_status: CardStatus | null; id: string };
+                card_status: cardStatusData,
+                is_archetype_card: isArchetypeCard,
+            } as Card & { card_status: CardStatus | null; is_archetype_card: boolean; id: string };
         });
 
         const localizedData = await CardService.applyLocaleToCardRecords(formattedData, locale);
