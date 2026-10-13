@@ -20,11 +20,13 @@ interface UserAttributes {
     is_banned: boolean;
     has_accepted_terms_and_conditions: boolean;
     locale: string;
+    biography: string | null;
+    loved_archetype_id: number | null;
     created_at?: Date;
     updated_at?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'created_at' | 'updated_at'> { }
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'loved_archetype_id' | 'created_at' | 'updated_at'> { }
 
 interface UserWithRoles extends UserAttributes {
     roles?: Role[];
@@ -43,6 +45,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     declare is_banned: boolean;
     declare has_accepted_terms_and_conditions: boolean;
     declare locale: string;
+    declare biography: string | null;
+    declare loved_archetype_id: number | null;
     declare created_at?: Date;
     declare updated_at?: Date;
 
@@ -142,6 +146,18 @@ User.init({
                 msg: 'Locale must be fr or en'
             }
         }
+    },
+    biography: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    loved_archetype_id: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+        references: {
+            model: 'archetype',
+            key: 'id',
+        },
     },
     created_at: {
         type: DataTypes.DATE,

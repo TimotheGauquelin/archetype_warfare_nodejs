@@ -210,7 +210,7 @@ class UserController {
             const id = getUuidParam(request.params.id);
             const authUser = (request as Request & { user?: { id?: string } }).user;
 
-            if (!authUser?.id || authUser.id !== id) {
+            if (!authUser?.id || String(authUser.id) !== String(id)) {
                 throw new CustomError('Non autorisé', 403);
             }
 
@@ -220,16 +220,48 @@ class UserController {
                 throw new CustomError('Utilisateur non trouvé', 404);
             }
 
-            const { locale } = request.body;
-            const updated = await UserService.updateMyProfile(existingUser, { locale });
+            const { locale, biography, loved_archetype_id } = request.body;
+            const updated = await UserService.updateMyProfile(existingUser, {
+                locale,
+                biography,
+                loved_archetype_id,
+            });
 
             response.status(200).json({
                 success: true,
                 message: 'Profil mis à jour',
-                user: {
-                    id: updated.id,
-                    locale: updated.locale,
-                },
+                user: updated,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async changeMyPassword(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = getUuidParam(request.params.id);
+            const authUser = (request as Request & { user?: { id?: string } }).user;
+
+            if (!authUser?.id || String(authUser.id) !== String(id)) {
+                throw new CustomError('Non autorisé', 403);
+            }
+
+            const existingUser = await User.findByPk(id);
+
+            if (!existingUser) {
+                throw new CustomError('Utilisateur non trouvé', 404);
+            }
+
+            const { currentPassword, password, confirmPassword } = request.body;
+            await UserService.changeMyPassword(existingUser, {
+                currentPassword,
+                password,
+                confirmPassword,
+            });
+
+            response.status(200).json({
+                success: true,
+                message: 'Mot de passe mis à jour avec succès',
             });
         } catch (error) {
             next(error);

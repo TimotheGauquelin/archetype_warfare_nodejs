@@ -20,6 +20,7 @@ router.put('/:id/switchIsActive', (request: Request, response: Response, next: N
 router.put('/:id/switchIsBanned', (request: Request, response: Response, next: NextFunction) => UserController.switchIsBanned(request, response, next));
 router.put('/:id/updateUserByAdmin', (request: Request, response: Response, next: NextFunction) => UserController.updateUserByAdmin(request, response, next));
 router.patch('/:id', authenticateToken, (request: Request, response: Response, next: NextFunction) => UserController.updateMyProfile(request, response, next));
+router.put('/:id/password', authenticateToken, (request: Request, response: Response, next: NextFunction) => UserController.changeMyPassword(request, response, next));
 // DELETE
 router.delete('/:id', (request: Request, response: Response, next: NextFunction) => UserController.deleteUser(request, response, next));
 

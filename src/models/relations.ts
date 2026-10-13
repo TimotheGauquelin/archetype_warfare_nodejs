@@ -84,6 +84,15 @@ Role.belongsToMany(User, {
     as: 'Users'
 });
 
+User.belongsTo(Archetype, {
+    foreignKey: 'loved_archetype_id',
+    as: 'loved_archetype',
+});
+Archetype.hasMany(User, {
+    foreignKey: 'loved_archetype_id',
+    as: 'fans',
+});
+
 // Relations Deck
 Deck.hasMany(DeckCard, {
     foreignKey: 'deck_id',

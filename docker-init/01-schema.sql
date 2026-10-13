@@ -62,12 +62,15 @@ CREATE TABLE IF NOT EXISTS "user" (
     is_banned BOOLEAN NOT NULL DEFAULT FALSE,
     has_accepted_terms_and_conditions BOOLEAN NOT NULL DEFAULT FALSE,
     locale VARCHAR(5) NOT NULL DEFAULT 'fr',
+    biography TEXT NULL,
+    loved_archetype_id BIGINT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT username_length_check CHECK (length(username) >= 3 AND length(username) <= 30),
     CONSTRAINT email_format_check CHECK (
         email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
-    )
+    ),
+    CONSTRAINT fk_user_loved_archetype FOREIGN KEY (loved_archetype_id) REFERENCES archetype (id) ON DELETE SET NULL
 );
 
 ALTER TABLE IF EXISTS "user"

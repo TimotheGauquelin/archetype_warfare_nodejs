@@ -1,4 +1,4 @@
-import { User, Role } from '../models/relations';
+import { User, Role, Archetype } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import { Op, WhereOptions } from 'sequelize';
 import sequelize from '../config/Sequelize';
@@ -80,10 +80,13 @@ class UserService {
         return User.findAll();
     }
 
-    static async getUserById(id: string): Promise<User & { roles: string[] }> {
+    static async getUserById(id: string): Promise<Record<string, unknown>> {
         const user = await User.findOne({
             where: {
                 id: id
+            },
+            attributes: {
+                exclude: ['password', 'reset_password_token'],
             },
             include: [
                 {
@@ -92,7 +95,13 @@ class UserService {
                     through: {
                         attributes: []
                     }
-                }
+                },
+                {
+                    model: Archetype,
+                    as: 'loved_archetype',
+                    attributes: ['id', 'name', 'slug', 'card_img_url', 'is_active'],
+                    required: false,
+                },
             ]
         });
 
@@ -100,10 +109,13 @@ class UserService {
             throw new CustomError('User not found', 404);
         }
 
-        const userData = user.toJSON() as User & { roles: Role[] };
+        const userData = user.toJSON() as User & {
+            roles?: Role[];
+            loved_archetype?: { id: number; name: string } | null;
+        };
         const roles = userData.roles ? userData.roles.map(role => role.label) : [];
 
-        return { ...userData, roles } as User & { roles: string[] };
+        return { ...userData, roles };
     }
 
     static async getUserByResetPassword(token: string): Promise<User> {
@@ -232,8 +244,12 @@ class UserService {
 
     static async updateMyProfile(
         existingUser: User,
-        data: { locale?: string }
-    ): Promise<User> {
+        data: {
+            locale?: string;
+            biography?: string | null;
+            loved_archetype_id?: number | string | null;
+        }
+    ): Promise<Record<string, unknown>> {
         if (data.locale !== undefined) {
             const locale = String(data.locale).trim().toLowerCase();
             if (locale !== 'fr' && locale !== 'en') {
@@ -242,8 +258,70 @@ class UserService {
             existingUser.locale = locale;
         }
 
+        if (data.biography !== undefined) {
+            const biography = data.biography === null ? null : String(data.biography).trim();
+            if (biography && biography.length > 2000) {
+                throw new CustomError('La biographie ne peut pas dépasser 2000 caractères.', 400);
+            }
+            existingUser.biography = biography || null;
+        }
+
+        if (data.loved_archetype_id !== undefined) {
+            if (data.loved_archetype_id === null || data.loved_archetype_id === '') {
+                existingUser.loved_archetype_id = null;
+            } else {
+                const archetypeId = Number(data.loved_archetype_id);
+                if (!Number.isFinite(archetypeId)) {
+                    throw new CustomError('Archétype préféré invalide.', 400);
+                }
+                const archetype = await Archetype.findByPk(archetypeId);
+                if (!archetype) {
+                    throw new CustomError('Archétype introuvable.', 404);
+                }
+                existingUser.loved_archetype_id = archetypeId;
+            }
+        }
+
         await existingUser.save();
-        return existingUser;
+        return this.getUserById(existingUser.id);
+    }
+
+    static async changeMyPassword(
+        existingUser: User,
+        data: {
+            currentPassword?: string;
+            password?: string;
+            confirmPassword?: string;
+        }
+    ): Promise<void> {
+        const { currentPassword, password, confirmPassword } = data;
+
+        if (!currentPassword || !password || !confirmPassword) {
+            throw new CustomError(
+                'Le mot de passe actuel, le nouveau mot de passe et la confirmation sont requis.',
+                400
+            );
+        }
+
+        if (password !== confirmPassword) {
+            throw new CustomError('Les mots de passe ne correspondent pas.', 400);
+        }
+
+        if (password.length < 8) {
+            throw new CustomError('Le nouveau mot de passe doit contenir au moins 8 caractères.', 400);
+        }
+
+        if (!existingUser.password) {
+            throw new CustomError('Aucun mot de passe n\'est défini pour ce compte.', 400);
+        }
+
+        const isValid = await User.validPassword(existingUser.password, currentPassword);
+        if (!isValid) {
+            throw new CustomError('Le mot de passe actuel est incorrect.', 400);
+        }
+
+        existingUser.password = password;
+        await existingUser.save();
     }
 
 
