@@ -338,7 +338,10 @@ class ArchetypeService {
             include,
             limit,
             offset,
-            order: [['name', 'ASC']],
+            order: [
+                ['is_active', 'DESC'],
+                ['name', 'ASC'],
+            ],
             distinct: true
         });
 
