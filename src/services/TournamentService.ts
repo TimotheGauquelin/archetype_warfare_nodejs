@@ -17,6 +17,7 @@ import {
     TournamentPlayerPenalty
 } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
+import DeckService from './DeckService';
 
 import type { RoundStatus } from '../models/TournamentRoundModel';
 import { TournamentStatus } from '../models/TournamentModel';
@@ -799,6 +800,10 @@ class TournamentService {
 
         await ensureNoOverlappingRegistration(userId, tournamentId, tournament);
 
+        if (deckId != null) {
+            await DeckService.assertDeckSelectableForTournament(deckId, userId);
+        }
+
         const tournamentPlayer = await TournamentPlayer.create({ tournament_id: tournamentId, user_id: userId, deck_id: deckId ?? null });
 
         if (deckId != null) {
@@ -861,10 +866,11 @@ class TournamentService {
                 throw new CustomError('Vous n\'êtes pas inscrit à ce tournoi', 404);
             }
 
-            const deck = await Deck.findByPk(deckId, { transaction });
-            if (!deck || deck.user_id !== userId) {
-                throw new CustomError('Deck introuvable ou ne vous appartient pas', 400);
-            }
+            const deck = await DeckService.assertDeckSelectableForTournament(
+                deckId,
+                userId,
+                transaction
+            );
 
             const oldDeckId = tp.deck_id as string | null;
 
@@ -943,16 +949,11 @@ class TournamentService {
                 throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
             }
 
-            const deck = await Deck.findByPk(deckId, { transaction });
-            if (!deck) {
-                throw new CustomError('Deck introuvable', 404);
-            }
-            if (deck.user_id !== tp.user_id) {
-                throw new CustomError('Ce deck n\'appartient pas à ce joueur', 400);
-            }
-            if (!deck.is_playable) {
-                throw new CustomError('Ce deck n\'est pas jouable (40 à 60 cartes requises)', 400);
-            }
+            const deck = await DeckService.assertDeckSelectableForTournament(
+                deckId,
+                tp.user_id,
+                transaction
+            );
 
             const oldDeckId = tp.deck_id as string | null;
 

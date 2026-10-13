@@ -120,21 +120,31 @@ class DeckService {
         return deckJson;
     }
 
+    static isExtraDeckCardType(cardType?: string | null): boolean {
+        const lower = (cardType || '').toLowerCase();
+        return (
+            lower.includes('fusion')
+            || lower.includes('synchro')
+            || lower.includes('link')
+            || lower.includes('xyz')
+        );
+    }
+
     /**
-     * Refuse les cartes liées uniquement à d'autres archétypes que celui du deck.
+     * Cartes liées uniquement à d'autres archétypes que celui du deck.
      */
-    static async assertCardsLegalForArchetype(
+    static async getIllegalCardIdsForArchetype(
         cardIds: string[],
         archetypeId: number | string | null | undefined,
         transaction?: import('sequelize').Transaction
-    ): Promise<void> {
+    ): Promise<string[]> {
         if (archetypeId == null || cardIds.length === 0) {
-            return;
+            return [];
         }
 
         const deckArchetypeId = Number(archetypeId);
         if (Number.isNaN(deckArchetypeId)) {
-            return;
+            return [];
         }
 
         const uniqueIds = [...new Set(cardIds.map(String).filter(Boolean))];
@@ -147,61 +157,243 @@ class DeckService {
                 ],
             },
             attributes: ['card_id', 'archetype_id'],
-            include: [
-                {
-                    model: Archetype,
-                    as: 'archetype',
-                    attributes: ['id', 'name'],
-                    required: false,
-                },
-                {
-                    model: Card,
-                    as: 'card',
-                    attributes: ['id', 'name'],
-                    required: false,
-                },
-            ],
             transaction,
         });
 
-        const linksByCardId = new Map<string, LinkedArchetype[]>();
+        const linksByCardId = new Map<string, number[]>();
         for (const row of bacRows) {
             const archId = row.archetype_id == null ? null : Number(row.archetype_id);
             if (archId == null || archId === 0) {
                 continue;
             }
             const cardId = String(row.card_id);
-            const name =
-                (row as BanlistArchetypeCard & { archetype?: { name?: string } }).archetype?.name
-                ?? `Archetype #${archId}`;
             const list = linksByCardId.get(cardId) ?? [];
-            if (!list.some((a) => a.id === archId)) {
-                list.push({ id: archId, name });
+            if (!list.includes(archId)) {
+                list.push(archId);
             }
             linksByCardId.set(cardId, list);
         }
 
-        const illegalNames: string[] = [];
-        for (const cardId of uniqueIds) {
+        return uniqueIds.filter((cardId) => {
             const linked = linksByCardId.get(cardId) ?? [];
             if (linked.length === 0) {
-                continue;
+                return false;
             }
-            if (linked.some((a) => a.id === deckArchetypeId)) {
-                continue;
-            }
-            const rowForCard = bacRows.find((r) => String(r.card_id) === cardId) as
-                | (BanlistArchetypeCard & { card?: { name?: string } })
-                | undefined;
-            illegalNames.push(rowForCard?.card?.name ?? cardId);
+            return !linked.includes(deckArchetypeId);
+        });
+    }
+
+    static async areCardsLegalForArchetype(
+        cardIds: string[],
+        archetypeId: number | string | null | undefined,
+        transaction?: import('sequelize').Transaction
+    ): Promise<boolean> {
+        const illegal = await DeckService.getIllegalCardIdsForArchetype(
+            cardIds,
+            archetypeId,
+            transaction
+        );
+        return illegal.length === 0;
+    }
+
+    /**
+     * Refuse les cartes liées uniquement à d'autres archétypes que celui du deck.
+     */
+    static async assertCardsLegalForArchetype(
+        cardIds: string[],
+        archetypeId: number | string | null | undefined,
+        transaction?: import('sequelize').Transaction
+    ): Promise<void> {
+        const illegalIds = await DeckService.getIllegalCardIdsForArchetype(
+            cardIds,
+            archetypeId,
+            transaction
+        );
+        if (illegalIds.length === 0) {
+            return;
         }
 
-        if (illegalNames.length > 0) {
+        const cards = await Card.findAll({
+            where: { id: { [Op.in]: illegalIds } },
+            attributes: ['id', 'name'],
+            transaction,
+        });
+        const names = cards.map((card) => card.name || card.id);
+
+        throw new CustomError(
+            `Impossible d'enregistrer le deck : ${illegalIds.length} carte(s) appartiennent à un autre archétype (${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}). Retirez-les avant de sauvegarder.`,
+            400
+        );
+    }
+
+    static async computeIsPlayable(
+        mainDeckCardCount: number,
+        cardIds: string[],
+        archetypeId: number | string | null | undefined,
+        transaction?: import('sequelize').Transaction
+    ): Promise<boolean> {
+        if (mainDeckCardCount < 40 || mainDeckCardCount > 60) {
+            return false;
+        }
+        return DeckService.areCardsLegalForArchetype(cardIds, archetypeId, transaction);
+    }
+
+    /**
+     * Recalcule is_playable pour tous les decks contenant au moins une des cartes données
+     * (ex. après qu'une carte générique soit rattachée à un archétype).
+     */
+    static async recomputePlayabilityForDecksContainingCards(
+        cardIds: string[],
+        transaction?: import('sequelize').Transaction
+    ): Promise<number> {
+        const uniqueIds = [...new Set(cardIds.map(String).filter(Boolean))];
+        if (uniqueIds.length === 0) {
+            return 0;
+        }
+
+        const affectedDeckCards = await DeckCard.findAll({
+            where: { card_id: { [Op.in]: uniqueIds } },
+            attributes: ['deck_id'],
+            transaction,
+        });
+        const deckIds = [...new Set(affectedDeckCards.map((row) => row.deck_id).filter(Boolean))];
+        if (deckIds.length === 0) {
+            return 0;
+        }
+
+        let updated = 0;
+        for (const deckId of deckIds) {
+            const changed = await DeckService.recomputeDeckPlayability(deckId, transaction);
+            if (changed) {
+                updated += 1;
+            }
+        }
+        return updated;
+    }
+
+    static async recomputeDeckPlayability(
+        deckId: string,
+        transaction?: import('sequelize').Transaction
+    ): Promise<boolean> {
+        const deck = await Deck.findByPk(deckId, {
+            include: [
+                {
+                    model: DeckCard,
+                    as: 'deck_cards',
+                    attributes: ['card_id', 'quantity'],
+                    include: [{ model: Card, as: 'card', attributes: ['id', 'card_type'] }],
+                },
+            ],
+            transaction,
+        });
+        if (!deck) {
+            return false;
+        }
+
+        const deckCards = (deck as Deck & {
+            deck_cards?: Array<{ card_id: string; quantity: number; card?: { card_type?: string } }>;
+        }).deck_cards ?? [];
+
+        let mainDeckCardCount = 0;
+        const cardIds: string[] = [];
+        for (const deckCard of deckCards) {
+            const cardId = String(deckCard.card_id);
+            cardIds.push(cardId);
+            if (!DeckService.isExtraDeckCardType(deckCard.card?.card_type)) {
+                mainDeckCardCount += deckCard.quantity || 0;
+            }
+        }
+
+        const is_playable = await DeckService.computeIsPlayable(
+            mainDeckCardCount,
+            cardIds,
+            deck.archetype_id,
+            transaction
+        );
+
+        if (Boolean(deck.is_playable) === is_playable) {
+            return false;
+        }
+
+        await deck.update({ is_playable }, { transaction });
+        return true;
+    }
+
+    /**
+     * Valide qu'un deck peut être sélectionné en tournoi (taille + légalité archétype).
+     */
+    static async assertDeckSelectableForTournament(
+        deckId: string,
+        expectedUserId?: string,
+        transaction?: import('sequelize').Transaction
+    ): Promise<Deck> {
+        const deck = await Deck.findByPk(deckId, {
+            include: [
+                {
+                    model: DeckCard,
+                    as: 'deck_cards',
+                    attributes: ['card_id', 'quantity'],
+                    include: [{ model: Card, as: 'card', attributes: ['id', 'card_type', 'name'] }],
+                },
+                {
+                    model: Archetype,
+                    as: 'archetype',
+                    attributes: ['id', 'name', 'is_active'],
+                    required: false,
+                },
+            ],
+            transaction,
+        });
+
+        if (!deck) {
+            throw new CustomError('Deck introuvable', 404);
+        }
+        if (expectedUserId && deck.user_id !== expectedUserId) {
+            throw new CustomError('Deck introuvable ou ne vous appartient pas', 400);
+        }
+
+        const archetype = (deck as Deck & { archetype?: { is_active?: boolean } | null }).archetype;
+        if (archetype && archetype.is_active === false) {
+            throw new CustomError('Ce deck n\'est pas jouable : son archétype n\'est plus actif', 400);
+        }
+
+        const deckCards = (deck as Deck & {
+            deck_cards?: Array<{ card_id: string; quantity: number; card?: { card_type?: string; name?: string } }>;
+        }).deck_cards ?? [];
+
+        let mainDeckCardCount = 0;
+        const cardIds: string[] = [];
+        for (const deckCard of deckCards) {
+            cardIds.push(String(deckCard.card_id));
+            if (!DeckService.isExtraDeckCardType(deckCard.card?.card_type)) {
+                mainDeckCardCount += deckCard.quantity || 0;
+            }
+        }
+
+        if (mainDeckCardCount < 40 || mainDeckCardCount > 60) {
+            throw new CustomError('Ce deck n\'est pas jouable (40 à 60 cartes requises)', 400);
+        }
+
+        const illegalIds = await DeckService.getIllegalCardIdsForArchetype(
+            cardIds,
+            deck.archetype_id,
+            transaction
+        );
+        if (illegalIds.length > 0) {
+            if (deck.is_playable) {
+                await deck.update({ is_playable: false }, { transaction });
+            }
             throw new CustomError(
-                `Impossible d'enregistrer le deck : ${illegalNames.length} carte(s) appartiennent à un autre archétype (${illegalNames.slice(0, 5).join(', ')}${illegalNames.length > 5 ? '…' : ''}). Retirez-les avant de sauvegarder.`,
+                'Ce deck n\'est pas jouable : il contient des cartes appartenant à un autre archétype. Modifiez le deck avant de le sélectionner.',
                 400
             );
         }
+
+        if (!deck.is_playable) {
+            await deck.update({ is_playable: true }, { transaction });
+        }
+
+        return deck;
     }
 
     static async getAllDecksByUserId(userId: string, isPlayable?: boolean | null, isArchetypeActive?: boolean | null): Promise<Deck[]> {
@@ -213,7 +405,7 @@ class DeckService {
             where['$archetype.is_active$'] = isArchetypeActive;
         }
 
-        return Deck.findAll({
+        const decks = await Deck.findAll({
             where,
             include: [
                 {
@@ -235,6 +427,44 @@ class DeckService {
                 }
             ]
         });
+
+        // Liste "jouables" : revalide la légalité archétype (flags is_playable éventuellement obsolètes)
+        if (isPlayable !== true) {
+            return decks;
+        }
+
+        const playableDecks: Deck[] = [];
+        for (const deck of decks) {
+            const deckCards = (deck as Deck & {
+                deck_cards?: Array<{ card_id: string; quantity: number; card?: { card_type?: string } }>;
+            }).deck_cards ?? [];
+
+            let mainDeckCardCount = 0;
+            const cardIds: string[] = [];
+            for (const deckCard of deckCards) {
+                cardIds.push(String(deckCard.card_id));
+                if (!DeckService.isExtraDeckCardType(deckCard.card?.card_type)) {
+                    mainDeckCardCount += deckCard.quantity || 0;
+                }
+            }
+
+            const stillPlayable = await DeckService.computeIsPlayable(
+                mainDeckCardCount,
+                cardIds,
+                deck.archetype_id
+            );
+
+            if (stillPlayable) {
+                playableDecks.push(deck);
+                continue;
+            }
+
+            if (deck.is_playable) {
+                await deck.update({ is_playable: false });
+            }
+        }
+
+        return playableDecks;
     }
 
     static async getDeckById(id: string): Promise<Record<string, unknown> | null> {
@@ -277,6 +507,7 @@ class DeckService {
             const deckId = deck.id;
 
             let mainDeckCardCount = 0;
+            const createdCardIds: string[] = [];
             if (body.deck_cards && Array.isArray(body.deck_cards) && body.deck_cards.length > 0) {
                 const cardMap = new Map<string, number>();
 
@@ -338,14 +569,7 @@ class DeckService {
 
                 // Compte uniquement les cartes de main deck (exclut Fusion, Synchro, Link, XYZ)
                 for (const card of existingCards) {
-                    const type = (card as any).card_type || '';
-                    const lower = type.toLowerCase();
-                    const isExtraDeckType =
-                        lower.includes('fusion') ||
-                        lower.includes('synchro') ||
-                        lower.includes('link') ||
-                        lower.includes('xyz');
-                    if (!isExtraDeckType) {
+                    if (!DeckService.isExtraDeckCardType((card as Card & { card_type?: string }).card_type)) {
                         const qty = cardMap.get(card.id);
                         if (qty) {
                             mainDeckCardCount += qty;
@@ -354,6 +578,7 @@ class DeckService {
                 }
 
                 for (const [cardId, quantity] of cardMap.entries()) {
+                    createdCardIds.push(cardId);
                     await DeckCard.create({
                         deck_id: deckId,
                         card_id: cardId,
@@ -362,7 +587,12 @@ class DeckService {
                 }
             }
 
-            const is_playable = mainDeckCardCount >= 40 && mainDeckCardCount <= 60;
+            const is_playable = await DeckService.computeIsPlayable(
+                mainDeckCardCount,
+                createdCardIds,
+                body.archetype_id ?? deck.archetype_id,
+                transaction
+            );
             await deck.update({ is_playable }, { transaction });
             if (deck.archetype_id != null) {
                 await Archetype.increment(
@@ -478,14 +708,7 @@ class DeckService {
 
                     // Compte uniquement les cartes de main deck (exclut Fusion, Synchro, Link, XYZ)
                     for (const card of existingCards) {
-                        const type = (card as any).card_type || '';
-                        const lower = type.toLowerCase();
-                        const isExtraDeckType =
-                            lower.includes('fusion') ||
-                            lower.includes('synchro') ||
-                            lower.includes('link') ||
-                            lower.includes('xyz');
-                        if (!isExtraDeckType) {
+                        if (!DeckService.isExtraDeckCardType((card as Card & { card_type?: string }).card_type)) {
                             const qty = newCardMap.get(card.id);
                             if (qty) {
                                 mainDeckCardCount += qty;
@@ -534,7 +757,12 @@ class DeckService {
                         }, { transaction });
                     }
                 }
-                const is_playable = mainDeckCardCount >= 40 && mainDeckCardCount <= 60;
+                const is_playable = await DeckService.computeIsPlayable(
+                    mainDeckCardCount,
+                    Array.from(newCardMap.keys()),
+                    effectiveArchetypeId,
+                    transaction
+                );
                 await Deck.update({ is_playable }, { where: { id }, transaction });
             }
 

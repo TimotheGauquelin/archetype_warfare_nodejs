@@ -8,6 +8,7 @@ import { Request, Response } from 'express';
 import logger from '../utils/logger';
 import { slugify } from '../utils/slugify';
 import CardService from './CardService';
+import DeckService from './DeckService';
 
 type ArchetypeLocale = 'fr' | 'en';
 
@@ -813,6 +814,7 @@ class ArchetypeService {
                         .map((row: { card_id?: string }) => row.card_id)
                         .filter((cardId: string | undefined): cardId is string => Boolean(cardId));
                     await ArchetypeService.removeGenericBanlistEntriesForCards(assignedCardIds, t);
+                    await DeckService.recomputePlayabilityForDecksContainingCards(assignedCardIds, t);
                 }
 
                 const archetypeWithRelations = await Archetype.findByPk(newArchetype.id, {
@@ -1083,10 +1085,9 @@ class ArchetypeService {
                     }));
 
                     await BanlistArchetypeCard.bulkCreate(banlistCardData, { transaction: t });
-                    await ArchetypeService.removeGenericBanlistEntriesForCards(
-                        validCards.map((card) => card.card_id),
-                        t
-                    );
+                    const assignedCardIds = validCards.map((card) => card.card_id);
+                    await ArchetypeService.removeGenericBanlistEntriesForCards(assignedCardIds, t);
+                    await DeckService.recomputePlayabilityForDecksContainingCards(assignedCardIds, t);
                 }
             });
 
