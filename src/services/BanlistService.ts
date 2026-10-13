@@ -25,7 +25,7 @@ class BanlistService {
     }
 
     static async getBanlistById(id: number, showArchetypeCards: boolean = false): Promise<Banlist | null> {
-        return Banlist.findOne({
+        const banlist = await Banlist.findOne({
             where: { id },
             include: [
                 {
@@ -37,7 +37,7 @@ class BanlistService {
                         {
                             model: Card,
                             as: 'card',
-                            attributes: ['id', 'name', 'img_url']
+                            attributes: ['id', 'name', 'img_url', 'level', 'atk', 'def', 'card_type']
                         },
                         {
                             model: CardStatus,
@@ -46,6 +46,22 @@ class BanlistService {
                     ]
                 }]
         });
+
+        if (!banlist || showArchetypeCards) {
+            return banlist;
+        }
+
+        // Filtrer côté service : génériques sans statut Unlimited
+        const banlistJson = banlist.toJSON() as Banlist & {
+            banlist_archetype_cards?: Array<{ card_status?: { label?: string } }>;
+        };
+        const cards = banlistJson.banlist_archetype_cards ?? [];
+        banlistJson.banlist_archetype_cards = cards.filter((card) => {
+            const label = card.card_status?.label?.toLowerCase() ?? '';
+            return label !== 'unlimited';
+        }) as typeof cards;
+
+        return banlistJson as Banlist;
     }
 
     static async getCurrentBanlist(includeArchetypeCards: boolean = true): Promise<Banlist | null> {
@@ -133,13 +149,25 @@ class BanlistService {
             );
 
             if (banlist_archetype_cards && Array.isArray(banlist_archetype_cards) && banlist_archetype_cards.length > 0) {
+                const unlimitedStatus = await CardStatus.findOne({
+                    where: { label: { [Op.iLike]: 'unlimited' } },
+                    attributes: ['id'],
+                    transaction,
+                });
+                const unlimitedId = unlimitedStatus?.id ?? null;
+
                 for (const card of banlist_archetype_cards) {
+                    const archetypeId = card.archetype_id ?? null;
+                    // Pas de ligne générique Unlimited
+                    if (archetypeId == null && unlimitedId != null && Number(card.card_status_id) === Number(unlimitedId)) {
+                        continue;
+                    }
                     await BanlistArchetypeCard.create({
                         banlist_id: banlist.id,
                         card_id: card.card_id,
                         card_status_id: card.card_status_id,
                         explanation_text: card.explanation_text || null,
-                        archetype_id: card.archetype_id || null
+                        archetype_id: archetypeId
                     }, { transaction });
                 }
             }
@@ -158,10 +186,25 @@ class BanlistService {
 
             await databaseBanlist.update(banlistFields, { transaction });
 
+            // Payload vide = supprimer toutes les génériques (archétype_id NULL), garder les cartes d'archétype
             if (!banlist_archetype_cards || banlist_archetype_cards.length === 0) {
+                await BanlistArchetypeCard.destroy({
+                    where: {
+                        banlist_id: banlistId,
+                        archetype_id: null,
+                    },
+                    transaction,
+                });
                 await transaction.commit();
                 return;
             }
+
+            const unlimitedStatus = await CardStatus.findOne({
+                where: { label: { [Op.iLike]: 'unlimited' } },
+                attributes: ['id'],
+                transaction,
+            });
+            const unlimitedId = unlimitedStatus?.id ?? null;
 
             // Normalisation du payload (le front peut envoyer card_status_id en string, et archetype_id null/undefined)
             type NormalizedCardData = {
@@ -177,6 +220,11 @@ class BanlistService {
                 const cardId = rawCard.card_id != null ? String(rawCard.card_id) : '';
                 const cardStatusId = parseInt(String((rawCard as any).card_status_id), 10);
                 const archetypeId = rawCard.archetype_id == null ? null : parseInt(String(rawCard.archetype_id), 10);
+
+                // Ignorer les génériques Unlimited (pas de ligne)
+                if (archetypeId == null && unlimitedId != null && cardStatusId === Number(unlimitedId)) {
+                    continue;
+                }
                 const explanationText = rawCard.explanation_text ?? null;
 
                 if (!cardId) {
