@@ -37,7 +37,7 @@ class DeckService {
             return null;
         }
 
-        const deckJson = deck.toJSON() as Record<string, unknown> & {
+        const deckJson = deck.toJSON() as unknown as Record<string, unknown> & {
             archetype_id?: number | string | null;
             deck_cards?: Array<Record<string, unknown> & {
                 card_id?: string;

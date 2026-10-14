@@ -362,6 +362,22 @@ class CardService {
 
         const result = await Card.findAndCountAll({
             where,
+            attributes: {
+                include: [
+                    [
+                        sequelize.literal(`(
+                            EXISTS (
+                                SELECT 1
+                                FROM banlist_archetype_card bac
+                                WHERE bac.card_id = "Card"."id"
+                                AND bac.archetype_id IS NOT NULL
+                                AND bac.archetype_id <> 0
+                            )
+                        )`),
+                        'is_archetype_card',
+                    ],
+                ],
+            },
             limit,
             offset,
             order: [['name', 'ASC']],
@@ -369,7 +385,20 @@ class CardService {
         });
 
         const localizedRows = await CardService.applyLocaleToCardRecords(
-            result.rows.map((row) => row.toJSON() as Card & { id: string }),
+            result.rows.map((row) => {
+                const json = row.toJSON() as Card & { id: string; is_archetype_card?: boolean | number | string };
+                const rawFlag = json.is_archetype_card;
+                const isArchetypeCard =
+                    rawFlag === true
+                    || rawFlag === 1
+                    || rawFlag === '1'
+                    || rawFlag === 't'
+                    || rawFlag === 'true';
+                return {
+                    ...json,
+                    is_archetype_card: isArchetypeCard,
+                };
+            }),
             locale
         );
 
@@ -378,7 +407,7 @@ class CardService {
         const hasPreviousPage = parseInt(String(page)) > 1;
 
         return {
-            data: localizedRows as Card[],
+            data: localizedRows as unknown as Card[],
             pagination: {
                 total: result.count,
                 totalPages: totalPages,

@@ -30,7 +30,7 @@ class AuthenticateController {
         }
     }
 
-    async discordCallback(request: Request, response: Response, next: NextFunction): Promise<void> {
+    async discordCallback(request: Request, response: Response, _next: NextFunction): Promise<void> {
         try {
             const code = typeof request.query.code === 'string' ? request.query.code : '';
             const stateRaw = typeof request.query.state === 'string' ? request.query.state : '';
