@@ -9,6 +9,13 @@ import { validate } from '../middlewares/validation';
 
 const router = Router();
 
+router.get('/discord', (request: Request, result: Response, next: NextFunction) =>
+    AuthenticateController.discordRedirect(request, result, next)
+);
+router.get('/discord/callback', (request: Request, result: Response, next: NextFunction) =>
+    AuthenticateController.discordCallback(request, result, next)
+);
+
 router.post('/login',
     loginLimiter,
     body('email')

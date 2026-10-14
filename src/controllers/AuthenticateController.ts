@@ -1,13 +1,95 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { User, Role } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import { sendPasswordResetEmail } from '../mailing/sendPasswordResetMail';
 import AuthenticateService from '../services/AuthenticateService';
+import DiscordAuthService from '../services/DiscordAuthService';
 import { generateRandomToken } from '../utils/token';
 import envVars from '../config/envValidation';
 import { getUuidParam } from '../utils/request';
 
 class AuthenticateController {
+    async discordRedirect(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            DiscordAuthService.assertConfigured();
+            const locale = request.query.locale === 'en' ? 'en' : 'fr';
+            const acceptedTerms = request.query.accepted_terms === '1' || request.query.accepted_terms === 'true';
+            const statePayload = Buffer.from(
+                JSON.stringify({
+                    nonce: crypto.randomBytes(16).toString('hex'),
+                    locale,
+                    acceptedTerms,
+                }),
+                'utf8'
+            ).toString('base64url');
+
+            response.redirect(DiscordAuthService.getAuthorizeUrl(statePayload));
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async discordCallback(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const code = typeof request.query.code === 'string' ? request.query.code : '';
+            const stateRaw = typeof request.query.state === 'string' ? request.query.state : '';
+            const oauthError = typeof request.query.error === 'string' ? request.query.error : '';
+
+            const frontCallback = `${envVars.FRONTEND_URL}/login/discord/callback`;
+
+            if (oauthError || !code) {
+                const message = encodeURIComponent(
+                    oauthError === 'access_denied'
+                        ? 'Connexion Discord annulée.'
+                        : 'Connexion Discord impossible.'
+                );
+                response.redirect(`${frontCallback}?error=${message}`);
+                return;
+            }
+
+            let locale = 'fr';
+            let acceptedTerms = false;
+            try {
+                const parsed = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8')) as {
+                    locale?: string;
+                    acceptedTerms?: boolean;
+                };
+                locale = parsed.locale === 'en' ? 'en' : 'fr';
+                acceptedTerms = Boolean(parsed.acceptedTerms);
+            } catch {
+                // state optionnel / invalide
+            }
+
+            const result = await DiscordAuthService.handleOAuthCallback(code, {
+                locale,
+                acceptedTerms,
+            });
+
+            if (result.status === 'authenticated') {
+                response.redirect(`${frontCallback}?token=${encodeURIComponent(result.token)}`);
+                return;
+            }
+
+            if (result.status === 'pending_approval') {
+                response.redirect(
+                    `${frontCallback}?pending=1&message=${encodeURIComponent(result.message)}`
+                );
+                return;
+            }
+
+            response.redirect(
+                `${frontCallback}?error=${encodeURIComponent(result.message)}`
+            );
+        } catch (error) {
+            const frontCallback = `${envVars.FRONTEND_URL}/login/discord/callback`;
+            const message = error instanceof CustomError
+                ? error.message
+                : 'Connexion Discord impossible.';
+            response.redirect(`${frontCallback}?error=${encodeURIComponent(message)}`);
+        }
+    }
+
     async login(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const { email, password } = request.body;

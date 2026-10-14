@@ -42,6 +42,13 @@ interface EnvVars {
     POSTGRES_USER?: string;
     POSTGRES_PASSWORD?: string;
     POSTGRES_DB?: string;
+
+    // Discord OAuth (optional — required only for Discord login)
+    DISCORD_CLIENT_ID?: string;
+    DISCORD_CLIENT_SECRET?: string;
+    DISCORD_REDIRECT_URI?: string;
+    DISCORD_GUILD_ID?: string;
+    DISCORD_BOT_TOKEN?: string;
 }
 
 const envVarsSchema = Joi.object({
@@ -85,6 +92,13 @@ const envVarsSchema = Joi.object({
     POSTGRES_USER: Joi.string().optional(),
     POSTGRES_PASSWORD: Joi.string().optional(),
     POSTGRES_DB: Joi.string().optional(),
+
+    // Discord OAuth
+    DISCORD_CLIENT_ID: Joi.string().optional().allow(''),
+    DISCORD_CLIENT_SECRET: Joi.string().optional().allow(''),
+    DISCORD_REDIRECT_URI: Joi.string().uri().optional().allow(''),
+    DISCORD_GUILD_ID: Joi.string().optional().allow(''),
+    DISCORD_BOT_TOKEN: Joi.string().optional().allow(''),
 }).unknown();
 
 const { value: envVarsRaw, error } = envVarsSchema.validate(process.env, {
