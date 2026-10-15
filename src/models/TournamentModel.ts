@@ -7,7 +7,8 @@ export type TournamentStatus =
     | 'tournament_beginning'
     | 'tournament_in_progress'
     | 'tournament_finished'
-    | 'tournament_cancelled';
+    | 'tournament_cancelled'
+    | 'tournament_did_not_happen';
 
 const TOURNAMENT_STATUSES: TournamentStatus[] = [
     'registration_open',
@@ -15,7 +16,8 @@ const TOURNAMENT_STATUSES: TournamentStatus[] = [
     'tournament_beginning',
     'tournament_in_progress',
     'tournament_finished',
-    'tournament_cancelled'
+    'tournament_cancelled',
+    'tournament_did_not_happen',
 ];
 
 interface TournamentAttributes {

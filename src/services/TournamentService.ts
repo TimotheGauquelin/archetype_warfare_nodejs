@@ -249,7 +249,22 @@ class TournamentService {
      * @param status - The status of the tournaments to get.
      * @returns A promise that resolves to an array of tournaments.
      */
+    static async expireUnstartedPastTournaments(): Promise<number> {
+        const now = new Date();
+        const [affectedCount] = await Tournament.update(
+            { status: 'tournament_did_not_happen' },
+            {
+                where: {
+                    status: { [Op.in]: ['registration_open', 'registration_closed'] },
+                    event_date: { [Op.lt]: now },
+                },
+            }
+        );
+        return affectedCount;
+    }
+
     static async getAllCurrentTournaments(status?: TournamentStatus) {
+        await TournamentService.expireUnstartedPastTournaments();
         const dateFrom = new Date();
         dateFrom.setDate(dateFrom.getDate() - 7);
         dateFrom.setHours(0, 0, 0, 0);
@@ -271,6 +286,7 @@ class TournamentService {
         location?: string;
         is_online?: boolean;
     }) {
+        await TournamentService.expireUnstartedPastTournaments();
         const where: Record<string, unknown> = {};
         if (filters?.name?.trim()) {
             where.name = { [Op.iLike]: `%${filters.name.trim()}%` };
@@ -538,6 +554,7 @@ class TournamentService {
     }
 
     static async getById(id: string, options?: { includePlayers?: boolean }) {
+        await TournamentService.expireUnstartedPastTournaments();
         const includePlayers = options?.includePlayers !== false;
         const include: Array<Record<string, unknown>> = [
             { model: TournamentRound, as: 'rounds', order: [['round_number', 'ASC']], include: [{ model: TournamentMatch, as: 'matches' }] }
