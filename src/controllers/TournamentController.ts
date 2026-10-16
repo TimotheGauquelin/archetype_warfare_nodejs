@@ -7,7 +7,7 @@ import { CustomError } from '../errors/CustomError';
 class TournamentController {
     async create(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const { name, max_number_of_rounds, matches_per_round, until_winner, max_players, location, event_date, event_date_end, is_online } = request.body;
+            const { name, max_number_of_rounds, matches_per_round, match_resolution_mode, until_winner, max_players, location, event_date, event_date_end, is_online } = request.body;
             if (!name || max_number_of_rounds == null || matches_per_round == null) {
                 response.status(400).json({ message: 'name, max_number_of_rounds et matches_per_round sont requis' });
                 return;
@@ -16,10 +16,15 @@ class TournamentController {
                 response.status(400).json({ message: 'matches_per_round doit être 1, 3 ou 5' });
                 return;
             }
+            if (match_resolution_mode != null && match_resolution_mode !== 'strict_wins' && match_resolution_mode !== 'highest_score') {
+                response.status(400).json({ message: 'match_resolution_mode doit être strict_wins ou highest_score' });
+                return;
+            }
             const tournament = await TournamentService.create({
                 name,
                 max_number_of_rounds: Number(max_number_of_rounds),
                 matches_per_round: matches_per_round as 1 | 3 | 5,
+                match_resolution_mode: match_resolution_mode === 'highest_score' ? 'highest_score' : 'strict_wins',
                 until_winner: until_winner === true,
                 require_deck_list: request.body.require_deck_list === true,
                 max_players: max_players != null ? Number(max_players) : null,
@@ -145,11 +150,34 @@ class TournamentController {
     async update(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getUuidParam(request.params.tournamentId);
-            const { name, status, max_number_of_rounds, until_winner, max_players, location, event_date, event_date_end, is_online, allow_penalities } = request.body;
+            const {
+                name,
+                status,
+                max_number_of_rounds,
+                matches_per_round,
+                match_resolution_mode,
+                until_winner,
+                max_players,
+                location,
+                event_date,
+                event_date_end,
+                is_online,
+                allow_penalities,
+            } = request.body;
+            if (match_resolution_mode != null && match_resolution_mode !== 'strict_wins' && match_resolution_mode !== 'highest_score') {
+                response.status(400).json({ message: 'match_resolution_mode doit être strict_wins ou highest_score' });
+                return;
+            }
             const tournament = await TournamentService.update(id, {
                 name,
                 status,
                 max_number_of_rounds,
+                matches_per_round,
+                match_resolution_mode: match_resolution_mode === undefined
+                    ? undefined
+                    : match_resolution_mode === 'highest_score'
+                        ? 'highest_score'
+                        : 'strict_wins',
                 until_winner,
                 require_deck_list: request.body.require_deck_list !== undefined ? request.body.require_deck_list === true : undefined,
                 max_players,

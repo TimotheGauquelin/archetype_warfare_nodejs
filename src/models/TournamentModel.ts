@@ -10,6 +10,8 @@ export type TournamentStatus =
     | 'tournament_cancelled'
     | 'tournament_did_not_happen';
 
+export type MatchResolutionMode = 'strict_wins' | 'highest_score';
+
 const TOURNAMENT_STATUSES: TournamentStatus[] = [
     'registration_open',
     'registration_closed',
@@ -20,11 +22,14 @@ const TOURNAMENT_STATUSES: TournamentStatus[] = [
     'tournament_did_not_happen',
 ];
 
+const MATCH_RESOLUTION_MODES: MatchResolutionMode[] = ['strict_wins', 'highest_score'];
+
 interface TournamentAttributes {
     id: string;
     name: string;
     max_number_of_rounds: number;
     matches_per_round: number;
+    match_resolution_mode: MatchResolutionMode;
     status: TournamentStatus;
     current_round: number;
     until_winner: boolean;
@@ -42,7 +47,7 @@ interface TournamentAttributes {
 interface TournamentCreationAttributes
     extends Optional<
         TournamentAttributes,
-        'id' | 'status' | 'current_round' | 'until_winner' | 'require_deck_list' | 'allow_penalities' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
+        'id' | 'status' | 'current_round' | 'match_resolution_mode' | 'until_winner' | 'require_deck_list' | 'allow_penalities' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
     > {}
 
 class Tournament extends Model<TournamentAttributes, TournamentCreationAttributes> implements TournamentAttributes {
@@ -50,6 +55,7 @@ class Tournament extends Model<TournamentAttributes, TournamentCreationAttribute
     declare name: string;
     declare max_number_of_rounds: number;
     declare matches_per_round: number;
+    declare match_resolution_mode: MatchResolutionMode;
     declare status: TournamentStatus;
     declare current_round: number;
     declare until_winner: boolean;
@@ -83,6 +89,12 @@ Tournament.init(
             type: DataTypes.INTEGER,
             allowNull: false,
             validate: { isIn: [[1, 3, 5]] }
+        },
+        match_resolution_mode: {
+            type: DataTypes.STRING(30),
+            allowNull: false,
+            defaultValue: 'strict_wins',
+            validate: { isIn: [MATCH_RESOLUTION_MODES] }
         },
         status: {
             type: DataTypes.STRING(30),

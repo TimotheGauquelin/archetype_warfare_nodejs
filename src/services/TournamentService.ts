@@ -20,9 +20,19 @@ import { CustomError } from '../errors/CustomError';
 import DeckService from './DeckService';
 
 import type { RoundStatus } from '../models/TournamentRoundModel';
-import { TournamentStatus } from '../models/TournamentModel';
+import { MatchResolutionMode, TournamentStatus } from '../models/TournamentModel';
 import { sendPlayerRemovedFromTournamentMail } from '../mailing/sendPlayerRemovedFromTournamentMail';
 import { sendPlayerAddedToTournamentMail } from '../mailing/sendPlayerAddedToTournamentMail';
+import { getMaxOpponentGamesWon, getWinsNeeded, resolveMatchOutcome } from '../utils/bestOfScore';
+
+const MATCH_RESOLUTION_MODES: MatchResolutionMode[] = ['strict_wins', 'highest_score'];
+
+function parseMatchResolutionMode(value: unknown): MatchResolutionMode {
+    if (typeof value === 'string' && MATCH_RESOLUTION_MODES.includes(value as MatchResolutionMode)) {
+        return value as MatchResolutionMode;
+    }
+    return 'strict_wins';
+}
 
 const REGISTRATION_DEADLINE_HOURS = 48;
 
@@ -76,6 +86,7 @@ interface CreateTournamentData {
     name: string;
     max_number_of_rounds: number;
     matches_per_round: 1 | 3 | 5;
+    match_resolution_mode?: MatchResolutionMode;
     until_winner?: boolean;
     require_deck_list?: boolean;
     max_players?: number | null;
@@ -231,6 +242,7 @@ class TournamentService {
             name: data.name,
             max_number_of_rounds: data.max_number_of_rounds,
             matches_per_round: data.matches_per_round,
+            match_resolution_mode: parseMatchResolutionMode(data.match_resolution_mode),
             until_winner: data.until_winner ?? false,
             require_deck_list: data.require_deck_list ?? false,
             max_players: data.max_players ?? null,
@@ -404,6 +416,7 @@ class TournamentService {
             status: string;
             max_number_of_rounds: number;
             matches_per_round: number;
+            match_resolution_mode?: MatchResolutionMode;
             current_round: number;
             until_winner?: boolean;
             require_deck_list?: boolean;
@@ -438,6 +451,7 @@ class TournamentService {
             status: plain.status,
             max_number_of_rounds: plain.max_number_of_rounds,
             matches_per_round: plain.matches_per_round,
+            match_resolution_mode: parseMatchResolutionMode(plain.match_resolution_mode),
             current_round: plain.current_round,
             until_winner: plain.until_winner ?? false,
             require_deck_list: plain.require_deck_list ?? false,
@@ -608,6 +622,8 @@ class TournamentService {
             name?: string;
             status?: TournamentStatus;
             max_number_of_rounds?: number;
+            matches_per_round?: 1 | 3 | 5;
+            match_resolution_mode?: MatchResolutionMode;
             until_winner?: boolean;
             require_deck_list?: boolean;
             max_players?: number | null;
@@ -623,6 +639,18 @@ class TournamentService {
         if (updates.name != null) t.name = updates.name;
         if (updates.status != null) t.status = updates.status;
         if (updates.max_number_of_rounds !== undefined) t.max_number_of_rounds = updates.max_number_of_rounds;
+        if (updates.matches_per_round !== undefined) {
+            if (![1, 3, 5].includes(Number(updates.matches_per_round))) {
+                throw new CustomError('matches_per_round doit être 1, 3 ou 5', 400);
+            }
+            t.matches_per_round = Number(updates.matches_per_round) as 1 | 3 | 5;
+        }
+        if (updates.match_resolution_mode !== undefined) {
+            if (!MATCH_RESOLUTION_MODES.includes(updates.match_resolution_mode)) {
+                throw new CustomError('match_resolution_mode doit être strict_wins ou highest_score', 400);
+            }
+            t.match_resolution_mode = updates.match_resolution_mode;
+        }
         if (updates.until_winner !== undefined) t.until_winner = updates.until_winner;
         if (updates.require_deck_list !== undefined) t.require_deck_list = updates.require_deck_list;
         if (updates.max_players !== undefined) t.max_players = updates.max_players;
@@ -1144,8 +1172,24 @@ class TournamentService {
             throw new CustomError('Tournoi introuvable', 404);
         }
 
-        if (['tournament_beginning', 'tournament_in_progress', 'tournament_finished', 'tournament_cancelled'].includes(tournament.status)) {
+        if ([
+            'tournament_beginning',
+            'tournament_in_progress',
+            'tournament_finished',
+            'tournament_cancelled',
+            'tournament_did_not_happen',
+        ].includes(tournament.status)) {
             throw new CustomError('Ce tournoi est déjà démarré ou terminé', 400);
+        }
+
+        const now = new Date();
+        // Démarrage anticipé : aligner event_date (et event_date_end) sur maintenant
+        if (tournament.event_date && tournament.event_date.getTime() > now.getTime()) {
+            if (tournament.event_date_end) {
+                const durationMs = tournament.event_date_end.getTime() - tournament.event_date.getTime();
+                tournament.event_date_end = new Date(now.getTime() + Math.max(durationMs, 0));
+            }
+            tournament.event_date = now;
         }
 
         tournament.status = 'tournament_beginning';
@@ -1423,6 +1467,13 @@ class TournamentService {
         tournamentPlayerId: number,
         transaction?: Transaction
     ): Promise<{ match_wins: number; match_losses: number; match_draws: number; games_won: number; games_played: number }> {
+        const tournament = await Tournament.findByPk(tournamentId, {
+            attributes: ['matches_per_round', 'match_resolution_mode'],
+            transaction
+        });
+        const winsNeeded = getWinsNeeded(tournament?.matches_per_round ?? 1);
+        const mode = parseMatchResolutionMode(tournament?.match_resolution_mode);
+
         const matches = await TournamentMatch.findAll({
             where: {
                 tournament_id: tournamentId,
@@ -1443,7 +1494,6 @@ class TournamentService {
             const p1Games = m.player1_games_won ?? 0;
             const p2Games = m.player2_games_won ?? 0;
             const totalGames = p1Games + p2Games;
-            const winnerId = m.winner_tournament_player_id;
             const isP1 = m.player1_tournament_player_id === tournamentPlayerId;
 
             if (m.player2_tournament_player_id == null) {
@@ -1454,13 +1504,21 @@ class TournamentService {
                 }
                 continue;
             }
-            if (winnerId === tournamentPlayerId) {
-                match_wins += 1;
-            } else if (winnerId != null) {
-                match_losses += 1;
-            } else {
+
+            const outcome = resolveMatchOutcome(p1Games, p2Games, winsNeeded, mode);
+            if (outcome === 'p1_win') {
+                if (isP1) match_wins += 1;
+                else match_losses += 1;
+            } else if (outcome === 'p2_win') {
+                if (isP1) match_losses += 1;
+                else match_wins += 1;
+            } else if (outcome === 'draw') {
                 match_draws += 1;
+            } else {
+                // double_loss
+                match_losses += 1;
             }
+
             if (isP1) {
                 games_won += p1Games;
                 games_played += totalGames;
@@ -1559,50 +1617,60 @@ class TournamentService {
             throw new CustomError('Ce match est un bye, aucun résultat à enregistrer', 400);
         }
         const tour = match.get('tournament') as Tournament;
-        const maxGames = tour.matches_per_round;
-        if (
-            data.player1GamesWon < 0 ||
-            data.player1GamesWon > maxGames ||
-            data.player2GamesWon < 0 ||
-            data.player2GamesWon > maxGames
-        ) {
-            throw new CustomError(`Chaque score doit être entre 0 et ${maxGames} (matches_per_round)`, 400);
+        const winsNeeded = getWinsNeeded(tour.matches_per_round);
+        const mode = parseMatchResolutionMode(tour.match_resolution_mode);
+        const p1Score = data.player1GamesWon;
+        const p2Score = data.player2GamesWon;
+
+        if (p1Score < 0 || p2Score < 0 || p1Score > winsNeeded || p2Score > winsNeeded) {
+            throw new CustomError(
+                `Chaque score doit être entre 0 et ${winsNeeded} (best of ${tour.matches_per_round})`,
+                400
+            );
         }
+        if (p2Score > getMaxOpponentGamesWon(p1Score, winsNeeded) || p1Score > getMaxOpponentGamesWon(p2Score, winsNeeded)) {
+            throw new CustomError(
+                `Score invalide pour un best of ${tour.matches_per_round} : si un joueur a ${winsNeeded}, l'autre ne peut pas dépasser ${winsNeeded - 1}`,
+                400
+            );
+        }
+
+        const outcome = resolveMatchOutcome(p1Score, p2Score, winsNeeded, mode);
         const winnerId =
-            data.player1GamesWon > data.player2GamesWon
+            outcome === 'p1_win'
                 ? match.player1_tournament_player_id
-                : data.player2GamesWon > data.player1GamesWon
+                : outcome === 'p2_win'
                     ? match.player2_tournament_player_id
                     : null;
 
         const transaction = await sequelize.transaction();
         try {
-            match.player1_games_won = data.player1GamesWon;
-            match.player2_games_won = data.player2GamesWon;
+            match.player1_games_won = p1Score;
+            match.player2_games_won = p2Score;
             match.winner_tournament_player_id = winnerId;
             match.status = 'completed';
             await match.save({ transaction });
-            const p1 = await TournamentPlayer.findByPk(match.player1_tournament_player_id, { transaction });
-            const p2 = await TournamentPlayer.findByPk(match.player2_tournament_player_id, { transaction });
-            if (!p1 || !p2) throw new CustomError('Joueurs du match introuvables', 500);
+            const player1 = await TournamentPlayer.findByPk(match.player1_tournament_player_id, { transaction });
+            const player2 = await TournamentPlayer.findByPk(match.player2_tournament_player_id, { transaction });
+            if (!player1 || !player2) throw new CustomError('Joueurs du match introuvables', 500);
 
             const tournamentId = tour.id;
             const [stats1, stats2] = await Promise.all([
-                this.recomputePlayerStatsFromMatches(tournamentId, p1.id, transaction),
-                this.recomputePlayerStatsFromMatches(tournamentId, p2.id, transaction)
+                this.recomputePlayerStatsFromMatches(tournamentId, player1.id, transaction),
+                this.recomputePlayerStatsFromMatches(tournamentId, player2.id, transaction)
             ]);
-            p1.match_wins = stats1.match_wins;
-            p1.match_losses = stats1.match_losses;
-            p1.match_draws = stats1.match_draws;
-            p1.games_won = stats1.games_won;
-            p1.games_played = stats1.games_played;
-            p2.match_wins = stats2.match_wins;
-            p2.match_losses = stats2.match_losses;
-            p2.match_draws = stats2.match_draws;
-            p2.games_won = stats2.games_won;
-            p2.games_played = stats2.games_played;
-            await p1.save({ transaction });
-            await p2.save({ transaction });
+            player1.match_wins = stats1.match_wins;
+            player1.match_losses = stats1.match_losses;
+            player1.match_draws = stats1.match_draws;
+            player1.games_won = stats1.games_won;
+            player1.games_played = stats1.games_played;
+            player2.match_wins = stats2.match_wins;
+            player2.match_losses = stats2.match_losses;
+            player2.match_draws = stats2.match_draws;
+            player2.games_won = stats2.games_won;
+            player2.games_played = stats2.games_played;
+            await player1.save({ transaction });
+            await player2.save({ transaction });
             await transaction.commit();
             return TournamentMatch.findByPk(match.id, {
                 include: [
