@@ -438,6 +438,7 @@ class TournamentService {
                     player1_games_won: number;
                     player2_games_won: number;
                     winner_tournament_player_id: number | null;
+                    result_reported_at?: string | Date | null;
                     player1?: { user?: { id: string; username: string } } | null;
                     player2?: { user?: { id: string; username: string } } | null;
                     winner?: { user?: { id: string; username: string } } | null;
@@ -508,6 +509,7 @@ class TournamentService {
                         id: number;
                         round_id: number;
                         status: string;
+                        result_reported_at: string | Date | null;
                         player1: {
                             id: string | null;
                             username: string | null;
@@ -537,6 +539,7 @@ class TournamentService {
                         id: m.id,
                         round_id: m.round_id,
                         status: m.status,
+                        result_reported_at: m.result_reported_at ?? null,
                         player1: p1User
                             ? {
                                 id: p1User.id,
@@ -1300,7 +1303,8 @@ class TournamentService {
                             player1_games_won: 0,
                             player2_games_won: 0,
                             winner_tournament_player_id: byePlayer.id,
-                            status: 'completed'
+                            status: 'completed',
+                            result_reported_at: new Date()
                         },
                         { transaction }
                     );
@@ -1649,6 +1653,7 @@ class TournamentService {
             match.player2_games_won = p2Score;
             match.winner_tournament_player_id = winnerId;
             match.status = 'completed';
+            match.result_reported_at = new Date();
             await match.save({ transaction });
             const player1 = await TournamentPlayer.findByPk(match.player1_tournament_player_id, { transaction });
             const player2 = await TournamentPlayer.findByPk(match.player2_tournament_player_id, { transaction });

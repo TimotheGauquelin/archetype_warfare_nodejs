@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS tournament_match (
     player2_games_won INT NOT NULL DEFAULT 0,
     winner_tournament_player_id INT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+    result_reported_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_tm_round FOREIGN KEY (round_id) REFERENCES tournament_round (id) ON DELETE CASCADE,

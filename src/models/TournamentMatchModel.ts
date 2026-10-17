@@ -13,11 +13,12 @@ interface TournamentMatchAttributes {
     player2_games_won: number;
     winner_tournament_player_id: number | null;
     status: MatchStatus;
+    result_reported_at: Date | null;
     created_at?: Date;
     updated_at?: Date;
 }
 
-interface TournamentMatchCreationAttributes extends Optional<TournamentMatchAttributes, 'id' | 'player2_tournament_player_id' | 'player1_games_won' | 'player2_games_won' | 'winner_tournament_player_id' | 'status' | 'created_at' | 'updated_at'> {}
+interface TournamentMatchCreationAttributes extends Optional<TournamentMatchAttributes, 'id' | 'player2_tournament_player_id' | 'player1_games_won' | 'player2_games_won' | 'winner_tournament_player_id' | 'status' | 'result_reported_at' | 'created_at' | 'updated_at'> {}
 
 class TournamentMatch extends Model<TournamentMatchAttributes, TournamentMatchCreationAttributes> implements TournamentMatchAttributes {
     declare id: number;
@@ -29,6 +30,7 @@ class TournamentMatch extends Model<TournamentMatchAttributes, TournamentMatchCr
     declare player2_games_won: number;
     declare winner_tournament_player_id: number | null;
     declare status: MatchStatus;
+    declare result_reported_at: Date | null;
     declare created_at?: Date;
     declare updated_at?: Date;
 }
@@ -79,6 +81,11 @@ TournamentMatch.init({
         allowNull: false,
         defaultValue: 'pending',
         validate: { isIn: [['pending', 'in_progress', 'completed']] }
+    },
+    result_reported_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null
     },
     created_at: {
         type: DataTypes.DATE,
