@@ -38,6 +38,7 @@ class CardController {
                 atk: body.atk !== undefined ? (body.atk as number | null) : undefined,
                 def: body.def !== undefined ? (body.def as number | null) : undefined,
                 attribute: body.attribute !== undefined ? (body.attribute as string | null) : undefined,
+                type: body.type !== undefined ? (body.type as string | null) : undefined,
                 card_type: body.card_type !== undefined ? (body.card_type as string | null) : undefined,
                 locale: (body.locale as string | undefined) ?? (request.query.locale as string | undefined)
             };

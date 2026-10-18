@@ -10,11 +10,13 @@ interface CardAttributes {
     atk?: number | null;
     def?: number | null;
     attribute?: string | null;
+    /** Race / type de monstre YGO (ex. Warrior, Wyrm) — distinct de card_type. */
+    type?: string | null;
     card_type?: string | null;
     manual_update: boolean;
 }
 
-interface CardCreationAttributes extends Optional<CardAttributes, 'description' | 'img_url' | 'level' | 'atk' | 'def' | 'attribute' | 'card_type' | 'manual_update'> { }
+interface CardCreationAttributes extends Optional<CardAttributes, 'description' | 'img_url' | 'level' | 'atk' | 'def' | 'attribute' | 'type' | 'card_type' | 'manual_update'> { }
 
 /**
  * Card model representing game cards
@@ -28,6 +30,7 @@ class Card extends Model<CardAttributes, CardCreationAttributes> implements Card
     declare atk?: number | null;
     declare def?: number | null;
     declare attribute?: string | null;
+    declare type?: string | null;
     declare card_type?: string | null;
     declare manual_update: boolean;
 }
@@ -64,6 +67,10 @@ Card.init(
         },
         attribute: {
             type: DataTypes.STRING(15),
+            allowNull: true
+        },
+        type: {
+            type: DataTypes.STRING(30),
             allowNull: true
         },
         card_type: {

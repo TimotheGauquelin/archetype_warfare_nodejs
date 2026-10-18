@@ -47,6 +47,7 @@ interface CardData {
     atk?: number;
     def?: number;
     attribute?: string;
+    type?: string;
     card_type?: string;
     translations?: CardTranslationInput[];
 }
@@ -60,6 +61,7 @@ export interface CardUpdateData {
     atk?: number | null;
     def?: number | null;
     attribute?: string | null;
+    type?: string | null;
     card_type?: string | null;
     locale?: string;
 }
@@ -133,10 +135,6 @@ class CardService {
         });
     }
 
-    /**
-     * Recherche texte sur le nom et/ou la description
-     * (table `card` + traduction de la locale demandée).
-     */
     static buildNameSearchWhere(name: string, locale?: string | null): WhereOptions {
         const normalizedLocale = CardService.normalizeLocale(locale);
         const pattern = `%${name}%`;
@@ -270,6 +268,9 @@ class CardService {
         const updates: Record<string, unknown> = { manual_update: true };
         for (const [key, value] of Object.entries(scalarFields)) {
             if (value !== undefined) updates[key] = value;
+        }
+        if (typeof updates.attribute === 'string') {
+            updates.attribute = updates.attribute.toLowerCase();
         }
 
         if (locale === 'en') {
@@ -641,7 +642,10 @@ class CardService {
                     level: cardData.level ?? null,
                     atk: cardData.atk ?? null,
                     def: cardData.def ?? null,
-                    attribute: cardData.attribute ?? null,
+                    attribute: cardData.attribute
+                        ? String(cardData.attribute).toLowerCase()
+                        : null,
+                    type: cardData.type ?? null,
                     card_type: cardData.card_type ?? null
                 };
 
