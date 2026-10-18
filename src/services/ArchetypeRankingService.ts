@@ -1,7 +1,6 @@
 import {
     Tournament,
     TournamentPlayer,
-    Deck,
     User,
     Archetype,
     TournamentPlayerDeck
@@ -38,6 +37,7 @@ class ArchetypeRankingService {
     /**
      * Détermine le vainqueur d'un tournoi terminé (suisse) : joueur avec le plus de match_wins,
      * puis games_won en cas d'égalité.
+     * L'archétype ne vient que du snapshot de decklist (pas du deck live).
      */
     static async getTournamentWinner(tournamentId: string): Promise<TournamentWinnerResult | null> {
         const tournament = await Tournament.findByPk(tournamentId);
@@ -54,13 +54,6 @@ class ArchetypeRankingService {
             include: [
                 { model: User, as: 'user', attributes: ['id', 'username'] },
                 {
-                    model: Deck,
-                    as: 'deck',
-                    attributes: ['id', 'archetype_id'],
-                    required: false,
-                    include: [{ model: Archetype, as: 'archetype', attributes: ['id', 'name'], required: false }]
-                },
-                {
                     model: TournamentPlayerDeck,
                     as: 'deck_snapshot',
                     attributes: ['id', 'archetype_id'],
@@ -74,9 +67,8 @@ class ArchetypeRankingService {
         if (!winner) return null;
 
         const deckSnapshot = winner.get('deck_snapshot') as (TournamentPlayerDeck & { archetype?: Archetype }) | null;
-        const deck = winner.get('deck') as (Deck & { archetype?: Archetype }) | null;
-        const archetype = deckSnapshot?.archetype ?? deck?.archetype ?? null;
-        const archetypeId = deckSnapshot?.archetype_id ?? deck?.archetype_id ?? null;
+        const archetype = deckSnapshot?.archetype ?? null;
+        const archetypeId = deckSnapshot?.archetype_id ?? null;
         const user = winner.get('user') as User | null;
 
         return {
@@ -91,10 +83,14 @@ class ArchetypeRankingService {
 
     /**
      * Construit la map (archetypeId -> userId -> nombre de victoires en tournoi).
+     * Uniquement les tournois terminés avec decklist obligatoire (snapshot fiable).
      */
     private static async computeWinsByArchetypeAndUser(): Promise<Map<number, Map<string, number>>> {
         const tournaments = await Tournament.findAll({
-            where: { status: 'tournament_finished' },
+            where: {
+                status: 'tournament_finished',
+                require_deck_list: true,
+            },
             attributes: ['id']
         });
 
