@@ -133,19 +133,29 @@ class CardService {
         });
     }
 
+    /**
+     * Recherche texte sur le nom et/ou la description
+     * (table `card` + traduction de la locale demandée).
+     */
     static buildNameSearchWhere(name: string, locale?: string | null): WhereOptions {
         const normalizedLocale = CardService.normalizeLocale(locale);
         const pattern = `%${name}%`;
+        const escapedPattern = sequelize.escape(pattern);
+        const escapedLocale = sequelize.escape(normalizedLocale);
 
         return {
             [Op.or]: [
                 { name: { [Op.iLike]: pattern } },
+                { description: { [Op.iLike]: pattern } },
                 sequelize.literal(`EXISTS (
                     SELECT 1
                     FROM card_translation ct
                     WHERE ct.card_id = "Card"."id"
-                      AND ct.locale = ${sequelize.escape(normalizedLocale)}
-                      AND ct.name ILIKE ${sequelize.escape(pattern)}
+                      AND ct.locale = ${escapedLocale}
+                      AND (
+                        ct.name ILIKE ${escapedPattern}
+                        OR COALESCE(ct.description, '') ILIKE ${escapedPattern}
+                      )
                 )`),
             ],
         };
