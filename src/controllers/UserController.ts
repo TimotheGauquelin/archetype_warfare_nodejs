@@ -220,10 +220,11 @@ class UserController {
                 throw new CustomError('Utilisateur non trouvé', 404);
             }
 
-            const { locale, biography, loved_archetype_id } = request.body;
+            const { locale, biography, country, loved_archetype_id } = request.body;
             const updated = await UserService.updateMyProfile(existingUser, {
                 locale,
                 biography,
+                country,
                 loved_archetype_id,
             });
 

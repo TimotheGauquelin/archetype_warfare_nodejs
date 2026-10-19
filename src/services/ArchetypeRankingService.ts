@@ -18,6 +18,7 @@ export interface TournamentWinnerResult {
 export interface PlayerRankingEntry {
     userId: string;
     username: string | null;
+    country: string | null;
     tournamentWins: number;
 }
 
@@ -126,14 +127,19 @@ class ArchetypeRankingService {
         const userIds = [...userWins.keys()];
         const users = await User.findAll({
             where: { id: userIds },
-            attributes: ['id', 'username']
+            attributes: ['id', 'username', 'country']
         });
         const userMap = new Map(users.map(u => [u.id, u]));
 
         const rankings: PlayerRankingEntry[] = [...userWins.entries()]
             .map(([userId, tournamentWins]) => {
                 const user = userMap.get(userId);
-                return { userId, username: user?.username ?? null, tournamentWins };
+                return {
+                    userId,
+                    username: user?.username ?? null,
+                    country: user?.country ?? null,
+                    tournamentWins,
+                };
             })
             .sort((a, b) => b.tournamentWins - a.tournamentWins);
 
@@ -158,7 +164,7 @@ class ArchetypeRankingService {
         winsByArchetypeAndUser.forEach(userMap => userMap.forEach((_, userId) => allUserIds.add(userId)));
         const users = await User.findAll({
             where: { id: [...allUserIds] },
-            attributes: ['id', 'username']
+            attributes: ['id', 'username', 'country']
         });
         const userMap = new Map(users.map(u => [u.id, u]));
 
@@ -176,6 +182,7 @@ class ArchetypeRankingService {
                 master: {
                     userId: top[0],
                     username: user?.username ?? null,
+                    country: user?.country ?? null,
                     tournamentWins: top[1]
                 }
             });

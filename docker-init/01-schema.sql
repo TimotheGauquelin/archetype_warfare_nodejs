@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     has_accepted_terms_and_conditions BOOLEAN NOT NULL DEFAULT FALSE,
     locale VARCHAR(5) NOT NULL DEFAULT 'fr',
     biography TEXT NULL,
+    country VARCHAR(2) NULL,
     loved_archetype_id BIGINT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -75,6 +76,9 @@ CREATE TABLE IF NOT EXISTS "user" (
 
 ALTER TABLE IF EXISTS "user"
     ADD COLUMN IF NOT EXISTS locale VARCHAR(5) NOT NULL DEFAULT 'fr';
+
+ALTER TABLE IF EXISTS "user"
+    ADD COLUMN IF NOT EXISTS country VARCHAR(2) NULL;
 
 CREATE TABLE IF NOT EXISTS user_role (
     user_id UUID NOT NULL,

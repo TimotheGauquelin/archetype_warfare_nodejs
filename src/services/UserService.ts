@@ -247,6 +247,7 @@ class UserService {
         data: {
             locale?: string;
             biography?: string | null;
+            country?: string | null;
             loved_archetype_id?: number | string | null;
         }
     ): Promise<Record<string, unknown>> {
@@ -264,6 +265,18 @@ class UserService {
                 throw new CustomError('La biographie ne peut pas dépasser 2000 caractères.', 400);
             }
             existingUser.biography = biography || null;
+        }
+
+        if (data.country !== undefined) {
+            if (data.country === null || data.country === '') {
+                existingUser.country = null;
+            } else {
+                const country = String(data.country).trim().toUpperCase();
+                if (!/^[A-Z]{2}$/.test(country)) {
+                    throw new CustomError('Le pays doit être un code ISO 3166-1 alpha-2 (ex. FR).', 400);
+                }
+                existingUser.country = country;
+            }
         }
 
         if (data.loved_archetype_id !== undefined) {

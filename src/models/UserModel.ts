@@ -21,6 +21,7 @@ interface UserAttributes {
     has_accepted_terms_and_conditions: boolean;
     locale: string;
     biography: string | null;
+    country: string | null;
     loved_archetype_id: number | null;
     discord_id: string | null;
     auth_provider: string;
@@ -28,7 +29,7 @@ interface UserAttributes {
     updated_at?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'loved_archetype_id' | 'discord_id' | 'auth_provider' | 'created_at' | 'updated_at'> { }
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'country' | 'loved_archetype_id' | 'discord_id' | 'auth_provider' | 'created_at' | 'updated_at'> { }
 
 interface UserWithRoles extends UserAttributes {
     roles?: Role[];
@@ -48,6 +49,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     declare has_accepted_terms_and_conditions: boolean;
     declare locale: string;
     declare biography: string | null;
+    declare country: string | null;
     declare loved_archetype_id: number | null;
     declare discord_id: string | null;
     declare auth_provider: string;
@@ -154,6 +156,16 @@ User.init({
     biography: {
         type: DataTypes.TEXT,
         allowNull: true,
+    },
+    country: {
+        type: DataTypes.STRING(2),
+        allowNull: true,
+        validate: {
+            is: {
+                args: /^[A-Z]{2}$/,
+                msg: 'Country must be an ISO 3166-1 alpha-2 code',
+            },
+        },
     },
     loved_archetype_id: {
         type: DataTypes.BIGINT,
