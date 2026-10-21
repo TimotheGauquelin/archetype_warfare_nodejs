@@ -51,7 +51,10 @@ INSERT INTO type (id, label) VALUES
 ('19', 'psychic'),
 ('20', 'wyrm'),
 ('21', 'cyberse'),
-('22', 'divine-beast');
+('22', 'divine-beast'),
+('23', 'illusion'),
+('24', 'winged-beast'),
+('25', 'zombie');
 
 INSERT INTO role (id, label) VALUES
 ('1', 'Admin'),

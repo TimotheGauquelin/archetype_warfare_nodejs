@@ -6,6 +6,7 @@ interface CardAttributes {
     name: string;
     description?: string | null;
     img_url?: string | null;
+    artwork_url?: string | null;
     level?: number | null;
     atk?: number | null;
     def?: number | null;
@@ -16,7 +17,7 @@ interface CardAttributes {
     manual_update: boolean;
 }
 
-interface CardCreationAttributes extends Optional<CardAttributes, 'description' | 'img_url' | 'level' | 'atk' | 'def' | 'attribute' | 'type' | 'card_type' | 'manual_update'> { }
+interface CardCreationAttributes extends Optional<CardAttributes, 'description' | 'img_url' | 'artwork_url' | 'level' | 'atk' | 'def' | 'attribute' | 'type' | 'card_type' | 'manual_update'> { }
 
 /**
  * Card model representing game cards
@@ -26,6 +27,7 @@ class Card extends Model<CardAttributes, CardCreationAttributes> implements Card
     declare name: string;
     declare description?: string | null;
     declare img_url?: string | null;
+    declare artwork_url?: string | null;
     declare level?: number | null;
     declare atk?: number | null;
     declare def?: number | null;
@@ -51,6 +53,10 @@ Card.init(
         },
         img_url: {
             type: DataTypes.STRING(255),
+            allowNull: true
+        },
+        artwork_url: {
+            type: DataTypes.TEXT,
             allowNull: true
         },
         level: {

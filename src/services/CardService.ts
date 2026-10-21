@@ -43,6 +43,7 @@ interface CardData {
     name: string;
     description?: string;
     img_url?: string;
+    artwork_url?: string;
     level?: number;
     atk?: number;
     def?: number;
@@ -57,6 +58,7 @@ export interface CardUpdateData {
     name?: string;
     description?: string | null;
     img_url?: string | null;
+    artwork_url?: string | null;
     level?: number | null;
     atk?: number | null;
     def?: number | null;
@@ -70,6 +72,17 @@ const DEFAULT_BANLIST_ID_FOR_NEW_CARDS = 1;
 const DEFAULT_CARD_STATUS_ID_UNLIMITED = 4;
 
 class CardService {
+    static croppedArtworkUrlFromId(cardId: string): string {
+        return `https://images.ygoprodeck.com/images/cards_cropped/${cardId}.jpg`;
+    }
+
+    static resolveArtworkUrl(cardId: string, artworkUrl?: string | null): string | null {
+        const trimmed = typeof artworkUrl === 'string' ? artworkUrl.trim() : '';
+        if (trimmed) return trimmed;
+        if (cardId) return CardService.croppedArtworkUrlFromId(cardId);
+        return null;
+    }
+
     /**
      * Crée une entrée banlist générique si aucune ligne banlist_archetype_card
      * n'existe encore pour ce card_id (banlist 1, archetype NULL, status unlimited).
@@ -135,25 +148,26 @@ class CardService {
         });
     }
 
+    /**
+     * Recherche sous-chaîne dans le nom uniquement (table card + traduction locale).
+     * Ex. "Poly" → "Polymerization", "Super Polymerization" ; "7" → carte nommée "7".
+     */
     static buildNameSearchWhere(name: string, locale?: string | null): WhereOptions {
         const normalizedLocale = CardService.normalizeLocale(locale);
-        const pattern = `%${name}%`;
+        const needle = String(name).trim();
+        const pattern = `%${needle}%`;
         const escapedPattern = sequelize.escape(pattern);
         const escapedLocale = sequelize.escape(normalizedLocale);
 
         return {
             [Op.or]: [
                 { name: { [Op.iLike]: pattern } },
-                { description: { [Op.iLike]: pattern } },
                 sequelize.literal(`EXISTS (
                     SELECT 1
                     FROM card_translation ct
                     WHERE ct.card_id = "Card"."id"
                       AND ct.locale = ${escapedLocale}
-                      AND (
-                        ct.name ILIKE ${escapedPattern}
-                        OR COALESCE(ct.description, '') ILIKE ${escapedPattern}
-                      )
+                      AND ct.name ILIKE ${escapedPattern}
                 )`),
             ],
         };
@@ -639,6 +653,10 @@ class CardService {
                     name: cardData.name,
                     description: cardData.description ?? null,
                     img_url: cardData.img_url ?? null,
+                    artwork_url: CardService.resolveArtworkUrl(
+                        cardId,
+                        cardData.artwork_url
+                    ),
                     level: cardData.level ?? null,
                     atk: cardData.atk ?? null,
                     def: cardData.def ?? null,

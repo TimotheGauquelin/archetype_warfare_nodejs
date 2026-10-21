@@ -34,6 +34,10 @@ class CardController {
                 name: body.name as string | undefined,
                 description: body.description !== undefined ? (body.description as string | null) : undefined,
                 img_url: body.img_url !== undefined ? (body.img_url as string | null) : undefined,
+                artwork_url:
+                    body.artwork_url !== undefined
+                        ? (body.artwork_url as string | null)
+                        : undefined,
                 level: body.level !== undefined ? (body.level as number | null) : undefined,
                 atk: body.atk !== undefined ? (body.atk as number | null) : undefined,
                 def: body.def !== undefined ? (body.def as number | null) : undefined,
