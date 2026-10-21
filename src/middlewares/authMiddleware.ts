@@ -48,6 +48,32 @@ export const authenticateToken = (req: Request, _res: Response, next: NextFuncti
     }
 };
 
+/** Auth optionnelle : attache req.user si un JWT valide est présent, sinon continue. */
+export const optionalAuthenticateToken = (
+    req: Request,
+    _res: Response,
+    next: NextFunction
+): void => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) {
+        next();
+        return;
+    }
+    try {
+        const decoded = jwt.verify(token, envVars.JWT_SECRET) as DecodedToken;
+        req.user = {
+            id: decoded.id,
+            email: decoded.email,
+            username: decoded.username,
+            roles: decoded.roles,
+        };
+    } catch {
+        // ignore invalid token for optional routes
+    }
+    next();
+};
+
 /**
  * Middleware pour vérifier que l'utilisateur a les rôles requis
  * @param requiredRoles - Tableau des rôles requis

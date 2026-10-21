@@ -25,11 +25,12 @@ interface UserAttributes {
     loved_archetype_id: number | null;
     discord_id: string | null;
     auth_provider: string;
+    quiz_points: number;
     created_at?: Date;
     updated_at?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'country' | 'loved_archetype_id' | 'discord_id' | 'auth_provider' | 'created_at' | 'updated_at'> { }
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'country' | 'loved_archetype_id' | 'discord_id' | 'auth_provider' | 'quiz_points' | 'created_at' | 'updated_at'> { }
 
 interface UserWithRoles extends UserAttributes {
     roles?: Role[];
@@ -53,6 +54,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     declare loved_archetype_id: number | null;
     declare discord_id: string | null;
     declare auth_provider: string;
+    declare quiz_points: number;
     declare created_at?: Date;
     declare updated_at?: Date;
 
@@ -184,6 +186,11 @@ User.init({
         type: DataTypes.STRING(20),
         allowNull: false,
         defaultValue: 'local',
+    },
+    quiz_points: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
     },
     created_at: {
         type: DataTypes.DATE,

@@ -20,6 +20,7 @@ import './models/relations';
 // import { limiter } from './middlewares/rateLimitMiddleware';
 import websiteActionsRoutes from './routes/WebsiteActionsRoute';
 import archetypeRankingRoutes from './routes/ArchetypeRankingRoute';
+import quizRoutes from './routes/QuizRoute';
 import envVars from './config/envValidation';
 import logger from './utils/logger';
 
@@ -60,6 +61,7 @@ apiRouter.use('/decks', deckRoutes);
 apiRouter.use('/tournaments', tournamentRoutes);
 apiRouter.use('/website-actions', websiteActionsRoutes);
 apiRouter.use('/archetype-rankings', archetypeRankingRoutes);
+apiRouter.use('/quizzes', quizRoutes);
 
 // ErrorHandler doit être après toutes les routes
 app.use(ErrorHandler);

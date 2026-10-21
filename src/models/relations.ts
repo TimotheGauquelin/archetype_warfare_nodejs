@@ -26,6 +26,12 @@ import UserRole from './UserRoleModel';
 import WebsiteActions from './WebsiteActionsModel';
 import PenaltyType from './PenaltyTypeModel';
 import TournamentPlayerPenalty from './TournamentPlayerPenaltyModel';
+import QuizTheme from './QuizThemeModel';
+import QuizQuestion from './QuizQuestionModel';
+import QuizDaily from './QuizDailyModel';
+import QuizAttempt from './QuizAttemptModel';
+import QuizAnswer from './QuizAnswerModel';
+import QuizSeason from './QuizSeasonModel';
 
 // Relations User
 User.hasMany(Deck, { foreignKey: 'user_id' });
@@ -71,6 +77,24 @@ TournamentPlayerPenalty.belongsTo(TournamentMatch, { foreignKey: 'tournament_mat
 TournamentMatch.hasMany(TournamentPlayerPenalty, { foreignKey: 'tournament_match_id' });
 TournamentPlayerPenalty.belongsTo(User, { foreignKey: 'applied_by_user_id', as: 'applied_by' });
 User.hasMany(TournamentPlayerPenalty, { foreignKey: 'applied_by_user_id', as: 'applied_penalties' });
+
+// Relations Quizz
+QuizTheme.hasMany(QuizQuestion, { foreignKey: 'theme_id', as: 'questions' });
+QuizQuestion.belongsTo(QuizTheme, { foreignKey: 'theme_id', as: 'theme' });
+QuizTheme.hasMany(QuizDaily, { foreignKey: 'theme_id', as: 'dailies' });
+QuizDaily.belongsTo(QuizTheme, { foreignKey: 'theme_id', as: 'theme' });
+QuizTheme.hasMany(QuizAttempt, { foreignKey: 'theme_id', as: 'attempts' });
+QuizAttempt.belongsTo(QuizTheme, { foreignKey: 'theme_id', as: 'theme' });
+User.hasMany(QuizAttempt, { foreignKey: 'user_id', as: 'quiz_attempts' });
+QuizAttempt.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+QuizAttempt.hasMany(QuizAnswer, { foreignKey: 'attempt_id', as: 'answers' });
+QuizAnswer.belongsTo(QuizAttempt, { foreignKey: 'attempt_id', as: 'attempt' });
+QuizQuestion.hasMany(QuizAnswer, { foreignKey: 'question_id', as: 'answers' });
+QuizAnswer.belongsTo(QuizQuestion, { foreignKey: 'question_id', as: 'question' });
+QuizSeason.hasMany(QuizQuestion, { foreignKey: 'season_id', as: 'questions' });
+QuizQuestion.belongsTo(QuizSeason, { foreignKey: 'season_id', as: 'season' });
+QuizSeason.hasMany(QuizDaily, { foreignKey: 'season_id', as: 'dailies' });
+QuizDaily.belongsTo(QuizSeason, { foreignKey: 'season_id', as: 'season' });
 
 // Relations User-Role (Many-to-Many)
 User.belongsToMany(Role, {
@@ -253,5 +277,11 @@ export {
     TournamentRound,
     TournamentMatch,
     PenaltyType,
-    TournamentPlayerPenalty
+    TournamentPlayerPenalty,
+    QuizTheme,
+    QuizQuestion,
+    QuizDaily,
+    QuizAttempt,
+    QuizAnswer,
+    QuizSeason,
 };
