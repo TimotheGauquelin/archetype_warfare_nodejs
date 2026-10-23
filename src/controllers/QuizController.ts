@@ -124,6 +124,17 @@ class QuizController {
         }
     }
 
+    async getMyStats(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const userId = (request as Request & { user?: { id?: string } }).user?.id;
+            if (!userId) throw new CustomError('Non authentifié', 401);
+            const stats = await QuizService.getMyStats(userId);
+            response.status(200).json(stats);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async listAdminQuestions(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const themeSlug =
@@ -336,6 +347,50 @@ class QuizController {
             }
             const podium = await QuizSeasonService.getSeasonPodium(seasonId);
             response.status(200).json(podium);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async autoFillAdminSeasonSchedule(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const seasonId = Number(request.params.seasonId);
+            if (!Number.isFinite(seasonId)) {
+                throw new CustomError('seasonId invalide', 400);
+            }
+            const dryRun =
+                request.body?.dryRun === true ||
+                request.query.dryRun === 'true';
+            const rawAssignments = request.body?.currentAssignments;
+            let currentAssignments: Record<string, number> | undefined;
+            if (rawAssignments && typeof rawAssignments === 'object') {
+                currentAssignments = {};
+                for (const [day, value] of Object.entries(
+                    rawAssignments as Record<string, unknown>
+                )) {
+                    const id = Number(value);
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(id)) {
+                        currentAssignments[day] = id;
+                    }
+                }
+            }
+            const rawCandidates = request.body?.candidateQuestionIds;
+            let candidateQuestionIds: number[] | undefined;
+            if (Array.isArray(rawCandidates)) {
+                candidateQuestionIds = rawCandidates
+                    .map((v) => Number(v))
+                    .filter((id) => Number.isFinite(id));
+            }
+            const result = await QuizSeasonService.autoFillSeasonSchedule(seasonId, {
+                dryRun,
+                currentAssignments,
+                candidateQuestionIds,
+            });
+            response.status(200).json(result);
         } catch (error) {
             next(error);
         }

@@ -39,6 +39,13 @@ router.get(
     (req: Request, res: Response, next: NextFunction) =>
         QuizController.getAdminSeasonPodium(req, res, next)
 );
+router.post(
+    '/admin/seasons/:seasonId/auto-schedule',
+    authenticateToken,
+    requireRole(['Admin']),
+    (req: Request, res: Response, next: NextFunction) =>
+        QuizController.autoFillAdminSeasonSchedule(req, res, next)
+);
 router.get(
     '/admin/seasons/:seasonId',
     authenticateToken,
@@ -102,6 +109,10 @@ router.delete(
     requireRole(['Admin']),
     (req: Request, res: Response, next: NextFunction) =>
         QuizController.deleteAdminQuestion(req, res, next)
+);
+
+router.get('/me/stats', authenticateToken, (req: Request, res: Response, next: NextFunction) =>
+    QuizController.getMyStats(req, res, next)
 );
 
 router.post('/attempts/free', authenticateToken, (req: Request, res: Response, next: NextFunction) =>

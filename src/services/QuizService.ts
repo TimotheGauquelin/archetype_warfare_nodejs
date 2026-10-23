@@ -2266,6 +2266,62 @@ class QuizService {
         );
         return { updated };
     }
+
+    /**
+     * Stats quiz du joueur : score daily cumulé + perf par type de question (mode de jeu).
+     */
+    static async getMyStats(userId: string): Promise<{
+        quizPoints: number;
+        byType: Array<{
+            type: string;
+            answersCount: number;
+            correctCount: number;
+            points: number;
+            accuracy: number;
+        }>;
+    }> {
+        const user = await User.findByPk(userId, { attributes: ['id', 'quiz_points'] });
+        if (!user) throw new CustomError('Utilisateur introuvable', 404);
+
+        const rows = await sequelize.query<{
+            type: string;
+            answers_count: number;
+            correct_count: number;
+            points: number;
+        }>(
+            `
+            SELECT q.type AS type,
+                   COUNT(*)::int AS answers_count,
+                   SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END)::int AS correct_count,
+                   COALESCE(SUM(a.points_awarded), 0)::int AS points
+            FROM quiz_answer a
+            INNER JOIN quiz_attempt att ON att.id = a.attempt_id
+            INNER JOIN quiz_question q ON q.id = a.question_id
+            WHERE att.user_id = :userId
+            GROUP BY q.type
+            ORDER BY points DESC, answers_count DESC
+            `,
+            { replacements: { userId }, type: QueryTypes.SELECT }
+        );
+
+        return {
+            quizPoints: user.quiz_points ?? 0,
+            byType: rows.map((row) => {
+                const answersCount = Number(row.answers_count) || 0;
+                const correctCount = Number(row.correct_count) || 0;
+                return {
+                    type: row.type,
+                    answersCount,
+                    correctCount,
+                    points: Number(row.points) || 0,
+                    accuracy:
+                        answersCount > 0
+                            ? Math.round((correctCount / answersCount) * 100)
+                            : 0,
+                };
+            }),
+        };
+    }
 }
 
 export default QuizService;
