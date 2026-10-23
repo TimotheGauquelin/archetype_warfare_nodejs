@@ -1,8 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import ArchetypeRankingController from '../controllers/ArchetypeRankingController';
+import { authenticateToken } from '../middlewares/authMiddleware';
 
 const router = Router();
 
+router.get('/me', authenticateToken, (req: Request, res: Response, next: NextFunction) =>
+    ArchetypeRankingController.getMyRankings(req, res, next)
+);
 router.get('/masters', (req: Request, res: Response, next: NextFunction) =>
     ArchetypeRankingController.getAllMasters(req, res, next)
 );

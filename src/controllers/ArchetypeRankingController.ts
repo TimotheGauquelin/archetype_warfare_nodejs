@@ -2,8 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import ArchetypeRankingService from '../services/ArchetypeRankingService';
 import ArchetypeService from '../services/ArchetypeService';
 import { getStringParam, getUuidParam } from '../utils/request';
+import { CustomError } from '../errors/CustomError';
 
 class ArchetypeRankingController {
+    async getMyRankings(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const userId = (request as Request & { user?: { id?: string } }).user?.id;
+            if (!userId) throw new CustomError('Non authentifié', 401);
+            const rankings = await ArchetypeRankingService.getUserArchetypeRankings(userId);
+            response.json(rankings);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getTournamentWinner(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const tournamentId = getUuidParam(request.params.tournamentId);

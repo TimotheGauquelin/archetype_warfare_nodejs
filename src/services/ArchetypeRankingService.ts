@@ -19,7 +19,8 @@ export interface PlayerRankingEntry {
     userId: string;
     username: string | null;
     country: string | null;
-    tournamentWins: number;
+    /** Points cumulés sur les tournois officiels (1er=10, 2e=5, 3e=3, reste=1). */
+    points: number;
 }
 
 export interface ArchetypeRankingResult {
@@ -32,6 +33,13 @@ export interface ArchetypeMasterEntry {
     archetypeId: number;
     archetypeName: string;
     master: PlayerRankingEntry | null;
+}
+
+function placementPoints(rank: number): number {
+    if (rank === 1) return 10;
+    if (rank === 2) return 5;
+    if (rank === 3) return 3;
+    return 1;
 }
 
 class ArchetypeRankingService {
@@ -83,85 +91,173 @@ class ArchetypeRankingService {
     }
 
     /**
-     * Construit la map (archetypeId -> userId -> nombre de victoires en tournoi).
-     * Uniquement les tournois terminés avec decklist obligatoire (snapshot fiable).
+     * Points maîtres : tournois officiels terminés.
+     * Classement global du tournoi → 1er=10, 2e=5, 3e=3, reste=1,
+     * attribués à l'archétype du snapshot de decklist.
      */
-    private static async computeWinsByArchetypeAndUser(): Promise<Map<number, Map<string, number>>> {
+    private static async computePointsByArchetypeAndUser(): Promise<Map<number, Map<string, number>>> {
         const tournaments = await Tournament.findAll({
             where: {
                 status: 'tournament_finished',
-                require_deck_list: true,
+                is_official: true,
             },
             attributes: ['id']
         });
 
-        const winsByArchetypeAndUser = new Map<number, Map<string, number>>();
+        const pointsByArchetypeAndUser = new Map<number, Map<string, number>>();
 
         for (const t of tournaments) {
-            const winner = await this.getTournamentWinner(t.id);
-            if (!winner || winner.archetypeId == null) continue;
+            const players = await TournamentPlayer.findAll({
+                where: { tournament_id: t.id },
+                order: [
+                    ['match_wins', 'DESC'],
+                    ['match_draws', 'DESC'],
+                    ['games_won', 'DESC']
+                ],
+                include: [
+                    {
+                        model: TournamentPlayerDeck,
+                        as: 'deck_snapshot',
+                        attributes: ['archetype_id'],
+                        required: false
+                    }
+                ]
+            });
 
-            if (!winsByArchetypeAndUser.has(winner.archetypeId)) {
-                winsByArchetypeAndUser.set(winner.archetypeId, new Map());
-            }
-            const userWins = winsByArchetypeAndUser.get(winner.archetypeId)!;
-            userWins.set(winner.userId, (userWins.get(winner.userId) ?? 0) + 1);
+            // Rang = classement global du tournoi ; points seulement si snapshot + archétype
+            players.forEach((player, index) => {
+                const deckSnapshot = player.get('deck_snapshot') as TournamentPlayerDeck | null;
+                const archetypeId = deckSnapshot?.archetype_id ?? null;
+                if (archetypeId == null) return;
+
+                const pts = placementPoints(index + 1);
+                if (!pointsByArchetypeAndUser.has(archetypeId)) {
+                    pointsByArchetypeAndUser.set(archetypeId, new Map());
+                }
+                const userPoints = pointsByArchetypeAndUser.get(archetypeId)!;
+                userPoints.set(player.user_id, (userPoints.get(player.user_id) ?? 0) + pts);
+            });
         }
 
-        return winsByArchetypeAndUser;
+        return pointsByArchetypeAndUser;
     }
 
     /**
-     * Classement pour un archétype donné : liste des joueurs avec leur nombre de victoires en tournoi.
+     * Classement pour un archétype donné : joueurs triés par points (tournois officiels).
      */
     static async getArchetypeRanking(archetypeId: number): Promise<ArchetypeRankingResult | null> {
         const archetype = await Archetype.findByPk(archetypeId, { attributes: ['id', 'name'] });
         if (!archetype) return null;
 
-        const winsByArchetypeAndUser = await this.computeWinsByArchetypeAndUser();
-        const userWins = winsByArchetypeAndUser.get(archetypeId);
-        if (!userWins || userWins.size === 0) {
+        const pointsByArchetypeAndUser = await this.computePointsByArchetypeAndUser();
+        const userPoints = pointsByArchetypeAndUser.get(archetypeId);
+        if (!userPoints || userPoints.size === 0) {
             return { archetypeId: archetype.id, archetypeName: archetype.name, rankings: [] };
         }
 
-        const userIds = [...userWins.keys()];
+        const userIds = [...userPoints.keys()];
         const users = await User.findAll({
             where: { id: userIds },
             attributes: ['id', 'username', 'country']
         });
         const userMap = new Map(users.map(u => [u.id, u]));
 
-        const rankings: PlayerRankingEntry[] = [...userWins.entries()]
-            .map(([userId, tournamentWins]) => {
+        const rankings: PlayerRankingEntry[] = [...userPoints.entries()]
+            .map(([userId, points]) => {
                 const user = userMap.get(userId);
                 return {
                     userId,
                     username: user?.username ?? null,
                     country: user?.country ?? null,
-                    tournamentWins,
+                    points,
                 };
             })
-            .sort((a, b) => b.tournamentWins - a.tournamentWins);
+            .sort((a, b) => b.points - a.points);
 
         return { archetypeId: archetype.id, archetypeName: archetype.name, rankings };
     }
 
     /**
-     * Liste des "maîtres" par archétype : pour chaque archétype ayant au moins une victoire,
-     * le joueur en tête (plus de victoires).
+     * Points maîtres de l'utilisateur connecté, par archétype joué en tournoi officiel.
+     */
+    static async getUserArchetypeRankings(userId: string): Promise<{
+        totalPoints: number;
+        archetypes: Array<{
+            archetypeId: number;
+            archetypeName: string;
+            slug: string | null;
+            points: number;
+            rank: number;
+            playersCount: number;
+        }>;
+    }> {
+        const pointsByArchetypeAndUser = await this.computePointsByArchetypeAndUser();
+        const entries: Array<{
+            archetypeId: number;
+            points: number;
+            rank: number;
+            playersCount: number;
+        }> = [];
+
+        for (const [archetypeId, userMap] of pointsByArchetypeAndUser) {
+            const points = userMap.get(userId);
+            if (points == null || points <= 0) continue;
+
+            const sorted = [...userMap.entries()].sort((a, b) => b[1] - a[1]);
+            const rank = sorted.findIndex(([id]) => id === userId) + 1;
+            entries.push({
+                archetypeId,
+                points,
+                rank,
+                playersCount: userMap.size,
+            });
+        }
+
+        if (entries.length === 0) {
+            return { totalPoints: 0, archetypes: [] };
+        }
+
+        const archetypes = await Archetype.findAll({
+            where: { id: entries.map((e) => e.archetypeId) },
+            attributes: ['id', 'name', 'slug'],
+        });
+        const archetypeMap = new Map(archetypes.map((a) => [a.id, a]));
+
+        const result = entries
+            .map((entry) => {
+                const archetype = archetypeMap.get(entry.archetypeId);
+                return {
+                    archetypeId: entry.archetypeId,
+                    archetypeName: archetype?.name ?? `#${entry.archetypeId}`,
+                    slug: archetype?.slug ?? null,
+                    points: entry.points,
+                    rank: entry.rank,
+                    playersCount: entry.playersCount,
+                };
+            })
+            .sort((a, b) => b.points - a.points || a.archetypeName.localeCompare(b.archetypeName));
+
+        return {
+            totalPoints: result.reduce((sum, a) => sum + a.points, 0),
+            archetypes: result,
+        };
+    }
+
+    /**
+     * Liste des "maîtres" par archétype : joueur en tête (plus de points).
      */
     static async getAllMasters(): Promise<ArchetypeMasterEntry[]> {
-        const winsByArchetypeAndUser = await this.computeWinsByArchetypeAndUser();
-        if (winsByArchetypeAndUser.size === 0) return [];
+        const pointsByArchetypeAndUser = await this.computePointsByArchetypeAndUser();
+        if (pointsByArchetypeAndUser.size === 0) return [];
 
-        const archetypeIds = [...winsByArchetypeAndUser.keys()];
+        const archetypeIds = [...pointsByArchetypeAndUser.keys()];
         const archetypes = await Archetype.findAll({
             where: { id: archetypeIds },
             attributes: ['id', 'name']
         });
 
         const allUserIds = new Set<string>();
-        winsByArchetypeAndUser.forEach(userMap => userMap.forEach((_, userId) => allUserIds.add(userId)));
+        pointsByArchetypeAndUser.forEach(userMap => userMap.forEach((_, userId) => allUserIds.add(userId)));
         const users = await User.findAll({
             where: { id: [...allUserIds] },
             attributes: ['id', 'username', 'country']
@@ -171,10 +267,10 @@ class ArchetypeRankingService {
         const result: ArchetypeMasterEntry[] = [];
 
         for (const archetype of archetypes) {
-            const userWins = winsByArchetypeAndUser.get(archetype.id);
-            if (!userWins || userWins.size === 0) continue;
+            const userPoints = pointsByArchetypeAndUser.get(archetype.id);
+            if (!userPoints || userPoints.size === 0) continue;
 
-            const top = [...userWins.entries()].sort((a, b) => b[1] - a[1])[0];
+            const top = [...userPoints.entries()].sort((a, b) => b[1] - a[1])[0];
             const user = userMap.get(top[0]);
             result.push({
                 archetypeId: archetype.id,
@@ -183,7 +279,7 @@ class ArchetypeRankingService {
                     userId: top[0],
                     username: user?.username ?? null,
                     country: user?.country ?? null,
-                    tournamentWins: top[1]
+                    points: top[1]
                 }
             });
         }
