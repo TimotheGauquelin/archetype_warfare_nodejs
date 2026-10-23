@@ -34,6 +34,7 @@ interface TournamentAttributes {
     current_round: number;
     until_winner: boolean;
     require_deck_list: boolean;
+    is_official: boolean;
     allow_penalities: boolean;
     max_players: number | null;
     location: string | null;
@@ -47,7 +48,7 @@ interface TournamentAttributes {
 interface TournamentCreationAttributes
     extends Optional<
         TournamentAttributes,
-        'id' | 'status' | 'current_round' | 'match_resolution_mode' | 'until_winner' | 'require_deck_list' | 'allow_penalities' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
+        'id' | 'status' | 'current_round' | 'match_resolution_mode' | 'until_winner' | 'require_deck_list' | 'is_official' | 'allow_penalities' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
     > {}
 
 class Tournament extends Model<TournamentAttributes, TournamentCreationAttributes> implements TournamentAttributes {
@@ -60,6 +61,7 @@ class Tournament extends Model<TournamentAttributes, TournamentCreationAttribute
     declare current_round: number;
     declare until_winner: boolean;
     declare require_deck_list: boolean;
+    declare is_official: boolean;
     declare allow_penalities: boolean;
     declare max_players: number | null;
     declare location: string | null;
@@ -113,6 +115,11 @@ Tournament.init(
             defaultValue: false
         },
         require_deck_list: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
+        is_official: {
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: false

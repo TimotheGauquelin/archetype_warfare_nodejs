@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS tournament (
     current_round INT NOT NULL DEFAULT 0,
     until_winner BOOLEAN NOT NULL DEFAULT FALSE,
     require_deck_list BOOLEAN NOT NULL DEFAULT FALSE,
+    is_official BOOLEAN NOT NULL DEFAULT FALSE,
     max_players INT NULL,
     location VARCHAR(255) NULL,
     event_date TIMESTAMP NULL,
@@ -348,6 +349,7 @@ CREATE INDEX IF NOT EXISTS idx_tournament_match_tournament ON tournament_match (
 
 ALTER TABLE deck ADD COLUMN IF NOT EXISTS is_playable BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE tournament ADD COLUMN IF NOT EXISTS require_deck_list BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tournament ADD COLUMN IF NOT EXISTS is_official BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE tournament ADD COLUMN IF NOT EXISTS allow_penalities BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_user_email ON "user" (email);

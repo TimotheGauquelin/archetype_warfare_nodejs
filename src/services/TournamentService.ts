@@ -89,6 +89,7 @@ interface CreateTournamentData {
     match_resolution_mode?: MatchResolutionMode;
     until_winner?: boolean;
     require_deck_list?: boolean;
+    is_official?: boolean;
     max_players?: number | null;
     location?: string | null;
     event_date?: Date | string | null;
@@ -245,6 +246,7 @@ class TournamentService {
             match_resolution_mode: parseMatchResolutionMode(data.match_resolution_mode),
             until_winner: data.until_winner ?? false,
             require_deck_list: data.require_deck_list ?? false,
+            is_official: data.is_official ?? false,
             max_players: data.max_players ?? null,
             location: data.location ?? null,
             event_date: data.event_date != null ? new Date(data.event_date) : null,
@@ -420,6 +422,7 @@ class TournamentService {
             current_round: number;
             until_winner?: boolean;
             require_deck_list?: boolean;
+            is_official?: boolean;
             event_date: string | null;
             event_date_end?: string | null;
             location?: string | null;
@@ -456,6 +459,7 @@ class TournamentService {
             current_round: plain.current_round,
             until_winner: plain.until_winner ?? false,
             require_deck_list: plain.require_deck_list ?? false,
+            is_official: plain.is_official ?? false,
             event_date: plain.event_date,
             ...(plain.event_date_end != null && { event_date_end: plain.event_date_end }),
             ...(plain.location != null && { location: plain.location }),
@@ -629,6 +633,7 @@ class TournamentService {
             match_resolution_mode?: MatchResolutionMode;
             until_winner?: boolean;
             require_deck_list?: boolean;
+            is_official?: boolean;
             max_players?: number | null;
             location?: string | null;
             event_date?: Date | string | null;
@@ -656,6 +661,7 @@ class TournamentService {
         }
         if (updates.until_winner !== undefined) t.until_winner = updates.until_winner;
         if (updates.require_deck_list !== undefined) t.require_deck_list = updates.require_deck_list;
+        if (updates.is_official !== undefined) t.is_official = updates.is_official;
         if (updates.max_players !== undefined) t.max_players = updates.max_players;
         if (updates.location !== undefined) t.location = updates.location;
         if (updates.event_date !== undefined) t.event_date = updates.event_date != null ? new Date(updates.event_date) : null;
