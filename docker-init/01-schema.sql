@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS tournament (
     max_number_of_rounds INT NOT NULL CHECK (max_number_of_rounds >= 1),
     matches_per_round INT NOT NULL CHECK (matches_per_round IN (1, 3, 5)),
     match_resolution_mode VARCHAR(30) NOT NULL DEFAULT 'strict_wins' CHECK (match_resolution_mode IN ('strict_wins', 'highest_score')),
-    status VARCHAR(30) NOT NULL DEFAULT 'draft' CHECK (status IN ('registration_open', 'registration_closed', 'tournament_beginning', 'tournament_in_progress', 'tournament_finished', 'tournament_cancelled', 'tournament_did_not_happen')),
+    status VARCHAR(30) NOT NULL DEFAULT 'not_visible' CHECK (status IN ('not_visible', 'registration_open', 'registration_closed', 'tournament_beginning', 'tournament_in_progress', 'tournament_finished', 'tournament_cancelled', 'tournament_did_not_happen')),
     current_round INT NOT NULL DEFAULT 0,
     until_winner BOOLEAN NOT NULL DEFAULT FALSE,
     require_deck_list BOOLEAN NOT NULL DEFAULT FALSE,

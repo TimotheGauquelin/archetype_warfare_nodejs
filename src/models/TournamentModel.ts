@@ -2,6 +2,7 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import sequelize from '../config/Sequelize';
 
 export type TournamentStatus =
+    | 'not_visible'
     | 'registration_open'
     | 'registration_closed'
     | 'tournament_beginning'
@@ -13,6 +14,7 @@ export type TournamentStatus =
 export type MatchResolutionMode = 'strict_wins' | 'highest_score';
 
 const TOURNAMENT_STATUSES: TournamentStatus[] = [
+    'not_visible',
     'registration_open',
     'registration_closed',
     'tournament_beginning',
@@ -101,7 +103,7 @@ Tournament.init(
         status: {
             type: DataTypes.STRING(30),
             allowNull: false,
-            defaultValue: 'registration_closed',
+            defaultValue: 'not_visible',
             validate: { isIn: [TOURNAMENT_STATUSES] }
         },
         current_round: {
