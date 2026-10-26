@@ -178,7 +178,99 @@ class ArchetypeRankingService {
     }
 
     /**
-     * Points maîtres de l'utilisateur connecté, par archétype joué en tournoi officiel.
+     * Historique des tournois officiels terminés pour un utilisateur,
+     * groupé par archétype du snapshot de deck.
+     */
+    private static async getUserOfficialTournamentResultsByArchetype(
+        userId: string
+    ): Promise<
+        Map<
+            number,
+            Array<{
+                tournamentId: string;
+                tournamentName: string;
+                eventDate: string | null;
+                tournamentPlayerId: number;
+                deckLabel: string | null;
+                place: number;
+                playersCount: number;
+                points: number;
+            }>
+        >
+    > {
+        const tournaments = await Tournament.findAll({
+            where: {
+                status: 'tournament_finished',
+                is_official: true,
+            },
+            attributes: ['id', 'name', 'event_date'],
+            order: [['event_date', 'DESC']],
+        });
+
+        const byArchetype = new Map<
+            number,
+            Array<{
+                tournamentId: string;
+                tournamentName: string;
+                eventDate: string | null;
+                tournamentPlayerId: number;
+                deckLabel: string | null;
+                place: number;
+                playersCount: number;
+                points: number;
+            }>
+        >();
+
+        for (const t of tournaments) {
+            const players = await TournamentPlayer.findAll({
+                where: { tournament_id: t.id },
+                order: [
+                    ['match_wins', 'DESC'],
+                    ['match_draws', 'DESC'],
+                    ['games_won', 'DESC'],
+                ],
+                include: [
+                    {
+                        model: TournamentPlayerDeck,
+                        as: 'deck_snapshot',
+                        attributes: ['id', 'label', 'archetype_id'],
+                        required: false,
+                    },
+                ],
+            });
+
+            const playersCount = players.length;
+            players.forEach((player, index) => {
+                if (player.user_id !== userId) return;
+                const deckSnapshot = player.get('deck_snapshot') as TournamentPlayerDeck | null;
+                const archetypeId = deckSnapshot?.archetype_id ?? null;
+                if (archetypeId == null) return;
+
+                const place = index + 1;
+                const entry = {
+                    tournamentId: t.id,
+                    tournamentName: t.name,
+                    eventDate: t.event_date ? t.event_date.toISOString() : null,
+                    tournamentPlayerId: player.id,
+                    deckLabel: deckSnapshot?.label ?? null,
+                    place,
+                    playersCount,
+                    points: placementPoints(place),
+                };
+
+                if (!byArchetype.has(archetypeId)) {
+                    byArchetype.set(archetypeId, []);
+                }
+                byArchetype.get(archetypeId)!.push(entry);
+            });
+        }
+
+        return byArchetype;
+    }
+
+    /**
+     * Points maîtres de l'utilisateur connecté, par archétype joué en tournoi officiel,
+     * avec le détail des tournois (deck snapshot, place, points).
      */
     static async getUserArchetypeRankings(userId: string): Promise<{
         totalPoints: number;
@@ -189,9 +281,23 @@ class ArchetypeRankingService {
             points: number;
             rank: number;
             playersCount: number;
+            tournaments: Array<{
+                tournamentId: string;
+                tournamentName: string;
+                eventDate: string | null;
+                tournamentPlayerId: number;
+                deckLabel: string | null;
+                place: number;
+                playersCount: number;
+                points: number;
+            }>;
         }>;
     }> {
-        const pointsByArchetypeAndUser = await this.computePointsByArchetypeAndUser();
+        const [pointsByArchetypeAndUser, tournamentsByArchetype] = await Promise.all([
+            this.computePointsByArchetypeAndUser(),
+            this.getUserOfficialTournamentResultsByArchetype(userId),
+        ]);
+
         const entries: Array<{
             archetypeId: number;
             points: number;
@@ -233,6 +339,7 @@ class ArchetypeRankingService {
                     points: entry.points,
                     rank: entry.rank,
                     playersCount: entry.playersCount,
+                    tournaments: tournamentsByArchetype.get(entry.archetypeId) ?? [],
                 };
             })
             .sort((a, b) => b.points - a.points || a.archetypeName.localeCompare(b.archetypeName));
