@@ -7,13 +7,17 @@ const router = Router();
 
 // GET
 router.get('/search', (request: Request, response: Response, next: NextFunction) => UserController.searchUsers(request, response, next));
+router.get('/roles', (request: Request, response: Response, next: NextFunction) => UserController.listRoles(request, response, next));
 router.get('/getUserByResetPassword/:token', (request: Request, response: Response, next: NextFunction) => UserController.getUserByResetPassword(request, response, next));
 router.get('/getNewUsers', (request: Request, response: Response, next: NextFunction) => UserController.getNewUsers(request, response, next));
+router.get('/:id/admin/quiz', (request: Request, response: Response, next: NextFunction) => UserController.getUserQuizSummary(request, response, next));
+router.get('/:id/admin/tournaments', (request: Request, response: Response, next: NextFunction) => UserController.getUserTournamentsSummary(request, response, next));
 router.get('/:id', (request: Request, response: Response, next: NextFunction) => UserController.getUserById(request, response, next));
 
 // POST
 router.post('/', usernameRuler, (request: Request, response: Response, next: NextFunction) => UserController.createUser(request, response, next));
 router.post('/admin/create', (request: Request, response: Response, next: NextFunction) => UserController.createUserByAdmin(request, response, next));
+router.post('/:id/admin/send-password-reset', (request: Request, response: Response, next: NextFunction) => UserController.adminSendPasswordReset(request, response, next));
 
 // PUT
 router.put('/:id/switchIsActive', (request: Request, response: Response, next: NextFunction) => UserController.switchIsActive(request, response, next));

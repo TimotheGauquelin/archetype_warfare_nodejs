@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Op } from 'sequelize';
 import { CustomError } from '../errors/CustomError';
 import { sendCreateUserByAdminEmail } from '../mailing/sendCreateUserByAdminMail';
+import { sendPasswordResetEmail } from '../mailing/sendPasswordResetMail';
 import User from '../models/UserModel';
 import UserService from '../services/UserService';
 import { generateRandomToken, hashToken } from '../utils/token';
@@ -11,13 +12,31 @@ import { getStringParam, getUuidParam } from '../utils/request';
 class UserController {
     async searchUsers(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
+            const parseBool = (value: unknown): boolean | undefined => {
+                if (value === 'true' || value === true) return true;
+                if (value === 'false' || value === false) return false;
+                return undefined;
+            };
             const filters = {
-                username: request.query.username as string | undefined,
+                q: (request.query.q as string | undefined)
+                    ?? (request.query.username as string | undefined),
+                is_active: parseBool(request.query.is_active),
+                is_banned: parseBool(request.query.is_banned),
+                role: request.query.role as string | undefined,
                 page: request.query.page ? parseInt(request.query.page as string) : 1,
                 size: request.query.size ? parseInt(request.query.size as string) : 10
             };
             const users = await UserService.searchUsers(filters);
             response.status(200).json(users);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async listRoles(_request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const roles = await UserService.listRoles();
+            response.status(200).json(roles);
         } catch (error) {
             next(error);
         }
@@ -95,7 +114,19 @@ class UserController {
 
     async createUserByAdmin(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const { email, username, roles, termsLink } = request.body;
+            const {
+                email,
+                username,
+                roles,
+                termsLink,
+                password,
+                send_invite_email,
+                is_active,
+                is_banned,
+                biography,
+                country,
+                loved_archetype_id,
+            } = request.body;
 
             if (!email || !username) {
                 throw new CustomError('Le nom d\'utilisateur et l\'adresse e-mail sont obligatoires.', 400);
@@ -103,24 +134,44 @@ class UserController {
 
             await User.emailAlreadyUsed(email);
 
-            const resetToken = generateRandomToken();
+            const hasPassword = typeof password === 'string' && password.trim().length > 0;
+            const shouldSendInvite =
+                send_invite_email === true || (!hasPassword && send_invite_email !== false);
+
+            if (!hasPassword && !shouldSendInvite) {
+                throw new CustomError(
+                    'Fournissez un mot de passe ou activez l\'envoi d\'invitation par email.',
+                    400
+                );
+            }
+
+            const resetToken = shouldSendInvite ? generateRandomToken() : null;
 
             const userPayload = {
                 email,
                 username,
-                is_active: true,
+                password: hasPassword ? String(password).trim() : undefined,
+                is_active: typeof is_active === 'boolean' ? is_active : true,
+                is_banned: typeof is_banned === 'boolean' ? is_banned : false,
                 has_accepted_terms_and_conditions: false,
-                reset_password_token: hashToken(resetToken)
+                reset_password_token: resetToken ? hashToken(resetToken) : null,
+                biography,
+                country,
+                loved_archetype_id,
             };
 
             const createdUser = await UserService.createUserByAdmin(userPayload, roles || []);
 
-            const termsUrl = termsLink || `${envVars.FRONTEND_URL}/terms-and-conditions`;
-            await sendCreateUserByAdminEmail(email, username, resetToken, termsUrl);
+            if (shouldSendInvite && resetToken) {
+                const termsUrl = termsLink || `${envVars.FRONTEND_URL}/terms-and-conditions`;
+                await sendCreateUserByAdminEmail(email, username, resetToken, termsUrl);
+            }
 
             response.status(201).json({
                 success: true,
-                message: 'Utilisateur créé par un administrateur.',
+                message: shouldSendInvite
+                    ? 'Utilisateur créé. Un email d\'invitation a été envoyé.'
+                    : 'Utilisateur créé avec un mot de passe initial.',
                 data: {
                     id: createdUser.id,
                     email: createdUser.email,
@@ -167,10 +218,31 @@ class UserController {
     async updateUserByAdmin(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getUuidParam(request.params.id);
-            const { username, email, roles } = request.body;
+            const {
+                username,
+                email,
+                roles,
+                is_active,
+                is_banned,
+                biography,
+                country,
+                loved_archetype_id,
+                password,
+            } = request.body;
 
-            if (!username && !email && !roles) {
-                throw new CustomError('Au moins un champ (username, email ou roles) doit être fourni', 400);
+            const hasUpdatableField =
+                username !== undefined ||
+                email !== undefined ||
+                roles !== undefined ||
+                typeof is_active === 'boolean' ||
+                typeof is_banned === 'boolean' ||
+                biography !== undefined ||
+                country !== undefined ||
+                loved_archetype_id !== undefined ||
+                (typeof password === 'string' && password.length > 0);
+
+            if (!hasUpdatableField) {
+                throw new CustomError('Au moins un champ doit être fourni', 400);
             }
 
             if (roles && (!Array.isArray(roles) || roles.length < 1)) {
@@ -200,6 +272,55 @@ class UserController {
                 success: true,
                 message: 'Utilisateur mis à jour avec succès',
             });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async adminSendPasswordReset(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = getUuidParam(request.params.id);
+            const userInfo = await UserService.adminSendPasswordReset(id);
+            const user = await User.findByPk(id);
+            if (!user || !user.email) {
+                throw new CustomError('User not found', 404);
+            }
+
+            const resetToken = generateRandomToken();
+            const resetLink = `${envVars.FRONTEND_URL}/password-reset/${resetToken}`;
+            await sendPasswordResetEmail(
+                { id: user.id, email: user.email, locale: user.locale },
+                resetToken,
+                resetLink
+            );
+
+            response.status(200).json({
+                success: true,
+                message: `Email de réinitialisation envoyé à ${userInfo.email}.`,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getUserQuizSummary(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = getUuidParam(request.params.id);
+            const limit = request.query.limit
+                ? parseInt(String(request.query.limit), 10)
+                : 20;
+            const summary = await UserService.getUserQuizSummary(id, limit);
+            response.status(200).json(summary);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getUserTournamentsSummary(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = getUuidParam(request.params.id);
+            const tournaments = await UserService.getUserTournamentsSummary(id);
+            response.status(200).json({ tournaments });
         } catch (error) {
             next(error);
         }
