@@ -28,6 +28,7 @@ class TournamentController {
                 until_winner: until_winner === true,
                 require_deck_list: request.body.require_deck_list === true,
                 is_official: request.body.is_official === true,
+                allow_penalities: request.body.allow_penalities === true,
                 max_players: max_players != null ? Number(max_players) : null,
                 location: location ?? null,
                 event_date: event_date ?? null,
@@ -309,6 +310,25 @@ class TournamentController {
         }
     }
 
+    async adminSetPlayerDropped(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const playerId = getIntParam(request.params.playerId);
+            if (typeof request.body?.dropped !== 'boolean') {
+                response.status(400).json({ message: 'dropped (boolean) est requis dans le body' });
+                return;
+            }
+            const result = await TournamentService.adminSetPlayerDropped(
+                tournamentId,
+                playerId,
+                request.body.dropped
+            );
+            response.status(200).json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async adminSetDeckForTournamentPlayer(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const tournamentId = getUuidParam(request.params.tournamentId);
@@ -388,7 +408,39 @@ class TournamentController {
                 throw new CustomError('Vous devez d\'abord démarrer le tournoi', 400);
             }
 
-            const round = await TournamentService.startNextRound(tournament as Tournament);
+            const rawUpdates = request.body?.playerDropUpdates;
+            let playerDropUpdates: { tournamentPlayerId: number; dropped: boolean }[] | undefined;
+            if (rawUpdates != null) {
+                if (!Array.isArray(rawUpdates)) {
+                    response.status(400).json({
+                        message: 'playerDropUpdates doit être un tableau',
+                    });
+                    return;
+                }
+                playerDropUpdates = [];
+                for (const item of rawUpdates) {
+                    const tournamentPlayerId = Number(item?.tournamentPlayerId);
+                    if (
+                        !Number.isInteger(tournamentPlayerId) ||
+                        tournamentPlayerId < 1 ||
+                        typeof item?.dropped !== 'boolean'
+                    ) {
+                        response.status(400).json({
+                            message:
+                                'Chaque entrée de playerDropUpdates doit avoir tournamentPlayerId (int) et dropped (boolean)',
+                        });
+                        return;
+                    }
+                    playerDropUpdates.push({
+                        tournamentPlayerId,
+                        dropped: item.dropped,
+                    });
+                }
+            }
+
+            const round = await TournamentService.startNextRound(tournament as Tournament, {
+                playerDropUpdates,
+            });
             response.status(201).json(round);
         } catch (error) {
             next(error);
@@ -456,6 +508,19 @@ class TournamentController {
             const tournamentId = getUuidParam(request.params.tournamentId);
             const result = await TournamentService.rollbackLastRound(tournamentId);
             response.status(200).json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async repairCurrentRound(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const round = await TournamentService.repairCurrentRound(tournamentId);
+            response.status(200).json({
+                message: 'Re-pairing effectué avec succès',
+                round,
+            });
         } catch (error) {
             next(error);
         }

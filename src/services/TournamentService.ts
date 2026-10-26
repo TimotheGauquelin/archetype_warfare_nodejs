@@ -90,6 +90,7 @@ interface CreateTournamentData {
     until_winner?: boolean;
     require_deck_list?: boolean;
     is_official?: boolean;
+    allow_penalities?: boolean;
     max_players?: number | null;
     location?: string | null;
     event_date?: Date | string | null;
@@ -111,10 +112,15 @@ interface RecordMatchResultData {
 /** Get the set of tournament_player IDs that have already received a BYE in this tournament
  *  (in rounds strictly before the given round number).
  */
-async function getPlayersWhoHadBye(tournamentId: string, beforeRoundNumber: number): Promise<Set<number>> {
+async function getPlayersWhoHadBye(
+    tournamentId: string,
+    beforeRoundNumber: number,
+    transaction?: Transaction
+): Promise<Set<number>> {
     const rounds = await TournamentRound.findAll({
         where: { tournament_id: tournamentId, round_number: { [Op.lt]: beforeRoundNumber } },
-        attributes: ['id']
+        attributes: ['id'],
+        transaction,
     });
     const roundIds = rounds.map((r) => r.id);
     if (roundIds.length === 0) return new Set();
@@ -125,7 +131,8 @@ async function getPlayersWhoHadBye(tournamentId: string, beforeRoundNumber: numb
             round_id: { [Op.in]: roundIds },
             player2_tournament_player_id: null
         },
-        attributes: ['player1_tournament_player_id']
+        attributes: ['player1_tournament_player_id'],
+        transaction,
     });
     const ids = new Set<number>();
     for (const m of matches) {
@@ -140,10 +147,14 @@ async function getPlayersWhoHadBye(tournamentId: string, beforeRoundNumber: numb
  * @param tournamentId - The ID of the tournament to get the played pairs for.
  * @returns A promise that resolves to a set of strings representing the played pairs.
  */
-async function getPlayedPairs(tournamentId: string): Promise<Set<string>> {
+async function getPlayedPairs(
+    tournamentId: string,
+    transaction?: Transaction
+): Promise<Set<string>> {
     const matches = await TournamentMatch.findAll({
         where: { tournament_id: tournamentId },
-        attributes: ['player1_tournament_player_id', 'player2_tournament_player_id']
+        attributes: ['player1_tournament_player_id', 'player2_tournament_player_id'],
+        transaction,
     });
     const pairs = new Set<string>();
     for (const m of matches) {
@@ -153,6 +164,34 @@ async function getPlayedPairs(tournamentId: string): Promise<Set<string>> {
         pairs.add([Math.min(a, b), Math.max(a, b)].join('-'));
     }
     return pairs;
+}
+
+/** Mélange Fisher–Yates (pour un re-pairing non déterministe). */
+function shuffleInPlace<T>(items: T[]): T[] {
+    for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+}
+
+/** Swiss avec brassage aléatoire au sein des groupes de même score. */
+function swissPairShuffled(
+    players: { id: number; match_wins: number }[],
+    playedPairs: Set<string>
+): [number, number][] {
+    const byWins = new Map<number, { id: number; match_wins: number }[]>();
+    for (const p of players) {
+        const list = byWins.get(p.match_wins) ?? [];
+        list.push(p);
+        byWins.set(p.match_wins, list);
+    }
+    const winsDesc = [...byWins.keys()].sort((a, b) => b - a);
+    const shuffled: { id: number; match_wins: number }[] = [];
+    for (const wins of winsDesc) {
+        shuffled.push(...shuffleInPlace([...(byWins.get(wins) ?? [])]));
+    }
+    return swissPair(shuffled, playedPairs);
 }
 
 /** Check if two players have already played against each other.
@@ -237,8 +276,45 @@ class TournamentService {
      * @param data - The data to create the tournament with.
      * @returns A promise that resolves to the created tournament.
      */
+    private static assertValidEventWindow(
+        eventDate: Date | null,
+        eventDateEnd: Date | null
+    ): void {
+        if (
+            eventDate != null &&
+            eventDateEnd != null &&
+            eventDateEnd.getTime() < eventDate.getTime()
+        ) {
+            throw new CustomError(
+                'La date de fin doit être postérieure ou égale à la date de début',
+                400
+            );
+        }
+    }
+
+    private static startOfLocalDay(date: Date): Date {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
     static async create(data: CreateTournamentData) {
         // Ne jamais passer id : la base (SERIAL) l'auto-incrémente.
+        const event_date =
+            data.event_date != null ? new Date(data.event_date) : null;
+        const event_date_end =
+            data.event_date_end != null ? new Date(data.event_date_end) : null;
+        this.assertValidEventWindow(event_date, event_date_end);
+
+        if (event_date != null) {
+            const today = this.startOfLocalDay(new Date());
+            const startDay = this.startOfLocalDay(event_date);
+            if (startDay.getTime() < today.getTime()) {
+                throw new CustomError(
+                    'La date de début ne peut pas être antérieure à aujourd\'hui',
+                    400
+                );
+            }
+        }
+
         const payload = {
             name: data.name,
             max_number_of_rounds: data.max_number_of_rounds,
@@ -247,12 +323,13 @@ class TournamentService {
             until_winner: data.until_winner ?? false,
             require_deck_list: data.require_deck_list ?? false,
             is_official: data.is_official ?? false,
+            allow_penalities: data.allow_penalities ?? false,
             max_players: data.max_players ?? null,
             location: data.location ?? null,
-            event_date: data.event_date != null ? new Date(data.event_date) : null,
-            event_date_end: data.event_date_end != null ? new Date(data.event_date_end) : null,
+            event_date,
+            event_date_end,
             is_online: data.is_online ?? true,
-            status: 'registration_closed' as const,
+            status: 'not_visible' as const,
             current_round: 0
         };
         return Tournament.create(payload);
@@ -269,7 +346,13 @@ class TournamentService {
             { status: 'tournament_did_not_happen' },
             {
                 where: {
-                    status: { [Op.in]: ['registration_open', 'registration_closed'] },
+                    status: {
+                        [Op.in]: [
+                            'not_visible',
+                            'registration_open',
+                            'registration_closed',
+                        ],
+                    },
                     event_date: { [Op.lt]: now },
                 },
             }
@@ -279,16 +362,15 @@ class TournamentService {
 
     static async getAllCurrentTournaments(status?: TournamentStatus) {
         await TournamentService.expireUnstartedPastTournaments();
-        const dateFrom = new Date();
-        dateFrom.setDate(dateFrom.getDate() - 7);
-        dateFrom.setHours(0, 0, 0, 0);
         const where: Record<string, unknown> = {
-            event_date: { [Op.gte]: dateFrom }
+            // Les tournois « non visibles » restent réservés à l'admin
+            status: status
+                ? status
+                : { [Op.ne]: 'not_visible' },
         };
-        if (status) where.status = status;
         return Tournament.findAll({
             where,
-            order: [['event_date', 'ASC']],
+            order: [['event_date', 'DESC']],
             include: [{ model: TournamentPlayer, as: 'players', attributes: ['id'] }]
         });
     }
@@ -316,7 +398,7 @@ class TournamentService {
         }
         return Tournament.findAll({
             where,
-            order: [['event_date', 'ASC']],
+            order: [['event_date', 'DESC']],
             include: [{ model: TournamentPlayer, as: 'players', attributes: ['id'] }]
         });
     }
@@ -668,6 +750,10 @@ class TournamentService {
         if (updates.event_date_end !== undefined) t.event_date_end = updates.event_date_end != null ? new Date(updates.event_date_end) : null;
         if (updates.is_online !== undefined) t.is_online = updates.is_online;
         if (updates.allow_penalities !== undefined) t.allow_penalities = updates.allow_penalities;
+        this.assertValidEventWindow(
+            t.event_date ? new Date(t.event_date) : null,
+            t.event_date_end ? new Date(t.event_date_end) : null
+        );
         await t.save();
         return t;
     }
@@ -1174,6 +1260,81 @@ class TournamentService {
         await tournamentPlayer.save();
     }
 
+    /**
+     * Admin : drop / undrop un joueur pendant une ronde en cours.
+     * Undrop uniquement tant que la ronde courante est encore en cours.
+     * Un joueur dropped n'est plus inclus dans la prochaine ronde.
+     */
+    static async adminSetPlayerDropped(
+        tournamentId: string,
+        tournamentPlayerId: number,
+        dropped: boolean
+    ) {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+
+        if (
+            tournament.status !== 'tournament_in_progress' &&
+            tournament.status !== 'tournament_beginning'
+        ) {
+            throw new CustomError(
+                'Le drop / undrop n\'est possible que pendant un tournoi démarré',
+                400
+            );
+        }
+
+        if (tournament.current_round < 1) {
+            throw new CustomError('Aucune ronde en cours', 400);
+        }
+
+        const currentRound = await TournamentRound.findOne({
+            where: {
+                tournament_id: tournamentId,
+                round_number: tournament.current_round,
+            },
+        });
+        if (!currentRound || currentRound.status !== 'in_progress') {
+            throw new CustomError(
+                'Le drop / undrop n\'est possible que pendant la ronde courante',
+                400
+            );
+        }
+
+        const tournamentPlayer = await TournamentPlayer.findOne({
+            where: { id: tournamentPlayerId, tournament_id: tournamentId },
+            include: [{ model: User, as: 'user', attributes: ['id', 'username'] }],
+        });
+        if (!tournamentPlayer) {
+            throw new CustomError(
+                'Ce joueur n\'est pas inscrit à ce tournoi',
+                404
+            );
+        }
+
+        if (!dropped && !tournamentPlayer.dropped) {
+            return {
+                message: 'Ce joueur n\'est pas dropped',
+                tournamentPlayer,
+            };
+        }
+
+        tournamentPlayer.dropped = dropped;
+        await tournamentPlayer.save();
+
+        const username =
+            (tournamentPlayer as { user?: { username?: string } }).user
+                ?.username ?? 'Joueur';
+
+        return {
+            message: dropped
+                ? `${username} a été dropped (exclu des prochaines rondes)`
+                : `${username} a été réintégré (undrop)`,
+            tournamentPlayer,
+        };
+    }
+
     static async startTournament(tournamentId: string) {
         const tournament = await Tournament.findByPk(tournamentId);
 
@@ -1210,15 +1371,54 @@ class TournamentService {
     }
 
     /**
+     * Applique des mises à jour drop/undrop avant le passage de ronde.
+     */
+    private static async applyPlayerDropUpdates(
+        tournamentId: string,
+        updates: { tournamentPlayerId: number; dropped: boolean }[]
+    ): Promise<void> {
+        if (!updates.length) return;
+
+        const ids = updates.map((u) => u.tournamentPlayerId);
+        const players = await TournamentPlayer.findAll({
+            where: { tournament_id: tournamentId, id: { [Op.in]: ids } },
+        });
+        const byId = new Map(players.map((p) => [p.id, p]));
+
+        for (const update of updates) {
+            const player = byId.get(update.tournamentPlayerId);
+            if (!player) {
+                throw new CustomError(
+                    `Joueur ${update.tournamentPlayerId} introuvable dans ce tournoi`,
+                    404
+                );
+            }
+            if (player.dropped !== update.dropped) {
+                player.dropped = update.dropped;
+                await player.save();
+            }
+        }
+    }
+
+    /**
      * Start the next round : close the current round if needed, create the new round
      * with Swiss pairings and BYE matches. If it was the last round, finish the tournament.
-     * 
-     * @param tournament - The tournament to start the next round for.
-     * @returns A promise that resolves to the next round.
+     *
+     * Optional playerDropUpdates are applied first (deferred admin drops).
      */
-    static async startNextRound(tournament: Tournament) {
+    static async startNextRound(
+        tournament: Tournament,
+        options?: {
+            playerDropUpdates?: { tournamentPlayerId: number; dropped: boolean }[];
+        }
+    ) {
 
         const tournamentId = tournament.id;
+
+        await this.applyPlayerDropUpdates(
+            tournamentId,
+            options?.playerDropUpdates ?? []
+        );
 
         const nextRoundNum = tournament.current_round + 1;
 
@@ -1469,6 +1669,173 @@ class TournamentService {
                 status: tournament.status
             };
         });
+    }
+
+    /**
+     * Re-génère les appariements de la ronde courante (sans changer de ronde).
+     * Interdit si un match non-BYE a déjà un résultat.
+     */
+    static async repairCurrentRound(tournamentId: string) {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) {
+            throw new CustomError('Tournoi introuvable', 404);
+        }
+        if (
+            tournament.status === 'tournament_finished' ||
+            tournament.status === 'tournament_cancelled' ||
+            tournament.status === 'tournament_did_not_happen'
+        ) {
+            throw new CustomError(
+                'Impossible de re-pairer une ronde sur un tournoi terminé ou annulé',
+                400
+            );
+        }
+
+        const currentRoundNumber = tournament.current_round;
+        if (currentRoundNumber < 1) {
+            throw new CustomError('Aucune ronde en cours à re-pairer', 400);
+        }
+
+        return sequelize.transaction(async (transaction) => {
+            const round = await TournamentRound.findOne({
+                where: {
+                    tournament_id: tournamentId,
+                    round_number: currentRoundNumber,
+                },
+                transaction,
+            });
+            if (!round) {
+                throw new CustomError('Ronde actuelle introuvable', 404);
+            }
+            if (round.status !== 'in_progress') {
+                throw new CustomError(
+                    'Seule une ronde en cours peut être re-pairée',
+                    400
+                );
+            }
+
+            const matches = await TournamentMatch.findAll({
+                where: { round_id: round.id },
+                transaction,
+            });
+
+            const hasReportedNonBye = matches.some(
+                (m) =>
+                    m.player2_tournament_player_id != null &&
+                    m.status === 'completed'
+            );
+            if (hasReportedNonBye) {
+                throw new CustomError(
+                    'Impossible de re-pairer : des résultats ont déjà été saisis pour cette ronde',
+                    400
+                );
+            }
+
+            // Annuler les BYE auto-attribués de cette ronde
+            for (const match of matches) {
+                if (match.player2_tournament_player_id != null) continue;
+                const byePlayerId = match.player1_tournament_player_id;
+                if (byePlayerId == null) continue;
+                const byePlayer = await TournamentPlayer.findByPk(byePlayerId, {
+                    transaction,
+                });
+                if (byePlayer && byePlayer.match_wins > 0) {
+                    byePlayer.match_wins -= 1;
+                    await byePlayer.save({ transaction });
+                }
+            }
+
+            await TournamentMatch.destroy({
+                where: { round_id: round.id },
+                transaction,
+            });
+
+            const players = await TournamentPlayer.findAll({
+                where: { tournament_id: tournamentId, dropped: false },
+                attributes: ['id', 'match_wins'],
+                transaction,
+            });
+            if (players.length < 2) {
+                throw new CustomError(
+                    'Il faut au moins 2 joueurs pour re-pairer une ronde',
+                    400
+                );
+            }
+
+            const playedPairs = await getPlayedPairs(tournamentId, transaction);
+            const pairs = swissPairShuffled(
+                players.map((p) => ({ id: p.id, match_wins: p.match_wins })),
+                playedPairs
+            );
+
+            const playersWhoHadBye = await getPlayersWhoHadBye(
+                tournamentId,
+                currentRoundNumber,
+                transaction
+            );
+            const maxRounds = tournament.max_number_of_rounds;
+            const playerCount = players.length;
+
+            for (const [p1Id, p2Id] of pairs) {
+                await TournamentMatch.create(
+                    {
+                        round_id: round.id,
+                        tournament_id: tournamentId,
+                        player1_tournament_player_id: p1Id,
+                        player2_tournament_player_id: p2Id,
+                        status: 'pending',
+                    },
+                    { transaction }
+                );
+            }
+
+            const pairedIds = new Set(pairs.flatMap(([a, b]) => [a, b]));
+            const unpaired = players.filter((p) => !pairedIds.has(p.id));
+
+            if (unpaired.length > 0) {
+                const preferNoByeYet = unpaired.filter(
+                    (p) => !playersWhoHadBye.has(p.id)
+                );
+                const canReceiveBye =
+                    preferNoByeYet.length > 0
+                        ? preferNoByeYet
+                        : maxRounds > playerCount
+                          ? unpaired
+                          : [];
+
+                if (canReceiveBye.length === 0) {
+                    throw new CustomError(
+                        'Impossible d\'attribuer le BYE : tous les joueurs non appariés en ont déjà eu un, et le nombre de rondes ne permet pas d\'en attribuer un second.',
+                        400
+                    );
+                }
+
+                const byePlayer = await TournamentPlayer.findByPk(
+                    canReceiveBye[0].id,
+                    { transaction }
+                );
+                if (byePlayer) {
+                    await TournamentMatch.create(
+                        {
+                            round_id: round.id,
+                            tournament_id: tournamentId,
+                            player1_tournament_player_id: byePlayer.id,
+                            player2_tournament_player_id: null,
+                            player1_games_won: 0,
+                            player2_games_won: 0,
+                            winner_tournament_player_id: byePlayer.id,
+                            status: 'completed',
+                            result_reported_at: new Date(),
+                        },
+                        { transaction }
+                    );
+                    byePlayer.match_wins += 1;
+                    await byePlayer.save({ transaction });
+                }
+            }
+
+            return round.id;
+        }).then((roundId) => this.getRoundWithMatches(roundId));
     }
 
     /** Recalcule les stats d'un joueur (match_wins, match_losses, match_draws, games_won, games_played) à partir de tous ses matchs complétés dans le tournoi. */

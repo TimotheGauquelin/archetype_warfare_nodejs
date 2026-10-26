@@ -29,10 +29,12 @@ router.post('/:tournamentId/drop', authenticateToken, (req: Request, res: Respon
 router.post('/:tournamentId/players/:userId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.addPlayerToTournament(req, res, next));
 router.put('/:tournamentId/players/:playerId/deck', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.adminSetDeckForTournamentPlayer(req, res, next));
 router.delete('/:tournamentId/players/:playerId/remove', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.removePlayerFromTournament(req, res, next));
+router.put('/:tournamentId/players/:playerId/drop', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.adminSetPlayerDropped(req, res, next));
 
 router.put('/:tournamentId/start', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.startTournament(req, res, next));
 router.put('/:tournamentId/rounds/next', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.startNextRound(req, res, next));
 router.post('/:tournamentId/rounds/complete', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.completeRound(req, res, next));
 router.put('/:tournamentId/rounds/rollback', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.rollbackLastRound(req, res, next));
+router.put('/:tournamentId/rounds/repair', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.repairCurrentRound(req, res, next));
 
 export default router;
