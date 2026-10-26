@@ -773,9 +773,13 @@ class QuizService {
             }>;
         } | null = null;
         if (currentSeason) {
-            seasonPodium = await QuizSeasonService.getSeasonPodium(
+            const fullPodium = await QuizSeasonService.getSeasonPodium(
                 this.toNumberId(currentSeason.id)
             );
+            seasonPodium = {
+                season: fullPodium.season,
+                podium: fullPodium.podium.slice(0, 3),
+            };
         }
 
         return { themes, daily, today, seasonPodium };

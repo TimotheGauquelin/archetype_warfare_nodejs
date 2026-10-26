@@ -352,6 +352,35 @@ class QuizController {
         }
     }
 
+    /** Classement public d'une saison (ou de la saison en cours si seasonId = "current"). */
+    async getSeasonRanking(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const raw = String(request.params.seasonId ?? 'current');
+            let seasonId: number;
+            if (raw === 'current') {
+                const today = QuizService.todayDateString();
+                const season = await QuizSeasonService.findSeasonForDate(today);
+                if (!season) {
+                    throw new CustomError('Aucune saison en cours', 404);
+                }
+                seasonId = QuizSeasonService.toNumberId(season.id);
+            } else {
+                seasonId = Number(raw);
+                if (!Number.isFinite(seasonId)) {
+                    throw new CustomError('seasonId invalide', 400);
+                }
+            }
+            const ranking = await QuizSeasonService.getSeasonPodium(seasonId);
+            response.status(200).json(ranking);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async autoFillAdminSeasonSchedule(
         request: Request,
         response: Response,

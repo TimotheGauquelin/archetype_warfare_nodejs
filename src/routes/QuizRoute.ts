@@ -17,6 +17,11 @@ router.get(
     (req: Request, res: Response, next: NextFunction) =>
         QuizController.getHub(req, res, next)
 );
+router.get(
+    '/seasons/:seasonId/ranking',
+    (req: Request, res: Response, next: NextFunction) =>
+        QuizController.getSeasonRanking(req, res, next)
+);
 
 router.get(
     '/admin/seasons',
