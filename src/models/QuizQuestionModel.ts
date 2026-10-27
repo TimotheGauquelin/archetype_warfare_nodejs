@@ -23,12 +23,15 @@ interface QuizQuestionAttributes {
     image_url?: string | null;
     hint?: string | null;
     explanation?: string | null;
+    explanation_image_url?: string | null;
     difficulty: QuizQuestionDifficulty;
-    /** Déjà utilisée / planifiée en Daily : non replanifiable ailleurs */
+    /** Intention actuelle : true = pool Daily, false = question libre */
+    for_daily: boolean;
+    /** Historique : déjà sortie au moins une fois en Daily */
     was_daily_question: boolean;
     /** Secondes pour le défi du jour : 0 = pas de chrono, max 30 */
     daily_time_limit_seconds: number;
-    /** Saison de Daily Quizz (si question du pool daily) */
+    /** Saison de Daily Quizz (si créneau planifié) */
     season_id?: number | null;
     /** Jour du défi du jour dans la saison (1 question / jour) */
     scheduled_date?: string | null;
@@ -45,7 +48,9 @@ type QuizQuestionCreationAttributes = Optional<
     | 'image_url'
     | 'hint'
     | 'explanation'
+    | 'explanation_image_url'
     | 'difficulty'
+    | 'for_daily'
     | 'was_daily_question'
     | 'daily_time_limit_seconds'
     | 'season_id'
@@ -68,7 +73,9 @@ class QuizQuestion
     declare image_url?: string | null;
     declare hint?: string | null;
     declare explanation?: string | null;
+    declare explanation_image_url?: string | null;
     declare difficulty: QuizQuestionDifficulty;
+    declare for_daily: boolean;
     declare was_daily_question: boolean;
     declare daily_time_limit_seconds: number;
     declare season_id?: number | null;
@@ -123,10 +130,19 @@ QuizQuestion.init(
             type: DataTypes.TEXT,
             allowNull: true,
         },
+        explanation_image_url: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
         difficulty: {
             type: DataTypes.STRING(20),
             allowNull: false,
             defaultValue: 'medium',
+        },
+        for_daily: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
         },
         was_daily_question: {
             type: DataTypes.BOOLEAN,

@@ -404,9 +404,10 @@ class QuizSeasonService {
                 where: { id: { [Op.in]: candidateIds } },
             });
         } else {
-            // Fallback : questions non brûlées Daily (false ou null), types jouables
+            // Fallback : pool Daily (for_daily) sans créneau encore assigné
             const poolWhere: Record<string, unknown> = {
-                was_daily_question: { [Op.or]: [false, null] },
+                for_daily: true,
+                scheduled_date: { [Op.is]: null },
                 type: { [Op.in]: AUTO_SCHEDULE_PLAYABLE_TYPES },
             };
             if (usedIds.size > 0) {
@@ -506,7 +507,8 @@ class QuizSeasonService {
                 const questionId = this.toNumberId(pick.id);
 
                 if (persist) {
-                    // Planifier seulement : was_daily_question reste false jusqu'au passage en Daily
+                    // Planifier le créneau : reste dans le pool jusqu'au passage en Daily
+                    pick.for_daily = true;
                     pick.season_id = seasonId;
                     pick.scheduled_date = day;
                     await pick.save({ transaction });

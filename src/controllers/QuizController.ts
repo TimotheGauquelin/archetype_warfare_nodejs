@@ -147,6 +147,9 @@ class QuizController {
             let isActive: boolean | undefined;
             if (request.query.is_active === 'true') isActive = true;
             if (request.query.is_active === 'false') isActive = false;
+            let forDaily: boolean | undefined;
+            if (request.query.for_daily === 'true') forDaily = true;
+            if (request.query.for_daily === 'false') forDaily = false;
             let wasDailyQuestion: boolean | undefined;
             if (request.query.was_daily_question === 'true') wasDailyQuestion = true;
             if (request.query.was_daily_question === 'false') wasDailyQuestion = false;
@@ -159,6 +162,7 @@ class QuizController {
                 themeSlug,
                 type,
                 isActive,
+                forDaily,
                 wasDailyQuestion,
                 difficulty,
                 seasonId,
@@ -179,6 +183,7 @@ class QuizController {
                 payload: (request.body.payload ?? {}) as Record<string, unknown>,
                 points: request.body.points,
                 is_active: request.body.is_active,
+                for_daily: request.body.for_daily,
                 was_daily_question: request.body.was_daily_question,
                 daily_time_limit_seconds: request.body.daily_time_limit_seconds,
                 difficulty: request.body.difficulty,
@@ -187,6 +192,7 @@ class QuizController {
                 image_url: request.body.image_url,
                 hint: request.body.hint,
                 explanation: request.body.explanation,
+                explanation_image_url: request.body.explanation_image_url,
             });
             response.status(201).json(created);
         } catch (error) {
@@ -207,6 +213,7 @@ class QuizController {
                 payload: request.body.payload,
                 points: request.body.points,
                 is_active: request.body.is_active,
+                for_daily: request.body.for_daily,
                 was_daily_question: request.body.was_daily_question,
                 daily_time_limit_seconds: request.body.daily_time_limit_seconds,
                 difficulty: request.body.difficulty,
@@ -215,6 +222,7 @@ class QuizController {
                 image_url: request.body.image_url,
                 hint: request.body.hint,
                 explanation: request.body.explanation,
+                explanation_image_url: request.body.explanation_image_url,
             });
             response.status(200).json(updated);
         } catch (error) {

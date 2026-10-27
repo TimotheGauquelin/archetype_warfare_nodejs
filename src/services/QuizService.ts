@@ -71,7 +71,7 @@ type HintLadderPayloadStored = {
 };
 const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
 const FREE_PLAY_ALL_SLUG = 'all';
-const FREE_PLAY_HIDDEN_SLUGS = new Set(['anime', FREE_PLAY_ALL_SLUG]);
+const FREE_PLAY_HIDDEN_SLUGS = new Set([FREE_PLAY_ALL_SLUG]);
 
 type McqChoiceStored = {
     text: string;
@@ -94,6 +94,7 @@ type PublicQuestion = {
     imageUrl: string | null;
     hint: string | null;
     explanation: string | null;
+    explanationImageUrl: string | null;
     theme: { id: number; slug: string; label: string } | null;
     payload: Record<string, unknown>;
     userAnswer?: Record<string, unknown> | null;
@@ -585,8 +586,8 @@ class QuizService {
     }
 
     /**
-     * Partie libre : uniquement les questions déjà sorties en Daily
-     * (`was_daily_question = true`), hors exclusions du jour.
+     * Partie libre : questions actives hors pool Daily (`for_daily = false`),
+     * hors exclusions (ex. Daily du jour).
      */
     static async countPlayableQuestions(
         themeId?: number | number[],
@@ -594,7 +595,7 @@ class QuizService {
     ): Promise<number> {
         const where: Record<string, unknown> = {
             is_active: true,
-            was_daily_question: true,
+            for_daily: false,
             type: { [Op.in]: [...PLAYABLE_TYPES] },
         };
         if (themeId !== undefined) {
@@ -606,12 +607,20 @@ class QuizService {
         return QuizQuestion.count({ where });
     }
 
-    /** Marque définitivement des questions comme déjà passées en Daily. */
-    static async markQuestionsAsWasDaily(questionIds: number[]): Promise<void> {
+    /**
+     * Après passage réel en Daily : historique + bascule en question libre
+     * (sort du pool, libère le créneau).
+     */
+    static async markQuestionsAsPlayedDaily(questionIds: number[]): Promise<void> {
         const ids = [...new Set(questionIds.filter((id) => Number.isFinite(id) && id > 0))];
         if (ids.length === 0) return;
         await QuizQuestion.update(
-            { was_daily_question: true },
+            {
+                was_daily_question: true,
+                for_daily: false,
+                season_id: null,
+                scheduled_date: null,
+            },
             { where: { id: { [Op.in]: ids } } }
         );
     }
@@ -623,9 +632,6 @@ class QuizService {
     }
 
     static displayThemeLabel(theme: QuizTheme): string {
-        if (theme.slug === 'manga' || theme.slug === 'anime') {
-            return 'Manga & Anime';
-        }
         return theme.label;
     }
 
@@ -640,14 +646,13 @@ class QuizService {
             return { attemptTheme: allTheme, questionThemeIds: null };
         }
 
-        if (normalized === 'manga' || normalized === 'manga-anime') {
+        // Rétrocompat : anciennes parties « manga-anime » → manga seul
+        if (normalized === 'manga-anime') {
             const manga = await this.getThemeBySlug('manga');
-            const anime = await QuizTheme.findOne({
-                where: { slug: 'anime', is_active: true },
-            });
-            const questionThemeIds = [this.toNumberId(manga.id)];
-            if (anime) questionThemeIds.push(this.toNumberId(anime.id));
-            return { attemptTheme: manga, questionThemeIds };
+            return {
+                attemptTheme: manga,
+                questionThemeIds: [this.toNumberId(manga.id)],
+            };
         }
 
         const theme = await this.getThemeBySlug(normalized);
@@ -677,29 +682,8 @@ class QuizService {
             });
         }
 
-        const manga = bySlug.get('manga');
-        const anime = bySlug.get('anime');
-        if (manga) {
-            const mangaAnimeIds = [manga.id];
-            if (anime) mangaAnimeIds.push(anime.id);
-            const mangaAnimeCount = await this.countPlayableQuestions(
-                mangaAnimeIds,
-                excludedQuestionIds
-            );
-            if (mangaAnimeCount > 0) {
-                freeThemes.push({
-                    ...manga,
-                    label: 'Manga & Anime',
-                    description:
-                        manga.description ??
-                        'Questions sur le manga et les animés Yu-Gi-Oh!',
-                    questionCount: mangaAnimeCount,
-                });
-            }
-        }
-
         for (const theme of themes) {
-            if (FREE_PLAY_HIDDEN_SLUGS.has(theme.slug) || theme.slug === 'manga') {
+            if (FREE_PLAY_HIDDEN_SLUGS.has(theme.slug)) {
                 continue;
             }
             const questionCount = await this.countPlayableQuestions(
@@ -805,8 +789,8 @@ class QuizService {
             where: { quiz_date: quizDate },
         });
         if (existing) {
-            // Passage en Daily → brûlage définitif (idempotent)
-            await this.markQuestionsAsWasDaily(
+            // Passage en Daily → historique + bascule libre (idempotent)
+            await this.markQuestionsAsPlayedDaily(
                 (existing.question_ids ?? []).map((id) => this.toNumberId(id))
             );
             return existing;
@@ -817,7 +801,7 @@ class QuizService {
             return null;
         }
 
-        // 1 question planifiée pour ce jour (pas encore brûlée)
+        // 1 question du pool Daily planifiée pour ce jour
         const rows = await sequelize.query<{
             id: string | number;
             theme_id: string | number;
@@ -826,7 +810,7 @@ class QuizService {
             SELECT q.id, q.theme_id
             FROM quiz_question q
             WHERE q.is_active = TRUE
-              AND q.was_daily_question = FALSE
+              AND q.for_daily = TRUE
               AND q.season_id = :seasonId
               AND q.scheduled_date = :quizDate
               AND q.type IN ('mcq', 'true_false', 'order', 'name_the_cards', 'summoner', 'zoom', 'hint_ladder')
@@ -854,14 +838,14 @@ class QuizService {
                 question_ids: [questionId],
                 season_id: this.toNumberId(season.id),
             });
-            await this.markQuestionsAsWasDaily([questionId]);
+            await this.markQuestionsAsPlayedDaily([questionId]);
             return created;
         } catch {
             const raced = await QuizDaily.findOne({
                 where: { quiz_date: quizDate },
             });
             if (raced) {
-                await this.markQuestionsAsWasDaily(
+                await this.markQuestionsAsPlayedDaily(
                     (raced.question_ids ?? []).map((id) => this.toNumberId(id))
                 );
                 return raced;
@@ -885,7 +869,7 @@ class QuizService {
             SELECT id
             FROM quiz_question
             WHERE is_active = TRUE
-              AND was_daily_question = TRUE
+              AND for_daily = FALSE
               AND type IN ('mcq', 'true_false', 'order', 'name_the_cards', 'summoner', 'zoom', 'hint_ladder')
               ${themeFilter}
               ${excludedFilter}
@@ -1081,6 +1065,10 @@ class QuizService {
                         hint: question.hint ?? null,
                         explanation:
                             answered || reveal ? question.explanation ?? null : null,
+                        explanationImageUrl:
+                            answered || reveal
+                                ? question.explanation_image_url ?? null
+                                : null,
                         theme: questionTheme
                             ? {
                                   id: this.toNumberId(questionTheme.id),
@@ -1340,8 +1328,21 @@ class QuizService {
             }
         }
 
+        const HINT_FORFEIT_TYPES = [
+            'mcq',
+            'true_false',
+            'order',
+            'name_the_cards',
+            'summoner',
+        ] as const;
+        const usedHint = Boolean(answer.usedHint);
+        const hintForfeitsPoints =
+            attempt.mode === 'daily' &&
+            usedHint &&
+            (HINT_FORFEIT_TYPES as readonly string[]).includes(question.type);
+
         let pointsAwarded = 0;
-        if (isCorrect && !timedOut && !skipped) {
+        if (isCorrect && !timedOut && !skipped && !hintForfeitsPoints) {
             if (question.type === 'zoom') {
                 const zoom = this.normalizeZoomPayload(question.payload ?? {});
                 const clientPhase = Math.max(
@@ -1755,6 +1756,7 @@ class QuizService {
             points: this.questionMaxPoints(question),
             is_active: question.is_active,
             difficulty: question.difficulty ?? 'medium',
+            for_daily: Boolean(question.for_daily),
             was_daily_question: Boolean(question.was_daily_question),
             daily_time_limit_seconds: this.normalizeDailyTimeLimitSeconds(
                 question.daily_time_limit_seconds
@@ -1776,6 +1778,7 @@ class QuizService {
             image_url: question.image_url ?? null,
             hint: question.hint ?? null,
             explanation: question.explanation ?? null,
+            explanation_image_url: question.explanation_image_url ?? null,
             created_at: question.created_at,
             updated_at: question.updated_at,
         };
@@ -1829,37 +1832,11 @@ class QuizService {
         return scheduledDate;
     }
 
-    /**
-     * Bloque la (re)planification d'une question déjà sortie en Daily
-     * (`was_daily_question` = true après passage réel en Daily).
-     * Libérer le créneau (nextSeasonId null) reste autorisé.
-     * Conserver le même créneau (édition d'autres champs) reste autorisé.
-     */
-    static assertCanScheduleDaily(
-        question: {
-            was_daily_question: boolean;
-            season_id?: number | null;
-        },
-        nextSeasonId: number | null
-    ): void {
-        if (!nextSeasonId) return;
-        if (!Boolean(question.was_daily_question)) return;
-        const currentlyScheduled = question.season_id != null;
-        if (
-            !currentlyScheduled ||
-            this.toNumberId(question.season_id as number) !== nextSeasonId
-        ) {
-            throw new CustomError(
-                'Cette question a déjà été utilisée en Daily et ne peut plus être planifiée',
-                400
-            );
-        }
-    }
-
     static async listAdminQuestions(filters: {
         themeSlug?: string;
         type?: string;
         isActive?: boolean;
+        forDaily?: boolean;
         wasDailyQuestion?: boolean;
         difficulty?: string;
         seasonId?: number;
@@ -1871,6 +1848,9 @@ class QuizService {
         }
         if (filters.isActive !== undefined) {
             where.is_active = filters.isActive;
+        }
+        if (filters.forDaily !== undefined) {
+            where.for_daily = filters.forDaily;
         }
         if (filters.wasDailyQuestion !== undefined) {
             where.was_daily_question = filters.wasDailyQuestion;
@@ -1920,6 +1900,7 @@ class QuizService {
         payload: Record<string, unknown>;
         points?: number;
         is_active?: boolean;
+        for_daily?: boolean;
         was_daily_question?: boolean;
         daily_time_limit_seconds?: number;
         difficulty?: string;
@@ -1928,6 +1909,7 @@ class QuizService {
         image_url?: string | null;
         hint?: string | null;
         explanation?: string | null;
+        explanation_image_url?: string | null;
     }) {
         const type = String(data.type).trim();
         if (!PLAYABLE_TYPES.includes(type as (typeof PLAYABLE_TYPES)[number])) {
@@ -1987,18 +1969,28 @@ class QuizService {
             );
         }
         const difficulty = this.normalizeDifficulty(data.difficulty);
-        const seasonId = await this.resolveSeasonIdForSchedule(data.season_id);
-        const scheduledDate = await this.resolveScheduledDateForSchedule(
-            seasonId,
-            data.scheduled_date
-        );
-        if ((seasonId && !scheduledDate) || (!seasonId && scheduledDate)) {
-            throw new CustomError(
-                'Saison et date sont requises ensemble pour planifier une question',
-                400
-            );
+        const forDaily = Boolean(data.for_daily);
+        let seasonId: number | null = null;
+        let scheduledDate: string | null = null;
+        if (forDaily) {
+            const rawSeason = data.season_id;
+            const rawDate = String(data.scheduled_date ?? '').trim();
+            const hasSeason = rawSeason != null && Number(rawSeason) > 0;
+            const hasDate = Boolean(rawDate);
+            if (hasSeason !== hasDate) {
+                throw new CustomError(
+                    'Saison et date sont requises ensemble pour planifier une question (sinon laissez les deux vides pour le pool)',
+                    400
+                );
+            }
+            if (hasSeason) {
+                seasonId = await this.resolveSeasonIdForSchedule(data.season_id);
+                scheduledDate = await this.resolveScheduledDateForSchedule(
+                    seasonId,
+                    data.scheduled_date
+                );
+            }
         }
-        // Planification ≠ brûlage : was_daily reste false jusqu'au passage réel en Daily
         let question: QuizQuestion;
         try {
             question = await QuizQuestion.create({
@@ -2008,6 +2000,7 @@ class QuizService {
                 payload,
                 points,
                 is_active: data.is_active !== false,
+                for_daily: forDaily,
                 was_daily_question: false,
                 season_id: seasonId,
                 scheduled_date: scheduledDate,
@@ -2027,6 +2020,10 @@ class QuizService {
                     type === 'zoom' || type === 'hint_ladder'
                         ? null
                         : this.normalizeOptionalText(data.explanation),
+                explanation_image_url:
+                    type === 'zoom' || type === 'hint_ladder'
+                        ? null
+                        : await this.resolveImageUrl(data.explanation_image_url),
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : '';
@@ -2052,6 +2049,7 @@ class QuizService {
             payload?: Record<string, unknown>;
             points?: number;
             is_active?: boolean;
+            for_daily?: boolean;
             was_daily_question?: boolean;
             daily_time_limit_seconds?: number;
             difficulty?: string;
@@ -2060,6 +2058,7 @@ class QuizService {
             image_url?: string | null;
             hint?: string | null;
             explanation?: string | null;
+            explanation_image_url?: string | null;
         }
     ) {
         const question = await QuizQuestion.findByPk(questionId);
@@ -2137,7 +2136,21 @@ class QuizService {
             question.is_active = Boolean(data.is_active);
         }
 
-        if (
+        if (data.for_daily !== undefined) {
+            question.for_daily = Boolean(data.for_daily);
+        }
+
+        if (question.for_daily === false) {
+            // Question libre : pas de créneau Daily
+            if (
+                data.for_daily === false ||
+                data.season_id !== undefined ||
+                data.scheduled_date !== undefined
+            ) {
+                question.season_id = null;
+                question.scheduled_date = null;
+            }
+        } else if (
             data.season_id !== undefined ||
             data.scheduled_date !== undefined
         ) {
@@ -2148,36 +2161,47 @@ class QuizService {
                       ? this.toNumberId(question.season_id)
                       : null;
 
-            this.assertCanScheduleDaily(question, nextSeasonId);
-
-            const nextScheduledDate =
-                data.scheduled_date !== undefined || data.season_id !== undefined
-                    ? await this.resolveScheduledDateForSchedule(
-                          nextSeasonId,
-                          data.scheduled_date !== undefined
-                              ? data.scheduled_date
-                              : question.scheduled_date
-                      )
-                    : question.scheduled_date
-                      ? String(question.scheduled_date).slice(0, 10)
-                      : null;
-
-            if (
-                (nextSeasonId && !nextScheduledDate) ||
-                (!nextSeasonId && nextScheduledDate)
+            const clearingSchedule =
+                data.season_id === null || data.scheduled_date === null;
+            let nextScheduledDate: string | null = null;
+            if (clearingSchedule && nextSeasonId == null) {
+                nextScheduledDate = null;
+            } else if (
+                data.scheduled_date !== undefined ||
+                data.season_id !== undefined
             ) {
+                const rawDate =
+                    data.scheduled_date !== undefined
+                        ? data.scheduled_date
+                        : question.scheduled_date;
+                if (nextSeasonId == null && (rawDate == null || rawDate === '')) {
+                    nextScheduledDate = null;
+                } else {
+                    nextScheduledDate =
+                        await this.resolveScheduledDateForSchedule(
+                            nextSeasonId,
+                            rawDate
+                        );
+                }
+            } else {
+                nextScheduledDate = question.scheduled_date
+                    ? String(question.scheduled_date).slice(0, 10)
+                    : null;
+            }
+
+            if ((nextSeasonId && !nextScheduledDate) || (!nextSeasonId && nextScheduledDate)) {
                 throw new CustomError(
-                    'Saison et date sont requises ensemble pour planifier une question',
+                    'Saison et date sont requises ensemble pour planifier une question (sinon laissez les deux vides pour le pool)',
                     400
                 );
             }
 
             question.season_id = nextSeasonId;
             question.scheduled_date = nextScheduledDate;
+            question.for_daily = true;
         }
 
-        // was_daily ne peut jamais repasser à false via l'API métier
-        // (true = déjà sortie en Daily, ou forcé manuellement côté admin)
+        // Historique : was_daily ne peut jamais repasser à false via l'API métier
         if (data.was_daily_question === true) {
             question.was_daily_question = true;
         }
@@ -2214,6 +2238,7 @@ class QuizService {
         if (question.type === 'hint_ladder' || question.type === 'zoom') {
             question.hint = null;
             question.explanation = null;
+            question.explanation_image_url = null;
         }
         if (question.type === 'hint_ladder') {
             question.image_url = null;
@@ -2251,6 +2276,16 @@ class QuizService {
             question.explanation = this.normalizeOptionalText(data.explanation);
         }
 
+        if (
+            data.explanation_image_url !== undefined &&
+            question.type !== 'hint_ladder' &&
+            question.type !== 'zoom'
+        ) {
+            question.explanation_image_url = await this.resolveImageUrl(
+                data.explanation_image_url
+            );
+        }
+
         try {
             await question.save();
         } catch (error) {
@@ -2284,7 +2319,10 @@ class QuizService {
         return { updated };
     }
 
-    /** Libère tous les créneaux (saison/date) sans réinitialiser was_daily_question. */
+    /**
+     * Libère tous les créneaux (saison/date).
+     * Les questions restent dans le pool Daily (`for_daily`) si elles y étaient.
+     */
     static async switchAllToNonDaily(): Promise<{ updated: number }> {
         const [updated] = await QuizQuestion.update(
             { season_id: null, scheduled_date: null },
