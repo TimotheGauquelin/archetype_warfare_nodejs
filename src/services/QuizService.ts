@@ -584,12 +584,17 @@ class QuizService {
         return difficulty as QuizQuestionDifficulty;
     }
 
+    /**
+     * Partie libre : uniquement les questions déjà sorties en Daily
+     * (`was_daily_question = true`), hors exclusions du jour.
+     */
     static async countPlayableQuestions(
         themeId?: number | number[],
         excludedQuestionIds: number[] = []
     ): Promise<number> {
         const where: Record<string, unknown> = {
             is_active: true,
+            was_daily_question: true,
             type: { [Op.in]: [...PLAYABLE_TYPES] },
         };
         if (themeId !== undefined) {
@@ -599,6 +604,16 @@ class QuizService {
             where.id = { [Op.notIn]: excludedQuestionIds };
         }
         return QuizQuestion.count({ where });
+    }
+
+    /** Marque définitivement des questions comme déjà passées en Daily. */
+    static async markQuestionsAsWasDaily(questionIds: number[]): Promise<void> {
+        const ids = [...new Set(questionIds.filter((id) => Number.isFinite(id) && id > 0))];
+        if (ids.length === 0) return;
+        await QuizQuestion.update(
+            { was_daily_question: true },
+            { where: { id: { [Op.in]: ids } } }
+        );
     }
 
     static async getTodayDailyQuestionIds(quizDate: string): Promise<number[]> {
@@ -789,14 +804,20 @@ class QuizService {
         const existing = await QuizDaily.findOne({
             where: { quiz_date: quizDate },
         });
-        if (existing) return existing;
+        if (existing) {
+            // Passage en Daily → brûlage définitif (idempotent)
+            await this.markQuestionsAsWasDaily(
+                (existing.question_ids ?? []).map((id) => this.toNumberId(id))
+            );
+            return existing;
+        }
 
         const season = await QuizSeasonService.findSeasonForDate(quizDate);
         if (!season) {
             return null;
         }
 
-        // 1 question planifiée pour ce jour précis dans la saison
+        // 1 question planifiée pour ce jour (pas encore brûlée)
         const rows = await sequelize.query<{
             id: string | number;
             theme_id: string | number;
@@ -805,6 +826,7 @@ class QuizService {
             SELECT q.id, q.theme_id
             FROM quiz_question q
             WHERE q.is_active = TRUE
+              AND q.was_daily_question = FALSE
               AND q.season_id = :seasonId
               AND q.scheduled_date = :quizDate
               AND q.type IN ('mcq', 'true_false', 'order', 'name_the_cards', 'summoner', 'zoom', 'hint_ladder')
@@ -824,18 +846,26 @@ class QuizService {
         }
 
         const picked = rows[0];
+        const questionId = this.toNumberId(picked.id);
         try {
-            return await QuizDaily.create({
+            const created = await QuizDaily.create({
                 quiz_date: quizDate,
                 theme_id: this.toNumberId(picked.theme_id),
-                question_ids: [this.toNumberId(picked.id)],
+                question_ids: [questionId],
                 season_id: this.toNumberId(season.id),
             });
+            await this.markQuestionsAsWasDaily([questionId]);
+            return created;
         } catch {
             const raced = await QuizDaily.findOne({
                 where: { quiz_date: quizDate },
             });
-            if (raced) return raced;
+            if (raced) {
+                await this.markQuestionsAsWasDaily(
+                    (raced.question_ids ?? []).map((id) => this.toNumberId(id))
+                );
+                return raced;
+            }
             throw new CustomError('Impossible de créer le quizz quotidien', 500);
         }
     }
@@ -855,6 +885,7 @@ class QuizService {
             SELECT id
             FROM quiz_question
             WHERE is_active = TRUE
+              AND was_daily_question = TRUE
               AND type IN ('mcq', 'true_false', 'order', 'name_the_cards', 'summoner', 'zoom', 'hint_ladder')
               ${themeFilter}
               ${excludedFilter}
@@ -1798,7 +1829,12 @@ class QuizService {
         return scheduledDate;
     }
 
-    /** Bloque la replanification d'une question déjà brûlée (was_daily sans créneau). */
+    /**
+     * Bloque la (re)planification d'une question déjà sortie en Daily
+     * (`was_daily_question` = true après passage réel en Daily).
+     * Libérer le créneau (nextSeasonId null) reste autorisé.
+     * Conserver le même créneau (édition d'autres champs) reste autorisé.
+     */
     static assertCanScheduleDaily(
         question: {
             was_daily_question: boolean;
@@ -1807,21 +1843,14 @@ class QuizService {
         nextSeasonId: number | null
     ): void {
         if (!nextSeasonId) return;
-        const alreadyBurned = Boolean(question.was_daily_question);
+        if (!Boolean(question.was_daily_question)) return;
         const currentlyScheduled = question.season_id != null;
-        if (alreadyBurned && !currentlyScheduled) {
-            throw new CustomError(
-                'Cette question a déjà été utilisée en Daily et ne peut plus être planifiée',
-                400
-            );
-        }
         if (
-            alreadyBurned &&
-            currentlyScheduled &&
+            !currentlyScheduled ||
             this.toNumberId(question.season_id as number) !== nextSeasonId
         ) {
             throw new CustomError(
-                'Cette question a déjà été utilisée en Daily et ne peut pas changer de saison',
+                'Cette question a déjà été utilisée en Daily et ne peut plus être planifiée',
                 400
             );
         }
@@ -1969,9 +1998,7 @@ class QuizService {
                 400
             );
         }
-        // Planifier brûle la question ; was_daily ne peut pas être forcé à false si planifiée
-        const wasDaily = Boolean(seasonId) || Boolean(data.was_daily_question);
-
+        // Planification ≠ brûlage : was_daily reste false jusqu'au passage réel en Daily
         let question: QuizQuestion;
         try {
             question = await QuizQuestion.create({
@@ -1981,7 +2008,7 @@ class QuizService {
                 payload,
                 points,
                 is_active: data.is_active !== false,
-                was_daily_question: wasDaily,
+                was_daily_question: false,
                 season_id: seasonId,
                 scheduled_date: scheduledDate,
                 daily_time_limit_seconds:
@@ -2145,17 +2172,12 @@ class QuizService {
                 );
             }
 
-            const hadSchedule = question.season_id != null;
             question.season_id = nextSeasonId;
             question.scheduled_date = nextScheduledDate;
-
-            // Planifier ou retirer d'un créneau existant → brûler (non replanifiable)
-            if (nextSeasonId || hadSchedule) {
-                question.was_daily_question = true;
-            }
         }
 
         // was_daily ne peut jamais repasser à false via l'API métier
+        // (true = déjà sortie en Daily, ou forcé manuellement côté admin)
         if (data.was_daily_question === true) {
             question.was_daily_question = true;
         }

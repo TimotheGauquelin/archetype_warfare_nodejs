@@ -506,9 +506,9 @@ class QuizSeasonService {
                 const questionId = this.toNumberId(pick.id);
 
                 if (persist) {
+                    // Planifier seulement : was_daily_question reste false jusqu'au passage en Daily
                     pick.season_id = seasonId;
                     pick.scheduled_date = day;
-                    pick.was_daily_question = true;
                     await pick.save({ transaction });
                 }
 
