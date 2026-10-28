@@ -33,12 +33,12 @@ class ArchetypeRankingController {
     async getArchetypeRanking(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const idOrSlug = getStringParam(request.params.archetypeId);
-            const archetypeId = await ArchetypeService.resolveArchetypeId(idOrSlug);
-            if (archetypeId == null) {
+            const archetype = await ArchetypeService.findByIdOrSlug(idOrSlug);
+            if (!archetype || !archetype.is_active) {
                 response.status(404).json({ message: 'Archétype introuvable' });
                 return;
             }
-            const result = await ArchetypeRankingService.getArchetypeRanking(archetypeId);
+            const result = await ArchetypeRankingService.getArchetypeRanking(archetype.id);
             if (!result) {
                 response.status(404).json({ message: 'Archétype introuvable' });
                 return;

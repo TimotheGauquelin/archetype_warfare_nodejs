@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import ArchetypeController from '../controllers/ArchetypeController';
 import { validateSearchArchetypes, validateGetArchetypeById } from '../validators/archetypeValidators';
 import { validateRequest } from '../middlewares/validation';
+import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 
 const router = Router();
 
@@ -13,7 +14,18 @@ router.get('/getEightMostRecentArchetypes', ArchetypeController.getEightMostRece
 router.get('/search', validateRequest(validateSearchArchetypes), ArchetypeController.searchArchetypes.bind(ArchetypeController));
 router.get('/random', ArchetypeController.getRandomArchetype.bind(ArchetypeController));
 router.get('/allNames', ArchetypeController.getAllArchetypeNames.bind(ArchetypeController));
-router.get('/:id', validateRequest(validateGetArchetypeById), ArchetypeController.getArchetypeById.bind(ArchetypeController));
+router.get(
+    '/admin/:id',
+    authenticateToken,
+    requireRole(['Admin']),
+    validateRequest(validateGetArchetypeById),
+    ArchetypeController.getAdminArchetypeById.bind(ArchetypeController)
+);
+router.get(
+    '/:id',
+    validateRequest(validateGetArchetypeById),
+    ArchetypeController.getArchetypeById.bind(ArchetypeController)
+);
 
 // ADD
 

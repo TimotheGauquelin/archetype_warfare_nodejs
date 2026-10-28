@@ -543,23 +543,33 @@ class ArchetypeService {
 
     /**
      * Récupère un archétype par son ID ou son slug (détail complet).
+     * @param requireActive si true (public), les archétypes hors ligne renvoient 404
      */
-    static async getArchetypeByIdOrSlug(idOrSlug: string, locale?: string): Promise<Record<string, unknown>> {
+    static async getArchetypeByIdOrSlug(
+        idOrSlug: string,
+        locale?: string,
+        requireActive = true
+    ): Promise<Record<string, unknown>> {
         const archetype = await this.findByIdOrSlug(idOrSlug);
         if (!archetype) {
+            throw new CustomError('Archétype non trouvé', 404);
+        }
+        if (requireActive && !archetype.is_active) {
             throw new CustomError('Archétype non trouvé', 404);
         }
         return this.getArchetypeById(archetype.id, locale);
     }
 
+    /** Tirage aléatoire parmi les archétypes en ligne uniquement. */
     static async getRandomArchetype(locale?: string): Promise<Record<string, unknown> | null> {
         const archetype = await Archetype.findOne({
+            where: { is_active: true },
             order: sequelize.literal('RANDOM()'),
-            attributes: ['id', 'name']
+            attributes: ['id', 'name', 'slug'],
         });
         if (!archetype) return null;
         const [localized] = await ArchetypeService.applyLocaleToArchetypeRecords(
-            [archetype.toJSON() as { id: number; name?: string }],
+            [archetype.toJSON() as { id: number; name?: string; slug?: string | null }],
             locale
         );
         return localized;

@@ -29,9 +29,26 @@ class ArchetypeController {
     async getArchetypeById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const idOrSlug = getStringParam(request.params.id);
+            // Page publique : toujours is_active=true (même pour un Admin connecté)
             const archetype = await ArchetypeService.getArchetypeByIdOrSlug(
                 idOrSlug,
-                request.query.locale as string | undefined
+                request.query.locale as string | undefined,
+                true
+            );
+            response.status(200).json(archetype);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /** Détail admin : accessible hors ligne (édition). */
+    async getAdminArchetypeById(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const idOrSlug = getStringParam(request.params.id);
+            const archetype = await ArchetypeService.getArchetypeByIdOrSlug(
+                idOrSlug,
+                request.query.locale as string | undefined,
+                false
             );
             response.status(200).json(archetype);
         } catch (error) {
