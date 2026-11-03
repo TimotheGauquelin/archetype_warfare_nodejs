@@ -1,6 +1,14 @@
-import { Banlist, BanlistArchetypeCard, Archetype, Card, CardStatus } from '../models/relations';
+import {
+    Banlist,
+    BanlistArchetypeCard,
+    BanlistReason,
+    Archetype,
+    Card,
+    CardStatus,
+} from '../models/relations';
 import sequelize from '../config/Sequelize';
-import { Op } from 'sequelize';
+import { Op, type Includeable } from 'sequelize';
+import BanlistReasonService from './BanlistReasonService';
 
 interface BanlistArchetypeCardData {
     card_id: string;
@@ -8,6 +16,8 @@ interface BanlistArchetypeCardData {
     explanation_text?: string | null;
     archetype_id?: number | null;
     id?: number;
+    reason_ids?: number[];
+    reasons?: Array<{ id: number }>;
 }
 
 interface BanlistData {
@@ -18,6 +28,43 @@ interface BanlistData {
     is_event_banlist?: boolean;
     banlist_archetype_cards?: BanlistArchetypeCardData[];
 }
+
+type NormalizedCardData = {
+    card_id: string;
+    card_status_id: number;
+    explanation_text: string | null;
+    archetype_id: number | null;
+    reason_ids: number[];
+};
+
+const parseReasonIds = (rawCard: BanlistArchetypeCardData): number[] => {
+    if (Array.isArray(rawCard.reason_ids)) {
+        return [
+            ...new Set(
+                rawCard.reason_ids
+                    .map((id) => Number(id))
+                    .filter((id) => !Number.isNaN(id) && id > 0)
+            ),
+        ];
+    }
+    if (Array.isArray(rawCard.reasons)) {
+        return [
+            ...new Set(
+                rawCard.reasons
+                    .map((r) => Number(r?.id))
+                    .filter((id) => !Number.isNaN(id) && id > 0)
+            ),
+        ];
+    }
+    return [];
+};
+
+const bacReasonsInclude: Includeable = {
+    model: BanlistReason,
+    as: 'reasons',
+    attributes: ['id', 'slug', 'label', 'text', 'logo_url'],
+    through: { attributes: [] },
+};
 
 class BanlistService {
     static async getAllBanlists(): Promise<Banlist[]> {
@@ -37,21 +84,22 @@ class BanlistService {
                         {
                             model: Card,
                             as: 'card',
-                            attributes: ['id', 'name', 'img_url', 'level', 'atk', 'def', 'card_type']
+                            attributes: ['id', 'name', 'img_url', 'level', 'atk', 'def', 'card_type'],
                         },
                         {
                             model: CardStatus,
-                            as: 'card_status'
-                        }
-                    ]
-                }]
+                            as: 'card_status',
+                        },
+                        bacReasonsInclude,
+                    ],
+                },
+            ],
         });
 
         if (!banlist || showArchetypeCards) {
             return banlist;
         }
 
-        // Filtrer côté service : génériques sans statut Unlimited
         const banlistJson = banlist.toJSON() as Banlist & {
             banlist_archetype_cards?: Array<{ card_status?: { label?: string } }>;
         };
@@ -66,17 +114,16 @@ class BanlistService {
 
     static async getCurrentBanlist(includeArchetypeCards: boolean = true): Promise<Banlist | null> {
         const today = new Date();
-
         const includeArchetypeCardsCondition = includeArchetypeCards ? {} : { archetype_id: null };
 
-        let standardBanlist = await Banlist.findOne({
+        return Banlist.findOne({
             order: [['release_date', 'DESC']],
             where: {
                 is_active: true,
                 is_event_banlist: false,
                 release_date: {
-                    [Op.lte]: today
-                }
+                    [Op.lte]: today,
+                },
             },
             include: [
                 {
@@ -88,54 +135,30 @@ class BanlistService {
                         {
                             model: Card,
                             as: 'card',
-                            attributes: ['id', 'name', 'img_url', 'level', 'atk', 'def', 'card_type']
+                            attributes: ['id', 'name', 'img_url', 'level', 'atk', 'def', 'card_type'],
                         },
                         {
                             model: CardStatus,
                             as: 'card_status',
-                            attributes: ['id', 'label']
+                            attributes: ['id', 'label'],
                         },
                         {
                             model: Archetype,
                             as: 'archetype',
-                            attributes: ['id', 'name']
-                        }
+                            attributes: ['id', 'name'],
+                        },
+                        bacReasonsInclude,
                     ],
-                }
-            ]
+                },
+            ],
         });
-
-        return standardBanlist;
-
-        // if (!standardBanlist) {
-        //     standardBanlist = await Banlist.findOne({
-        //         order: [['release_date', 'ASC']],
-        //         where: {
-        //             is_active: true,
-        //             is_event_banlist: false,
-        //             release_date: {
-        //                 [Op.gte]: today
-        //             }
-        //         }
-        //     });
-        // }
-
-        // const eventBanlists = await Banlist.findAll({
-        //     order: [['release_date', 'DESC']],
-        //     where: {
-        //         is_active: true,
-        //         is_event_banlist: true,
-        //         release_date: {
-        //             [Op.lte]: today
-        //         }
-        //     }
-        // });
     }
 
     static async addBanlist(banlistData: BanlistData): Promise<void> {
         const transaction = await sequelize.transaction();
         try {
-            const { banlist_archetype_cards, label, release_date, description, is_active, is_event_banlist } = banlistData;
+            const { banlist_archetype_cards, label, release_date, description, is_active, is_event_banlist } =
+                banlistData;
 
             const banlist = await Banlist.create(
                 {
@@ -143,7 +166,7 @@ class BanlistService {
                     release_date: release_date,
                     description: description,
                     is_active: is_active,
-                    is_event_banlist: is_event_banlist ?? false
+                    is_event_banlist: is_event_banlist ?? false,
                 },
                 { transaction }
             );
@@ -158,17 +181,28 @@ class BanlistService {
 
                 for (const card of banlist_archetype_cards) {
                     const archetypeId = card.archetype_id ?? null;
-                    // Pas de ligne générique Unlimited
-                    if (archetypeId == null && unlimitedId != null && Number(card.card_status_id) === Number(unlimitedId)) {
+                    if (
+                        archetypeId == null &&
+                        unlimitedId != null &&
+                        Number(card.card_status_id) === Number(unlimitedId)
+                    ) {
                         continue;
                     }
-                    await BanlistArchetypeCard.create({
-                        banlist_id: banlist.id,
-                        card_id: card.card_id,
-                        card_status_id: card.card_status_id,
-                        explanation_text: card.explanation_text || null,
-                        archetype_id: archetypeId
-                    }, { transaction });
+                    const created = await BanlistArchetypeCard.create(
+                        {
+                            banlist_id: banlist.id,
+                            card_id: card.card_id,
+                            card_status_id: card.card_status_id,
+                            explanation_text: card.explanation_text || null,
+                            archetype_id: archetypeId,
+                        },
+                        { transaction }
+                    );
+                    await BanlistReasonService.syncCardReasons(
+                        created.id,
+                        parseReasonIds(card),
+                        transaction
+                    );
                 }
             }
 
@@ -179,14 +213,17 @@ class BanlistService {
         }
     }
 
-    static async updateBanlist(banlistId: number, databaseBanlist: Banlist, banlistData: BanlistData): Promise<void> {
+    static async updateBanlist(
+        banlistId: number,
+        databaseBanlist: Banlist,
+        banlistData: BanlistData
+    ): Promise<void> {
         const transaction = await sequelize.transaction();
         try {
             const { banlist_archetype_cards, ...banlistFields } = banlistData;
 
             await databaseBanlist.update(banlistFields, { transaction });
 
-            // Payload vide = supprimer toutes les génériques (archétype_id NULL), garder les cartes d'archétype
             if (!banlist_archetype_cards || banlist_archetype_cards.length === 0) {
                 await BanlistArchetypeCard.destroy({
                     where: {
@@ -206,22 +243,14 @@ class BanlistService {
             });
             const unlimitedId = unlimitedStatus?.id ?? null;
 
-            // Normalisation du payload (le front peut envoyer card_status_id en string, et archetype_id null/undefined)
-            type NormalizedCardData = {
-                card_id: string;
-                card_status_id: number;
-                explanation_text: string | null;
-                archetype_id: number | null;
-            };
-
             const desiredByCardId = new Map<string, NormalizedCardData>();
 
             for (const rawCard of banlist_archetype_cards) {
                 const cardId = rawCard.card_id != null ? String(rawCard.card_id) : '';
-                const cardStatusId = parseInt(String((rawCard as any).card_status_id), 10);
-                const archetypeId = rawCard.archetype_id == null ? null : parseInt(String(rawCard.archetype_id), 10);
+                const cardStatusId = parseInt(String((rawCard as { card_status_id?: unknown }).card_status_id), 10);
+                const archetypeId =
+                    rawCard.archetype_id == null ? null : parseInt(String(rawCard.archetype_id), 10);
 
-                // Ignorer les génériques Unlimited (pas de ligne)
                 if (archetypeId == null && unlimitedId != null && cardStatusId === Number(unlimitedId)) {
                     continue;
                 }
@@ -241,7 +270,8 @@ class BanlistService {
                     card_id: cardId,
                     card_status_id: cardStatusId,
                     explanation_text: explanationText,
-                    archetype_id: archetypeId
+                    archetype_id: archetypeId,
+                    reason_ids: parseReasonIds(rawCard),
                 };
 
                 const existing = desiredByCardId.get(cardId);
@@ -250,7 +280,6 @@ class BanlistService {
                     continue;
                 }
 
-                // Si le payload contient plusieurs entrées pour la même carte, on préfère un archetype_id non-null.
                 if (existing.archetype_id == null && normalized.archetype_id != null) {
                     desiredByCardId.set(cardId, normalized);
                 }
@@ -258,14 +287,13 @@ class BanlistService {
 
             const desiredCardIds = [...desiredByCardId.keys()];
 
-            // Pour garder le comportement existant : suppression des lignes "archetype_id = NULL"
-            // si la carte n'est plus présente dans le payload.
             const existingNullCardsInBanlist = await BanlistArchetypeCard.findAll({
                 where: {
                     banlist_id: banlistId,
-                    archetype_id: null
+                    archetype_id: null,
                 },
-                attributes: ['id', 'card_id']
+                attributes: ['id', 'card_id'],
+                transaction,
             });
 
             const cardsToDeleteIds: number[] = [];
@@ -277,18 +305,19 @@ class BanlistService {
                 }
             }
 
-            // On récupère toutes les variantes (null + non-null) pour les cartes présentes dans le payload
             const existingCardsForPayload = await BanlistArchetypeCard.findAll({
                 where: {
                     banlist_id: banlistId,
                     card_id: {
-                        [Op.in]: desiredCardIds
-                    }
+                        [Op.in]: desiredCardIds,
+                    },
                 },
-                attributes: ['id', 'card_id', 'archetype_id', 'card_status_id', 'explanation_text']
+                attributes: ['id', 'card_id', 'archetype_id', 'card_status_id', 'explanation_text'],
+                transaction,
             });
 
-            const keyOf = (cardId: string, archetypeId: number | null) => `${cardId}::${archetypeId ?? 'null'}`;
+            const keyOf = (cardId: string, archetypeId: number | null) =>
+                `${cardId}::${archetypeId ?? 'null'}`;
 
             const existingByKey = new Map<string, BanlistArchetypeCard>();
             const existingRowsByCardId = new Map<string, BanlistArchetypeCard[]>();
@@ -304,9 +333,17 @@ class BanlistService {
                 existingRowsByCardId.set(cardId, list);
             }
 
-            // Validation (cartes + statuts + archétypes)
-            const cardStatusIds = [...new Set([...desiredByCardId.values()].map(c => c.card_status_id))];
-            const archetypeIds = [...new Set([...desiredByCardId.values()].map(c => c.archetype_id).filter((id): id is number => id != null))];
+            const cardStatusIds = [...new Set([...desiredByCardId.values()].map((c) => c.card_status_id))];
+            const archetypeIds = [
+                ...new Set(
+                    [...desiredByCardId.values()]
+                        .map((c) => c.archetype_id)
+                        .filter((id): id is number => id != null)
+                ),
+            ];
+            const allReasonIds = [
+                ...new Set([...desiredByCardId.values()].flatMap((c) => c.reason_ids)),
+            ];
 
             const validationPromises: Promise<void>[] = [];
 
@@ -314,10 +351,10 @@ class BanlistService {
                 validationPromises.push(
                     Card.findAll({
                         where: { id: desiredCardIds },
-                        attributes: ['id']
-                    }).then(existingCards => {
-                        const existingCardIds = existingCards.map(card => card.id);
-                        const missingCardIds = desiredCardIds.filter(id => !existingCardIds.includes(id));
+                        attributes: ['id'],
+                    }).then((existingCards) => {
+                        const existingCardIds = existingCards.map((card) => card.id);
+                        const missingCardIds = desiredCardIds.filter((id) => !existingCardIds.includes(id));
                         if (missingCardIds.length > 0) {
                             throw new Error(`Les cartes suivantes n'existent pas: ${missingCardIds.join(', ')}`);
                         }
@@ -329,12 +366,16 @@ class BanlistService {
                 validationPromises.push(
                     CardStatus.findAll({
                         where: { id: cardStatusIds },
-                        attributes: ['id']
-                    }).then(existingCardStatuses => {
-                        const existingCardStatusIds = existingCardStatuses.map(status => status.id);
-                        const missingCardStatusIds = cardStatusIds.filter(id => !existingCardStatusIds.includes(id));
+                        attributes: ['id'],
+                    }).then((existingCardStatuses) => {
+                        const existingCardStatusIds = existingCardStatuses.map((status) => status.id);
+                        const missingCardStatusIds = cardStatusIds.filter(
+                            (id) => !existingCardStatusIds.includes(id)
+                        );
                         if (missingCardStatusIds.length > 0) {
-                            throw new Error(`Les statuts de cartes suivants n'existent pas: ${missingCardStatusIds.join(', ')}`);
+                            throw new Error(
+                                `Les statuts de cartes suivants n'existent pas: ${missingCardStatusIds.join(', ')}`
+                            );
                         }
                     })
                 );
@@ -344,37 +385,36 @@ class BanlistService {
                 validationPromises.push(
                     Archetype.findAll({
                         where: { id: archetypeIds },
-                        attributes: ['id']
-                    }).then(existingArchetypes => {
-                        const existingArchetypeIds = existingArchetypes.map(archetype => archetype.id);
-                        const missingArchetypeIds = archetypeIds.filter(id => !existingArchetypeIds.includes(id));
+                        attributes: ['id'],
+                    }).then((existingArchetypes) => {
+                        const existingArchetypeIds = existingArchetypes.map((archetype) => archetype.id);
+                        const missingArchetypeIds = archetypeIds.filter(
+                            (id) => !existingArchetypeIds.includes(id)
+                        );
                         if (missingArchetypeIds.length > 0) {
-                            throw new Error(`Les archétypes suivants n'existent pas: ${missingArchetypeIds.join(', ')}`);
+                            throw new Error(
+                                `Les archétypes suivants n'existent pas: ${missingArchetypeIds.join(', ')}`
+                            );
                         }
                     })
                 );
             }
 
             await Promise.all(validationPromises);
-
-            const operations: Promise<unknown>[] = [];
+            await BanlistReasonService.assertReasonIdsExist(allReasonIds);
 
             if (cardsToDeleteIds.length > 0) {
-                operations.push(
-                    BanlistArchetypeCard.destroy({
-                        where: { id: cardsToDeleteIds },
-                        transaction
-                    })
-                );
+                await BanlistArchetypeCard.destroy({
+                    where: { id: cardsToDeleteIds },
+                    transaction,
+                });
             }
 
-            // Pour éviter les doublons "archetype_id NULL" + "archetype_id=<valeur>",
-            // on force l'unicité par `card_id` au moment de l'update : on ne garde
-            // que la variante correspondant à l'archetype_id désiré dans le payload.
             for (const [cardId, desired] of desiredByCardId) {
                 const desiredKey = keyOf(cardId, desired.archetype_id);
                 const existingDesired = existingByKey.get(desiredKey);
                 const keepDesiredRowId = existingDesired?.id ?? null;
+                let targetRowId: number | null = keepDesiredRowId;
 
                 if (existingDesired) {
                     const shouldUpdate =
@@ -382,50 +422,52 @@ class BanlistService {
                         existingDesired.explanation_text !== desired.explanation_text;
 
                     if (shouldUpdate) {
-                        operations.push(
-                            BanlistArchetypeCard.update(
-                                {
-                                    card_status_id: desired.card_status_id,
-                                    explanation_text: desired.explanation_text
-                                },
-                                { where: { id: existingDesired.id }, transaction }
-                            )
+                        await BanlistArchetypeCard.update(
+                            {
+                                card_status_id: desired.card_status_id,
+                                explanation_text: desired.explanation_text,
+                            },
+                            { where: { id: existingDesired.id }, transaction }
                         );
                     }
                 } else {
-                    operations.push(
-                        BanlistArchetypeCard.create(
-                            {
-                                banlist_id: banlistId,
-                                card_id: cardId,
-                                card_status_id: desired.card_status_id,
-                                explanation_text: desired.explanation_text,
-                                archetype_id: desired.archetype_id
-                            },
-                            { transaction }
-                        )
+                    const created = await BanlistArchetypeCard.create(
+                        {
+                            banlist_id: banlistId,
+                            card_id: cardId,
+                            card_status_id: desired.card_status_id,
+                            explanation_text: desired.explanation_text,
+                            archetype_id: desired.archetype_id,
+                        },
+                        { transaction }
                     );
+                    targetRowId = created.id;
                 }
 
-                // Suppression des autres variantes déjà présentes en base
                 const existingRows = existingRowsByCardId.get(cardId) ?? [];
                 for (const row of existingRows) {
                     const rowArchId = row.archetype_id == null ? null : row.archetype_id;
                     const isDesiredVariant = rowArchId === desired.archetype_id;
-                    const isExtraDesiredRow = isDesiredVariant && keepDesiredRowId != null && row.id !== keepDesiredRowId;
+                    const isExtraDesiredRow =
+                        isDesiredVariant && keepDesiredRowId != null && row.id !== keepDesiredRowId;
 
                     if (!isDesiredVariant || isExtraDesiredRow) {
-                        operations.push(
-                            BanlistArchetypeCard.destroy({
-                                where: { id: row.id },
-                                transaction
-                            })
-                        );
+                        await BanlistArchetypeCard.destroy({
+                            where: { id: row.id },
+                            transaction,
+                        });
                     }
+                }
+
+                if (targetRowId != null) {
+                    await BanlistReasonService.syncCardReasons(
+                        targetRowId,
+                        desired.reason_ids,
+                        transaction
+                    );
                 }
             }
 
-            await Promise.all(operations);
             await transaction.commit();
         } catch (error) {
             await transaction.rollback();
@@ -435,7 +477,7 @@ class BanlistService {
 
     static async deleteBanlist(id: number): Promise<void> {
         await Banlist.destroy({
-            where: { id }
+            where: { id },
         });
     }
 }
