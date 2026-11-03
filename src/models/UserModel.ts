@@ -22,6 +22,7 @@ interface UserAttributes {
     locale: string;
     biography: string | null;
     country: string | null;
+    profile_picture_url: string | null;
     loved_archetype_id: number | null;
     discord_id: string | null;
     auth_provider: string;
@@ -30,7 +31,7 @@ interface UserAttributes {
     updated_at?: Date;
 }
 
-interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'country' | 'loved_archetype_id' | 'discord_id' | 'auth_provider' | 'quiz_points' | 'created_at' | 'updated_at'> { }
+interface UserCreationAttributes extends Optional<UserAttributes, 'id' | 'username' | 'password' | 'reset_password_token' | 'email' | 'locale' | 'biography' | 'country' | 'profile_picture_url' | 'loved_archetype_id' | 'discord_id' | 'auth_provider' | 'quiz_points' | 'created_at' | 'updated_at'> { }
 
 interface UserWithRoles extends UserAttributes {
     roles?: Role[];
@@ -51,6 +52,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
     declare locale: string;
     declare biography: string | null;
     declare country: string | null;
+    declare profile_picture_url: string | null;
     declare loved_archetype_id: number | null;
     declare discord_id: string | null;
     declare auth_provider: string;
@@ -168,6 +170,10 @@ User.init({
                 msg: 'Country must be an ISO 3166-1 alpha-2 code',
             },
         },
+    },
+    profile_picture_url: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     loved_archetype_id: {
         type: DataTypes.BIGINT,

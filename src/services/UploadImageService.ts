@@ -180,8 +180,63 @@ class UploadImageService {
         });
     }
 
+    /**
+     * Liste les images d'un dossier Cloudinary.
+     * 1) prefix public_id (ex. jumbotron_archetypes/…)
+     * 2) fallback Media Library asset_folder (ex. picture_profile/default
+     *    où le public_id peut être juste « katsuya »)
+     */
+    static async listImagesInFolder(folderName: string): Promise<CloudinaryResource[]> {
+        const normalized = folderName.replace(/\/+$/, '');
+        const prefix = `${normalized}/`;
+
+        const byPrefix = await new Promise<CloudinaryResource[]>((resolve, reject) => {
+            cloudinary.api.resources(
+                {
+                    resource_type: 'image',
+                    type: 'upload',
+                    prefix,
+                    max_results: 500,
+                },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result?.resources ?? []);
+                }
+            );
+        });
+
+        if (byPrefix.length > 0) return byPrefix;
+
+        try {
+            return await new Promise<CloudinaryResource[]>((resolve, reject) => {
+                cloudinary.api.resources_by_asset_folder(
+                    normalized,
+                    {
+                        resource_type: 'image',
+                        max_results: 500,
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result?.resources ?? []);
+                    }
+                );
+            });
+        } catch (assetFolderError) {
+            logger.logDebug('resources_by_asset_folder vide ou indisponible', {
+                folderName: normalized,
+                error:
+                    assetFolderError instanceof Error
+                        ? assetFolderError.message
+                        : String(assetFolderError),
+            });
+            return [];
+        }
+    }
+
     static async getAllImagesFromFolder(request: Request, response: Response): Promise<void> {
-        const folderName = request.params.folderName;
+        const folderName =
+            (request as Request & { cloudinaryFolder?: string }).cloudinaryFolder ||
+            request.params.folderName;
 
         if (!folderName) {
             response.status(400).json({
@@ -192,38 +247,16 @@ class UploadImageService {
         }
 
         try {
-            const images = await new Promise<CloudinaryResource[]>((resolve, reject) => {
-                cloudinary.api.resources(
-                    {
-                        resource_type: 'image',
-                        type: 'upload',
-                        prefix: folderName + '/',
-                        max_results: 500
-                    },
-                    (error, result) => {
-                        if (error) {
-                            reject(error);
-                        } else {
-                            resolve(result.resources);
-                        }
-                    }
-                );
-            });
-
-            if (!images || images.length === 0) {
-                response.status(404).json({
-                    success: false,
-                    message: `Aucune image trouvée dans le dossier '${folderName}'`
-                });
-                return;
-            }
-
+            const list = await UploadImageService.listImagesInFolder(folderName);
             response.status(200).json({
                 success: true,
-                message: `Images trouvées dans le dossier '${folderName}'`,
-                data: images,
+                message:
+                    list.length > 0
+                        ? `Images trouvées dans le dossier '${folderName}'`
+                        : `Aucune image dans le dossier '${folderName}'`,
+                data: list,
                 folder: folderName,
-                count: images.length
+                count: list.length
             });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
