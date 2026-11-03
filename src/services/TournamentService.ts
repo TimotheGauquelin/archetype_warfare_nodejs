@@ -24,6 +24,7 @@ import { MatchResolutionMode, TournamentStatus } from '../models/TournamentModel
 import { sendPlayerRemovedFromTournamentMail } from '../mailing/sendPlayerRemovedFromTournamentMail';
 import { sendPlayerAddedToTournamentMail } from '../mailing/sendPlayerAddedToTournamentMail';
 import { getMaxOpponentGamesWon, getWinsNeeded, resolveMatchOutcome } from '../utils/bestOfScore';
+import MedalService from './MedalService';
 
 const MATCH_RESOLUTION_MODES: MatchResolutionMode[] = ['strict_wins', 'highest_score'];
 
@@ -34,17 +35,35 @@ function parseMatchResolutionMode(value: unknown): MatchResolutionMode {
     return 'strict_wins';
 }
 
-const REGISTRATION_DEADLINE_HOURS = 48;
+const DEFAULT_REGISTRATION_CLOSE_HOURS = 48;
 
-/** Check that the registration/unregistration is still allowed (at least 48 hours before the start).
- * 
- * @param eventDate - The event date of the tournament.
- * @returns A boolean indicating if the registration/unregistration is still allowed.
- */
-function isWithinRegistrationWindow(eventDate: Date | null): boolean {
+function normalizeRegistrationCloseHours(value: unknown): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return DEFAULT_REGISTRATION_CLOSE_HOURS;
+    return Math.max(0, Math.min(24 * 30, Math.round(n)));
+}
+
+function clampImageFocal(value: unknown, fallback = 50): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function clampImageZoom(value: unknown, fallback = 100): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(100, Math.min(250, Math.round(n)));
+}
+
+/** Inscription / désinscription encore autorisée selon le délai du tournoi. */
+function isWithinRegistrationWindow(
+    eventDate: Date | null,
+    closeHoursBefore: unknown = DEFAULT_REGISTRATION_CLOSE_HOURS
+): boolean {
     if (!eventDate) return true;
+    const hours = normalizeRegistrationCloseHours(closeHoursBefore);
     const start = new Date(eventDate).getTime();
-    const deadline = start - REGISTRATION_DEADLINE_HOURS * 60 * 60 * 1000;
+    const deadline = start - hours * 60 * 60 * 1000;
     return Date.now() < deadline;
 }
 
@@ -74,9 +93,17 @@ async function ensureNoOverlappingRegistration(
         const otherEnd = other.event_date_end ? new Date(other.event_date_end).getTime() : otherStart;
 
         if (newStart <= otherEnd && otherStart <= newEnd) {
+            const otherName = other.name?.trim() || 'un autre tournoi';
             throw new CustomError(
-                'Vous êtes déjà inscrit à un tournoi sur cette période. Abandonnez l\'autre tournoi pour vous inscrire ici.',
-                400
+                `Vous êtes déjà inscrit au tournoi « ${otherName} ». Abandonnez-le pour vous inscrire ici.`,
+                400,
+                false,
+                {
+                    overlappingTournament: {
+                        id: other.id,
+                        name: otherName,
+                    },
+                }
             );
         }
     }
@@ -96,6 +123,11 @@ interface CreateTournamentData {
     event_date?: Date | string | null;
     event_date_end?: Date | string | null;
     is_online?: boolean;
+    registration_close_hours_before?: number;
+    image_url?: string | null;
+    image_focal_x?: number;
+    image_focal_y?: number;
+    image_zoom?: number;
 }
 
 interface RegisterPlayerData {
@@ -329,6 +361,16 @@ class TournamentService {
             event_date,
             event_date_end,
             is_online: data.is_online ?? true,
+            registration_close_hours_before: normalizeRegistrationCloseHours(
+                data.registration_close_hours_before
+            ),
+            image_url:
+                typeof data.image_url === 'string' && data.image_url.trim()
+                    ? data.image_url.trim()
+                    : null,
+            image_focal_x: clampImageFocal(data.image_focal_x, 50),
+            image_focal_y: clampImageFocal(data.image_focal_y, 50),
+            image_zoom: clampImageZoom(data.image_zoom, 100),
             status: 'not_visible' as const,
             current_round: 0
         };
@@ -371,7 +413,13 @@ class TournamentService {
         return Tournament.findAll({
             where,
             order: [['event_date', 'DESC']],
-            include: [{ model: TournamentPlayer, as: 'players', attributes: ['id'] }]
+            include: [
+                {
+                    model: TournamentPlayer,
+                    as: 'players',
+                    attributes: ['id', 'user_id', 'dropped'],
+                },
+            ],
         });
     }
 
@@ -670,7 +718,7 @@ class TournamentService {
                     {
                         model: User,
                         as: 'user',
-                        attributes: ['id', 'username', 'email']
+                        attributes: ['id', 'username', 'email', 'country']
                     },
                     {
                         model: TournamentPlayerDeck,
@@ -722,6 +770,11 @@ class TournamentService {
             event_date_end?: Date | string | null;
             is_online?: boolean;
             allow_penalities?: boolean;
+            registration_close_hours_before?: number;
+            image_url?: string | null;
+            image_focal_x?: number;
+            image_focal_y?: number;
+            image_zoom?: number;
         }
     ) {
         const t = await Tournament.findByPk(id);
@@ -750,6 +803,31 @@ class TournamentService {
         if (updates.event_date_end !== undefined) t.event_date_end = updates.event_date_end != null ? new Date(updates.event_date_end) : null;
         if (updates.is_online !== undefined) t.is_online = updates.is_online;
         if (updates.allow_penalities !== undefined) t.allow_penalities = updates.allow_penalities;
+        if (updates.registration_close_hours_before !== undefined) {
+            t.registration_close_hours_before = normalizeRegistrationCloseHours(
+                updates.registration_close_hours_before
+            );
+        }
+        if (updates.image_url !== undefined) {
+            t.image_url =
+                typeof updates.image_url === 'string' && updates.image_url.trim()
+                    ? updates.image_url.trim()
+                    : null;
+            if (!t.image_url) {
+                t.image_focal_x = 50;
+                t.image_focal_y = 50;
+                t.image_zoom = 100;
+            }
+        }
+        if (updates.image_focal_x !== undefined) {
+            t.image_focal_x = clampImageFocal(updates.image_focal_x, 50);
+        }
+        if (updates.image_focal_y !== undefined) {
+            t.image_focal_y = clampImageFocal(updates.image_focal_y, 50);
+        }
+        if (updates.image_zoom !== undefined) {
+            t.image_zoom = clampImageZoom(updates.image_zoom, 100);
+        }
         this.assertValidEventWindow(
             t.event_date ? new Date(t.event_date) : null,
             t.event_date_end ? new Date(t.event_date_end) : null
@@ -890,8 +968,19 @@ class TournamentService {
             throw new CustomError('Les inscriptions ne sont pas ouvertes pour ce tournoi', 400);
         }
 
-        if (!isWithinRegistrationWindow(tournament.event_date)) {
-            throw new CustomError('Les inscriptions sont closes 48 h avant le début du tournoi', 400);
+        if (
+            !isWithinRegistrationWindow(
+                tournament.event_date,
+                tournament.registration_close_hours_before
+            )
+        ) {
+            const hours = normalizeRegistrationCloseHours(
+                tournament.registration_close_hours_before
+            );
+            throw new CustomError(
+                `Les inscriptions sont closes ${hours} h avant le début du tournoi`,
+                400
+            );
         }
         if (tournament.max_players != null) {
             const count = await TournamentPlayer.count({ where: { tournament_id: data.tournamentId } });
@@ -973,8 +1062,19 @@ class TournamentService {
             throw new CustomError('La désinscription n\'est plus possible pentru ce tournoi', 400);
         }
 
-        if (!isWithinRegistrationWindow(tournament.event_date)) {
-            throw new CustomError('La désinscription n\'est plus possible 48 h avant le début du tournoi', 400);
+        if (
+            !isWithinRegistrationWindow(
+                tournament.event_date,
+                tournament.registration_close_hours_before
+            )
+        ) {
+            const hours = normalizeRegistrationCloseHours(
+                tournament.registration_close_hours_before
+            );
+            throw new CustomError(
+                `La désinscription n'est plus possible ${hours} h avant le début du tournoi`,
+                400
+            );
         }
 
         const tp = await TournamentPlayer.findOne({ where: { tournament_id: data.tournamentId, user_id: data.userId } });
@@ -1936,7 +2036,7 @@ class TournamentService {
      * @returns A promise that resolves to the message 'Le tournoi est terminé'.
      */
     private static async finishTournament(tournamentId: string, currentRoundNumber: number) {
-        return sequelize.transaction(async (transaction) => {
+        const result = await sequelize.transaction(async (transaction) => {
             await markRoundAsCompleted(tournamentId, currentRoundNumber, transaction);
             await Tournament.update(
                 { status: 'tournament_finished' },
@@ -1944,6 +2044,10 @@ class TournamentService {
             );
             return { message: 'Le tournoi est terminé' };
         });
+        MedalService.evaluateSafe('onOfficialTournamentFinished', () =>
+            MedalService.onOfficialTournamentFinished(tournamentId)
+        );
+        return result;
     }
 
     /** Check that all matches of the current round are completed ; otherwise throw an error 400. 
@@ -2089,6 +2193,9 @@ class TournamentService {
             if (remainingMatches === 0) {
                 tournament.status = 'tournament_finished';
                 await tournament.save();
+                MedalService.evaluateSafe('onOfficialTournamentFinished', () =>
+                    MedalService.onOfficialTournamentFinished(String(tournament.id))
+                );
             }
         }
 

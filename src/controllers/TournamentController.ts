@@ -33,7 +33,21 @@ class TournamentController {
                 location: location ?? null,
                 event_date: event_date ?? null,
                 event_date_end: event_date_end ?? null,
-                is_online: is_online !== false
+                is_online: is_online !== false,
+                registration_close_hours_before:
+                    request.body.registration_close_hours_before ??
+                    request.body.registrationCloseHoursBefore,
+                image_url:
+                    request.body.image_url !== undefined
+                        ? request.body.image_url
+                        : request.body.imageUrl !== undefined
+                          ? request.body.imageUrl
+                          : undefined,
+                image_focal_x:
+                    request.body.image_focal_x ?? request.body.imageFocalX,
+                image_focal_y:
+                    request.body.image_focal_y ?? request.body.imageFocalY,
+                image_zoom: request.body.image_zoom ?? request.body.imageZoom,
             });
             response.status(201).json(tournament);
         } catch (error) {
@@ -165,6 +179,11 @@ class TournamentController {
                 event_date_end,
                 is_online,
                 allow_penalities,
+                registration_close_hours_before,
+                image_url,
+                image_focal_x,
+                image_focal_y,
+                image_zoom,
             } = request.body;
             if (match_resolution_mode != null && match_resolution_mode !== 'strict_wins' && match_resolution_mode !== 'highest_score') {
                 response.status(400).json({ message: 'match_resolution_mode doit être strict_wins ou highest_score' });
@@ -188,7 +207,37 @@ class TournamentController {
                 event_date,
                 event_date_end,
                 is_online,
-                allow_penalities
+                allow_penalities,
+                registration_close_hours_before:
+                    registration_close_hours_before !== undefined
+                        ? registration_close_hours_before
+                        : request.body.registrationCloseHoursBefore !== undefined
+                          ? request.body.registrationCloseHoursBefore
+                          : undefined,
+                image_url:
+                    image_url !== undefined
+                        ? image_url
+                        : request.body.imageUrl !== undefined
+                          ? request.body.imageUrl
+                          : undefined,
+                image_focal_x:
+                    image_focal_x !== undefined
+                        ? image_focal_x
+                        : request.body.imageFocalX !== undefined
+                          ? request.body.imageFocalX
+                          : undefined,
+                image_focal_y:
+                    image_focal_y !== undefined
+                        ? image_focal_y
+                        : request.body.imageFocalY !== undefined
+                          ? request.body.imageFocalY
+                          : undefined,
+                image_zoom:
+                    image_zoom !== undefined
+                        ? image_zoom
+                        : request.body.imageZoom !== undefined
+                          ? request.body.imageZoom
+                          : undefined,
             });
             response.status(200).json(tournament);
         } catch (error) {

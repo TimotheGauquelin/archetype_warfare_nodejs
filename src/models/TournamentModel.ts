@@ -43,6 +43,11 @@ interface TournamentAttributes {
     event_date: Date | null;
     event_date_end: Date | null;
     is_online: boolean;
+    registration_close_hours_before: number;
+    image_url: string | null;
+    image_focal_x: number;
+    image_focal_y: number;
+    image_zoom: number;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -50,7 +55,26 @@ interface TournamentAttributes {
 interface TournamentCreationAttributes
     extends Optional<
         TournamentAttributes,
-        'id' | 'status' | 'current_round' | 'match_resolution_mode' | 'until_winner' | 'require_deck_list' | 'is_official' | 'allow_penalities' | 'max_players' | 'location' | 'event_date' | 'event_date_end' | 'is_online' | 'created_at' | 'updated_at'
+        | 'id'
+        | 'status'
+        | 'current_round'
+        | 'match_resolution_mode'
+        | 'until_winner'
+        | 'require_deck_list'
+        | 'is_official'
+        | 'allow_penalities'
+        | 'max_players'
+        | 'location'
+        | 'event_date'
+        | 'event_date_end'
+        | 'is_online'
+        | 'registration_close_hours_before'
+        | 'image_url'
+        | 'image_focal_x'
+        | 'image_focal_y'
+        | 'image_zoom'
+        | 'created_at'
+        | 'updated_at'
     > {}
 
 class Tournament extends Model<TournamentAttributes, TournamentCreationAttributes> implements TournamentAttributes {
@@ -70,6 +94,11 @@ class Tournament extends Model<TournamentAttributes, TournamentCreationAttribute
     declare event_date: Date | null;
     declare event_date_end: Date | null;
     declare is_online: boolean;
+    declare registration_close_hours_before: number;
+    declare image_url: string | null;
+    declare image_focal_x: number;
+    declare image_focal_y: number;
+    declare image_zoom: number;
     declare created_at?: Date;
     declare updated_at?: Date;
 }
@@ -151,6 +180,30 @@ Tournament.init(
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: true
+        },
+        registration_close_hours_before: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 48,
+        },
+        image_url: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        image_focal_x: {
+            type: DataTypes.SMALLINT,
+            allowNull: false,
+            defaultValue: 50,
+        },
+        image_focal_y: {
+            type: DataTypes.SMALLINT,
+            allowNull: false,
+            defaultValue: 50,
+        },
+        image_zoom: {
+            type: DataTypes.SMALLINT,
+            allowNull: false,
+            defaultValue: 100,
         },
         created_at: {
             type: DataTypes.DATE,
