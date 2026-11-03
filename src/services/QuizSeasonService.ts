@@ -6,6 +6,10 @@ import QuizQuestion, {
     QuizQuestionDifficulty,
     QuizQuestionType,
 } from '../models/QuizQuestionModel';
+import UploadImageService from './UploadImageService';
+import { extractImageIdFromUrl } from '../utils/image';
+
+const QUIZ_SEASON_IMAGE_FOLDER = 'quizz/season';
 
 /** Durée par défaut d'une saison Daily (~3 mois) */
 export const DEFAULT_SEASON_DAYS = 90;
@@ -78,6 +82,11 @@ class QuizSeasonService {
             name: season.name,
             startDate: season.start_date,
             endDate: season.end_date,
+            imageUrl: season.image_url ?? null,
+            imageFocalX: this.clampFocal(season.image_focal_x, 50),
+            imageFocalY: this.clampFocal(season.image_focal_y, 50),
+            imageZoom: this.clampZoom(season.image_zoom, 100),
+            allowsOverlap: Boolean(season.allows_overlap),
             dayCount: this.daysInclusive(season.start_date, season.end_date),
             questionCount,
             status,
@@ -86,36 +95,104 @@ class QuizSeasonService {
         };
     }
 
-    static async findSeasonForDate(quizDate: string): Promise<QuizSeason | null> {
-        return QuizSeason.findOne({
+    private static clampFocal(value: unknown, fallback = 50): number {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(0, Math.min(100, Math.round(n)));
+    }
+
+    /** Zoom en % (100 = 1×, 250 = 2.5×). */
+    private static clampZoom(value: unknown, fallback = 100): number {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(100, Math.min(250, Math.round(n)));
+    }
+
+    /** Upload Cloudinary si base64 / data URL, sinon conserve l'URL telle quelle. */
+    private static async resolveSeasonImageUrl(
+        imageUrl: unknown
+    ): Promise<string | null> {
+        if (imageUrl === undefined || imageUrl === null) return null;
+        const value = String(imageUrl).trim();
+        if (!value) return null;
+        if (value.startsWith('data:')) {
+            return UploadImageService.uploadImage(value, QUIZ_SEASON_IMAGE_FOLDER);
+        }
+        return value;
+    }
+
+    /**
+     * Toutes les saisons couvrant une date.
+     * Ordre : saisons normales d'abord, puis exceptionnelles (allows_overlap).
+     */
+    static async findSeasonsForDate(quizDate: string): Promise<QuizSeason[]> {
+        const seasons = await QuizSeason.findAll({
             where: {
                 start_date: { [Op.lte]: quizDate },
                 end_date: { [Op.gte]: quizDate },
             },
-            order: [['start_date', 'DESC']],
+            order: [
+                ['allows_overlap', 'ASC'],
+                ['start_date', 'DESC'],
+                ['id', 'DESC'],
+            ],
         });
+        return seasons;
     }
 
-    /** Saison en cours + les 2 prochaines (ou prochaines seules si pas de courante). */
+    /** Saison « principale » du jour (normale si présente, sinon exceptionnelle). */
+    static async findSeasonForDate(quizDate: string): Promise<QuizSeason | null> {
+        const seasons = await this.findSeasonsForDate(quizDate);
+        return seasons[0] ?? null;
+    }
+
+    private static parseAllowsOverlap(value: unknown, fallback = false): boolean {
+        if (value === undefined || value === null) return fallback;
+        if (typeof value === 'boolean') return value;
+        if (value === 1 || value === '1' || value === 'true') return true;
+        if (value === 0 || value === '0' || value === 'false') return false;
+        return fallback;
+    }
+
+    /**
+     * Conflit uniquement entre saisons normales (allows_overlap = false).
+     * Une saison exceptionnelle peut chevaucher une normale.
+     */
+    private static blockingOverlaps(
+        overlaps: QuizSeason[],
+        selfAllowsOverlap: boolean
+    ): QuizSeason[] {
+        if (selfAllowsOverlap) return [];
+        return overlaps.filter((s) => !s.allows_overlap);
+    }
+
+    /** Saisons en cours (normale + exceptionnelle) + prochaines, max 3. */
     static async listDashboardSeasons() {
         const today = this.todayDateString();
-        const current = await QuizSeason.findOne({
+        const currents = await QuizSeason.findAll({
             where: {
                 start_date: { [Op.lte]: today },
                 end_date: { [Op.gte]: today },
             },
-            order: [['start_date', 'DESC']],
+            order: [
+                ['allows_overlap', 'ASC'],
+                ['start_date', 'DESC'],
+            ],
         });
 
-        const upcoming = await QuizSeason.findAll({
-            where: {
-                start_date: { [Op.gt]: today },
-            },
-            order: [['start_date', 'ASC']],
-            limit: current ? 2 : 3,
-        });
+        const remaining = Math.max(0, 3 - currents.length);
+        const upcoming =
+            remaining > 0
+                ? await QuizSeason.findAll({
+                      where: {
+                          start_date: { [Op.gt]: today },
+                      },
+                      order: [['start_date', 'ASC']],
+                      limit: remaining,
+                  })
+                : [];
 
-        const rows = [...(current ? [current] : []), ...upcoming].slice(0, 3);
+        const rows = [...currents, ...upcoming].slice(0, 3);
         return Promise.all(rows.map((s) => this.serializeSeason(s)));
     }
 
@@ -175,6 +252,11 @@ class QuizSeasonService {
         name?: string;
         startDate?: string;
         endDate?: string;
+        imageUrl?: string | null;
+        imageFocalX?: number;
+        imageFocalY?: number;
+        imageZoom?: number;
+        allowsOverlap?: boolean;
     }) {
         const name = String(data.name ?? '').trim();
         if (!name) throw new CustomError('Nom de saison requis', 400);
@@ -194,22 +276,43 @@ class QuizSeasonService {
             );
         }
 
+        const allowsOverlap = this.parseAllowsOverlap(data.allowsOverlap, false);
         const overlaps = await this.findOverlappingSeasons(startDate, endDate);
-        if (overlaps.length > 0) {
-            throw new CustomError(this.overlapErrorMessage(overlaps), 400);
+        const blocking = this.blockingOverlaps(overlaps, allowsOverlap);
+        if (blocking.length > 0) {
+            throw new CustomError(this.overlapErrorMessage(blocking), 400);
         }
+
+        const imageUrl =
+            data.imageUrl !== undefined
+                ? await this.resolveSeasonImageUrl(data.imageUrl)
+                : null;
 
         const season = await QuizSeason.create({
             name,
             start_date: startDate,
             end_date: endDate,
+            image_url: imageUrl,
+            image_focal_x: this.clampFocal(data.imageFocalX, 50),
+            image_focal_y: this.clampFocal(data.imageFocalY, 50),
+            image_zoom: this.clampZoom(data.imageZoom, 100),
+            allows_overlap: allowsOverlap,
         });
         return this.serializeSeason(season);
     }
 
     static async updateSeason(
         seasonId: number,
-        data: { name?: string; startDate?: string; endDate?: string }
+        data: {
+            name?: string;
+            startDate?: string;
+            endDate?: string;
+            imageUrl?: string | null;
+            imageFocalX?: number;
+            imageFocalY?: number;
+            imageZoom?: number;
+            allowsOverlap?: boolean;
+        }
     ) {
         const season = await QuizSeason.findByPk(seasonId);
         if (!season) throw new CustomError('Saison introuvable', 404);
@@ -232,13 +335,61 @@ class QuizSeasonService {
             );
         }
 
+        if (data.imageUrl !== undefined) {
+            const oldImageUrl = season.image_url ?? null;
+            if (data.imageUrl === null || String(data.imageUrl).trim() === '') {
+                if (oldImageUrl) {
+                    const oldId = extractImageIdFromUrl(oldImageUrl);
+                    if (oldId) {
+                        await UploadImageService.deleteImageFromCloudinary(oldId).catch(
+                            () => undefined
+                        );
+                    }
+                }
+                season.image_url = null;
+                season.image_focal_x = 50;
+                season.image_focal_y = 50;
+                season.image_zoom = 100;
+            } else {
+                const nextUrl = await this.resolveSeasonImageUrl(data.imageUrl);
+                if (nextUrl && nextUrl !== oldImageUrl) {
+                    if (oldImageUrl) {
+                        const oldId = extractImageIdFromUrl(oldImageUrl);
+                        if (oldId) {
+                            await UploadImageService.deleteImageFromCloudinary(
+                                oldId
+                            ).catch(() => undefined);
+                        }
+                    }
+                    season.image_url = nextUrl;
+                }
+            }
+        }
+
+        if (data.imageFocalX !== undefined) {
+            season.image_focal_x = this.clampFocal(data.imageFocalX, 50);
+        }
+        if (data.imageFocalY !== undefined) {
+            season.image_focal_y = this.clampFocal(data.imageFocalY, 50);
+        }
+        if (data.imageZoom !== undefined) {
+            season.image_zoom = this.clampZoom(data.imageZoom, 100);
+        }
+        if (data.allowsOverlap !== undefined) {
+            season.allows_overlap = this.parseAllowsOverlap(
+                data.allowsOverlap,
+                season.allows_overlap
+            );
+        }
+
         const overlaps = await this.findOverlappingSeasons(
             season.start_date,
             season.end_date,
             this.toNumberId(season.id)
         );
-        if (overlaps.length > 0) {
-            throw new CustomError(this.overlapErrorMessage(overlaps), 400);
+        const blocking = this.blockingOverlaps(overlaps, season.allows_overlap);
+        if (blocking.length > 0) {
+            throw new CustomError(this.overlapErrorMessage(blocking), 400);
         }
 
         await season.save();
@@ -539,7 +690,10 @@ class QuizSeasonService {
         };
     }
 
-    /** Classement saison : tous les joueurs (somme des scores daily), du meilleur au moins bon. */
+    /**
+     * Classement saison : somme des points des réponses aux questions de CETTE saison
+     * (une question exceptionnelle ne remonte pas dans la saison normale chevauchée).
+     */
     static async getSeasonPodium(seasonId: number) {
         const season = await QuizSeason.findByPk(seasonId);
         if (!season) throw new CustomError('Saison introuvable', 404);
@@ -554,15 +708,36 @@ class QuizSeasonService {
             SELECT
                 u.id AS user_id,
                 u.username,
-                COALESCE(SUM(a.score), 0) AS total_score,
-                COUNT(a.id) AS attempts_count
+                COALESCE(SUM(ans.points_awarded), 0) AS total_score,
+                COUNT(DISTINCT a.id) AS attempts_count
             FROM quiz_attempt a
             INNER JOIN "user" u ON u.id = a.user_id
+            INNER JOIN quiz_answer ans ON ans.attempt_id = a.id
+            INNER JOIN quiz_question q ON q.id = ans.question_id
+            LEFT JOIN quiz_daily d
+                ON d.quiz_date = a.daily_date
+               AND (
+                    a.season_id IS NULL
+                    OR d.season_id = a.season_id
+               )
             WHERE a.mode = 'daily'
               AND a.status = 'finished'
               AND a.daily_date IS NOT NULL
               AND a.daily_date >= :startDate
               AND a.daily_date <= :endDate
+              AND COALESCE(
+                    a.season_id,
+                    q.season_id,
+                    d.season_id,
+                    (
+                        SELECT s3.id
+                        FROM quiz_season s3
+                        WHERE a.daily_date >= s3.start_date
+                          AND a.daily_date <= s3.end_date
+                        ORDER BY s3.allows_overlap ASC, s3.start_date DESC, s3.id DESC
+                        LIMIT 1
+                    )
+                ) = :seasonId
             GROUP BY u.id, u.username
             ORDER BY total_score DESC, attempts_count DESC, u.username ASC
             `,
@@ -570,6 +745,7 @@ class QuizSeasonService {
                 replacements: {
                     startDate: season.start_date,
                     endDate: season.end_date,
+                    seasonId: this.toNumberId(season.id),
                 },
                 type: QueryTypes.SELECT,
             }
