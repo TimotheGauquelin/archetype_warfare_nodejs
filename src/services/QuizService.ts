@@ -14,8 +14,13 @@ import Card from '../models/CardModel';
 import UploadImageService from './UploadImageService';
 import CardService from './CardService';
 import QuizSeasonService from './QuizSeasonService';
+import MedalService from './MedalService';
 
 const DEFAULT_QUESTION_COUNT = 5;
+/** Limite de parties libres pour les comptes classiques (non Admin / non Premium). */
+const FREE_PLAY_LIMIT = 5;
+/** Rôles sans limite de parties libres (Premium prévu plus tard). */
+const UNLIMITED_FREE_PLAY_ROLES = ['Admin', 'Premium'] as const;
 const PLAYABLE_TYPES = [
     'mcq',
     'true_false',
@@ -69,6 +74,7 @@ type HintLadderPayloadStored = {
     label: string;
     hints: Record<HintLadderLevel, string>;
 };
+
 const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
 const FREE_PLAY_ALL_SLUG = 'all';
 const FREE_PLAY_HIDDEN_SLUGS = new Set([FREE_PLAY_ALL_SLUG]);
@@ -567,12 +573,29 @@ class QuizService {
         return text.length > 0 ? text : null;
     }
 
-    static async resolveImageUrl(imageUrl: unknown): Promise<string | null> {
+    /** Dossier Cloudinary `quizz/<type>` pour les uploads PC (base64). */
+    static cloudinaryFolderForQuizType(type?: string | null): string {
+        const normalized = String(type ?? '').trim().toLowerCase();
+        if (
+            (PLAYABLE_TYPES as readonly string[]).includes(normalized)
+        ) {
+            return `quizz/${normalized}`;
+        }
+        return 'quizz';
+    }
+
+    static async resolveImageUrl(
+        imageUrl: unknown,
+        quizType?: string | null
+    ): Promise<string | null> {
         if (imageUrl === undefined || imageUrl === null) return null;
         const value = String(imageUrl).trim();
         if (!value) return null;
         if (value.startsWith('data:')) {
-            return UploadImageService.uploadImage(value, 'quizz');
+            return UploadImageService.uploadImage(
+                value,
+                this.cloudinaryFolderForQuizType(quizType)
+            );
         }
         return value;
     }
@@ -608,8 +631,8 @@ class QuizService {
     }
 
     /**
-     * Après passage réel en Daily : historique + bascule en question libre
-     * (sort du pool, libère le créneau).
+     * Après passage réel en Daily : historique + bascule en question libre.
+     * Conserve season_id / scheduled_date pour rester visible dans le planificateur.
      */
     static async markQuestionsAsPlayedDaily(questionIds: number[]): Promise<void> {
         const ids = [...new Set(questionIds.filter((id) => Number.isFinite(id) && id > 0))];
@@ -618,17 +641,20 @@ class QuizService {
             {
                 was_daily_question: true,
                 for_daily: false,
-                season_id: null,
-                scheduled_date: null,
             },
             { where: { id: { [Op.in]: ids } } }
         );
     }
 
     static async getTodayDailyQuestionIds(quizDate: string): Promise<number[]> {
-        const daily = await QuizDaily.findOne({ where: { quiz_date: quizDate } });
-        if (!daily) return [];
-        return (daily.question_ids ?? []).map((id) => this.toNumberId(id));
+        const dailies = await QuizDaily.findAll({ where: { quiz_date: quizDate } });
+        const ids: number[] = [];
+        for (const daily of dailies) {
+            for (const id of daily.question_ids ?? []) {
+                ids.push(this.toNumberId(id));
+            }
+        }
+        return [...new Set(ids)];
     }
 
     static displayThemeLabel(theme: QuizTheme): string {
@@ -698,42 +724,90 @@ class QuizService {
         return freeThemes;
     }
 
-    static async getHub(userId?: string) {
-        const today = this.todayDateString();
-        const dailyRow = await this.ensureGlobalDaily(today);
-        const excludedFromFree = dailyRow
-            ? dailyRow.question_ids.map((id) => this.toNumberId(id))
-            : [];
-        const themes = await this.getFreePlayThemes(excludedFromFree);
+    static hasUnlimitedFreePlay(roles?: string[] | null): boolean {
+        if (!roles?.length) return false;
+        return roles.some((role) =>
+            (UNLIMITED_FREE_PLAY_ROLES as readonly string[]).includes(role)
+        );
+    }
 
-        let daily: {
+    static async countFreeAttempts(userId: string): Promise<number> {
+        return QuizAttempt.count({
+            where: { user_id: userId, mode: 'free' },
+        });
+    }
+
+    static async getFreePlayQuota(userId?: string, roles?: string[] | null) {
+        if (userId && this.hasUnlimitedFreePlay(roles)) {
+            return {
+                unlimited: true as const,
+                limit: null,
+                used: 0,
+                remaining: null,
+            };
+        }
+        const used = userId ? await this.countFreeAttempts(userId) : 0;
+        const remaining = Math.max(0, FREE_PLAY_LIMIT - used);
+        return {
+            unlimited: false as const,
+            limit: FREE_PLAY_LIMIT,
+            used,
+            remaining,
+        };
+    }
+
+    static async getHub(userId?: string, roles?: string[] | null) {
+        const today = this.todayDateString();
+        const dailyRows = await this.ensureDailiesForDate(today);
+        const excludedFromFree = dailyRows.flatMap((row) =>
+            (row.question_ids ?? []).map((id) => this.toNumberId(id))
+        );
+        const themes = await this.getFreePlayThemes(excludedFromFree);
+        const freePlay = await this.getFreePlayQuota(userId, roles);
+
+        type DailyHubEntry = {
             quizDate: string;
             questionCount: number;
-            theme: { id: number; slug: string; label: string; description: string | null } | null;
+            seasonId: number | null;
+            theme: {
+                id: number;
+                slug: string;
+                label: string;
+                description: string | null;
+            } | null;
+            season: Awaited<
+                ReturnType<typeof QuizSeasonService.serializeSeason>
+            > | null;
             myAttempt: {
                 id: string;
                 status: string;
                 score: number;
                 max_score: number;
             } | null;
-        } | null = null;
+        };
 
-        if (dailyRow) {
+        const dailies: DailyHubEntry[] = [];
+        for (const dailyRow of dailyRows) {
+            const seasonId = dailyRow.season_id
+                ? this.toNumberId(dailyRow.season_id)
+                : null;
             const theme = await QuizTheme.findByPk(dailyRow.theme_id);
-            let myAttempt: {
-                id: string;
-                status: string;
-                score: number;
-                max_score: number;
-            } | null = null;
+            const season = seasonId
+                ? await QuizSeason.findByPk(seasonId)
+                : null;
+            let myAttempt: DailyHubEntry['myAttempt'] = null;
 
             if (userId) {
+                const attemptWhere: Record<string, unknown> = {
+                    user_id: userId,
+                    mode: 'daily',
+                    daily_date: today,
+                };
+                if (seasonId != null) {
+                    attemptWhere.season_id = seasonId;
+                }
                 const attempt = await QuizAttempt.findOne({
-                    where: {
-                        user_id: userId,
-                        mode: 'daily',
-                        daily_date: today,
-                    },
+                    where: attemptWhere,
                 });
                 if (attempt) {
                     myAttempt = {
@@ -745,9 +819,10 @@ class QuizService {
                 }
             }
 
-            daily = {
+            dailies.push({
                 quizDate: today,
-                questionCount: dailyRow.question_ids.length,
+                questionCount: (dailyRow.question_ids ?? []).length,
+                seasonId,
                 theme: theme
                     ? {
                           id: this.toNumberId(theme.id),
@@ -756,12 +831,17 @@ class QuizService {
                           description: theme.description,
                       }
                     : null,
+                season: season
+                    ? await QuizSeasonService.serializeSeason(season)
+                    : null,
                 myAttempt,
-            };
+            });
         }
 
-        const currentSeason = await QuizSeasonService.findSeasonForDate(today);
-        let seasonPodium: {
+        /** Daily principal (normale) — rétrocompat. */
+        const daily = dailies[0] ?? null;
+
+        type SeasonPodiumBlock = {
             season: Awaited<ReturnType<typeof QuizSeasonService.serializeSeason>>;
             podium: Array<{
                 rank: number;
@@ -770,38 +850,40 @@ class QuizService {
                 totalScore: number;
                 attemptsCount: number;
             }>;
-        } | null = null;
-        if (currentSeason) {
+        };
+
+        const currentSeasons = await QuizSeasonService.findSeasonsForDate(today);
+        const seasonPodiums: SeasonPodiumBlock[] = [];
+        for (const season of currentSeasons) {
             const fullPodium = await QuizSeasonService.getSeasonPodium(
-                this.toNumberId(currentSeason.id)
+                this.toNumberId(season.id)
             );
-            seasonPodium = {
+            seasonPodiums.push({
                 season: fullPodium.season,
                 podium: fullPodium.podium.slice(0, 3),
-            };
+            });
         }
+        const seasonPodium = seasonPodiums[0] ?? null;
 
-        return { themes, daily, today, seasonPodium };
+        return {
+            themes,
+            daily,
+            dailies,
+            today,
+            seasonPodium,
+            seasonPodiums,
+            freePlay,
+        };
     }
 
-    static async ensureGlobalDaily(quizDate: string): Promise<QuizDaily | null> {
-        const existing = await QuizDaily.findOne({
-            where: { quiz_date: quizDate },
-        });
-        if (existing) {
-            // Passage en Daily → historique + bascule libre (idempotent)
-            await this.markQuestionsAsPlayedDaily(
-                (existing.question_ids ?? []).map((id) => this.toNumberId(id))
-            );
-            return existing;
-        }
-
-        const season = await QuizSeasonService.findSeasonForDate(quizDate);
-        if (!season) {
-            return null;
-        }
-
-        // 1 question du pool Daily planifiée pour ce jour
+    /**
+     * Question planifiée du jour pour une saison (ou null).
+     * Ne dépend pas de for_daily : une question déjà jouée garde season_id + scheduled_date.
+     */
+    private static async findScheduledDailyQuestionForSeason(
+        seasonId: number,
+        quizDate: string
+    ): Promise<{ id: number; theme_id: number } | null> {
         const rows = await sequelize.query<{
             id: string | number;
             theme_id: string | number;
@@ -810,39 +892,85 @@ class QuizService {
             SELECT q.id, q.theme_id
             FROM quiz_question q
             WHERE q.is_active = TRUE
-              AND q.for_daily = TRUE
               AND q.season_id = :seasonId
               AND q.scheduled_date = :quizDate
               AND q.type IN ('mcq', 'true_false', 'order', 'name_the_cards', 'summoner', 'zoom', 'hint_ladder')
             LIMIT 1
             `,
             {
-                replacements: {
-                    seasonId: this.toNumberId(season.id),
-                    quizDate,
-                },
+                replacements: { seasonId, quizDate },
                 type: QueryTypes.SELECT,
             }
         );
+        if (rows.length === 0) return null;
+        return {
+            id: this.toNumberId(rows[0].id),
+            theme_id: this.toNumberId(rows[0].theme_id),
+        };
+    }
 
-        if (rows.length === 0) {
-            return null;
+    /**
+     * Crée / met à jour le daily d'UNE saison pour une date (1 question).
+     */
+    static async ensureDailyForSeason(
+        quizDate: string,
+        seasonId: number
+    ): Promise<QuizDaily | null> {
+        const pick = await this.findScheduledDailyQuestionForSeason(
+            seasonId,
+            quizDate
+        );
+        if (!pick) return null;
+
+        let existing = await QuizDaily.findOne({
+            where: { quiz_date: quizDate, season_id: seasonId },
+        });
+
+        // Ancien format : une seule ligne par date (sans / mauvais season_id)
+        if (!existing) {
+            const legacy = await QuizDaily.findOne({
+                where: { quiz_date: quizDate },
+            });
+            if (
+                legacy &&
+                (legacy.season_id == null ||
+                    this.toNumberId(legacy.season_id) === seasonId)
+            ) {
+                existing = legacy;
+            }
         }
 
-        const picked = rows[0];
-        const questionId = this.toNumberId(picked.id);
+        if (existing) {
+            const currentIds = (existing.question_ids ?? []).map((id) =>
+                this.toNumberId(id)
+            );
+            const needsFix =
+                currentIds.length !== 1 ||
+                currentIds[0] !== pick.id ||
+                this.toNumberId(existing.season_id ?? 0) !== seasonId ||
+                this.toNumberId(existing.theme_id) !== pick.theme_id;
+            if (needsFix) {
+                existing.question_ids = [pick.id];
+                existing.season_id = seasonId;
+                existing.theme_id = pick.theme_id;
+                await existing.save();
+            }
+            await this.markQuestionsAsPlayedDaily([pick.id]);
+            return existing;
+        }
+
         try {
             const created = await QuizDaily.create({
                 quiz_date: quizDate,
-                theme_id: this.toNumberId(picked.theme_id),
-                question_ids: [questionId],
-                season_id: this.toNumberId(season.id),
+                theme_id: pick.theme_id,
+                question_ids: [pick.id],
+                season_id: seasonId,
             });
-            await this.markQuestionsAsPlayedDaily([questionId]);
+            await this.markQuestionsAsPlayedDaily([pick.id]);
             return created;
         } catch {
             const raced = await QuizDaily.findOne({
-                where: { quiz_date: quizDate },
+                where: { quiz_date: quizDate, season_id: seasonId },
             });
             if (raced) {
                 await this.markQuestionsAsPlayedDaily(
@@ -852,6 +980,26 @@ class QuizService {
             }
             throw new CustomError('Impossible de créer le quizz quotidien', 500);
         }
+    }
+
+    /** Tous les dailys du jour (1 par saison active ayant une question planifiée). */
+    static async ensureDailiesForDate(quizDate: string): Promise<QuizDaily[]> {
+        const seasons = await QuizSeasonService.findSeasonsForDate(quizDate);
+        const rows: QuizDaily[] = [];
+        for (const season of seasons) {
+            const daily = await this.ensureDailyForSeason(
+                quizDate,
+                this.toNumberId(season.id)
+            );
+            if (daily) rows.push(daily);
+        }
+        return rows;
+    }
+
+    /** Daily principal du jour (saison normale, sinon 1ʳᵉ disponible). */
+    static async ensureGlobalDaily(quizDate: string): Promise<QuizDaily | null> {
+        const dailies = await this.ensureDailiesForDate(quizDate);
+        return dailies[0] ?? null;
     }
 
     static async pickRandomQuestionIds(
@@ -897,8 +1045,17 @@ class QuizService {
         userId: string,
         themeSlug: string,
         questionCount?: number,
-        locale?: string | null
+        locale?: string | null,
+        roles?: string[] | null
     ) {
+        const quota = await this.getFreePlayQuota(userId, roles);
+        if (!quota.unlimited && (quota.remaining ?? 0) <= 0) {
+            throw new CustomError(
+                `Limite de parties libres atteinte (${FREE_PLAY_LIMIT} maximum)`,
+                403
+            );
+        }
+
         const { attemptTheme, questionThemeIds } =
             await this.resolveFreePlayThemeIds(themeSlug);
         const today = this.todayDateString();
@@ -935,28 +1092,112 @@ class QuizService {
         return this.getAttemptForUser(attempt.id, userId, locale);
     }
 
-    static async startDailyAttempt(userId: string, locale?: string | null) {
+    static async startDailyAttempt(
+        userId: string,
+        locale?: string | null,
+        seasonIdRaw?: number | string | null
+    ) {
         const today = this.todayDateString();
-        const daily = await this.ensureGlobalDaily(today);
-        if (!daily) {
-            throw new CustomError('Aucune question disponible pour le quizz du jour', 404);
+        const seasons = await QuizSeasonService.findSeasonsForDate(today);
+        if (seasons.length === 0) {
+            throw new CustomError(
+                'Aucune question disponible pour le quizz du jour',
+                404
+            );
         }
 
-        const existing = await QuizAttempt.findOne({
+        let seasonId: number | null = null;
+        if (
+            seasonIdRaw !== undefined &&
+            seasonIdRaw !== null &&
+            String(seasonIdRaw).trim() !== ''
+        ) {
+            const parsed = Number(seasonIdRaw);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                throw new CustomError('seasonId invalide', 400);
+            }
+            if (!seasons.some((s) => this.toNumberId(s.id) === parsed)) {
+                throw new CustomError(
+                    'Cette saison n’a pas de quizz du jour aujourd’hui',
+                    404
+                );
+            }
+            seasonId = parsed;
+        } else {
+            seasonId = this.toNumberId(seasons[0].id);
+        }
+
+        const daily = await this.ensureDailyForSeason(today, seasonId);
+        if (!daily) {
+            throw new CustomError(
+                'Aucune question disponible pour le quizz du jour',
+                404
+            );
+        }
+
+        const dailyQuestionIds = (daily.question_ids ?? [])
+            .map((id) => this.toNumberId(id))
+            .slice(0, 1);
+        if (dailyQuestionIds.length === 0) {
+            throw new CustomError(
+                'Aucune question disponible pour le quizz du jour',
+                404
+            );
+        }
+
+        let existing = await QuizAttempt.findOne({
             where: {
                 user_id: userId,
                 mode: 'daily',
                 daily_date: today,
+                season_id: seasonId,
             },
         });
+        // Tentatives antérieures sans season_id (avant multi-daily)
+        if (!existing) {
+            const legacy = await QuizAttempt.findOne({
+                where: {
+                    user_id: userId,
+                    mode: 'daily',
+                    daily_date: today,
+                    season_id: null,
+                },
+            });
+            if (legacy) {
+                legacy.season_id = seasonId;
+                await legacy.save();
+                existing = legacy;
+            }
+        }
         if (existing) {
+            // Corrige d’éventuelles tentatives multi-questions héritées
+            if (
+                existing.status === 'in_progress' &&
+                ((existing.question_ids ?? []).length !== 1 ||
+                    this.toNumberId(existing.question_ids[0]) !==
+                        dailyQuestionIds[0])
+            ) {
+                const answered = await QuizAnswer.findAll({
+                    where: { attempt_id: existing.id },
+                });
+                if (answered.length === 0) {
+                    const questions = await QuizQuestion.findAll({
+                        where: { id: { [Op.in]: dailyQuestionIds } },
+                    });
+                    const maxScore = questions.reduce(
+                        (sum, q) => sum + this.questionMaxPoints(q),
+                        0
+                    );
+                    existing.question_ids = dailyQuestionIds;
+                    existing.max_score = Math.max(1, maxScore);
+                    existing.season_id = seasonId;
+                    await existing.save();
+                }
+            }
             return this.getAttemptForUser(existing.id, userId, locale);
         }
 
         try {
-            const dailyQuestionIds = daily.question_ids.map((id) =>
-                this.toNumberId(id)
-            );
             const dailyQuestions = await QuizQuestion.findAll({
                 where: { id: { [Op.in]: dailyQuestionIds } },
             });
@@ -969,6 +1210,7 @@ class QuizService {
                 theme_id: this.toNumberId(daily.theme_id),
                 mode: 'daily',
                 daily_date: today,
+                season_id: seasonId,
                 status: 'in_progress',
                 score: 0,
                 max_score: Math.max(1, dailyMaxScore),
@@ -981,6 +1223,7 @@ class QuizService {
                     user_id: userId,
                     mode: 'daily',
                     daily_date: today,
+                    season_id: seasonId,
                 },
             });
             if (raced) return this.getAttemptForUser(raced.id, userId, locale);
@@ -1016,9 +1259,10 @@ class QuizService {
         const firstQuestion = attempt.question_ids
             .map((id) => questionMap.get(this.toNumberId(id)))
             .find((q): q is QuizQuestion => Boolean(q));
-        // Zoom gère son propre chrono (3 × durée de phase) : pas de chrono daily global
+        // Zoom gère son propre chrono ; multi-questions (saison exceptionnelle) : pas de chrono global unique
         const dailyTimeLimitSeconds =
             attempt.mode === 'daily' &&
+            attempt.question_ids.length === 1 &&
             firstQuestion &&
             firstQuestion.type !== 'zoom'
                 ? this.normalizeDailyTimeLimitSeconds(
@@ -1398,11 +1642,24 @@ class QuizService {
         }
 
         const answeredCount = await QuizAnswer.count({ where: { attempt_id: attempt.id } });
+        let justFinished = false;
         if (answeredCount >= attempt.question_ids.length) {
             attempt.status = 'finished';
             attempt.finished_at = new Date();
             await attempt.save();
+            justFinished = true;
         }
+
+        const userAfter = await User.findByPk(userId, { attributes: ['quiz_points'] });
+        MedalService.evaluateSafe('onQuizAttemptProgress', () =>
+            MedalService.onQuizAttemptProgress({
+                userId,
+                mode: attempt.mode,
+                attemptScore: attempt.score,
+                userQuizPoints: userAfter?.quiz_points ?? 0,
+                justFinished,
+            })
+        );
 
         return this.getAttemptForUser(attempt.id, userId, locale);
     }
@@ -1423,6 +1680,18 @@ class QuizService {
         attempt.status = 'finished';
         attempt.finished_at = new Date();
         await attempt.save();
+
+        const userAfter = await User.findByPk(userId, { attributes: ['quiz_points'] });
+        MedalService.evaluateSafe('onQuizAttemptProgress', () =>
+            MedalService.onQuizAttemptProgress({
+                userId,
+                mode: attempt.mode,
+                attemptScore: attempt.score,
+                userQuizPoints: userAfter?.quiz_points ?? 0,
+                justFinished: true,
+            })
+        );
+
         return this.getAttemptForUser(attempt.id, userId, locale);
     }
 
@@ -1644,13 +1913,14 @@ class QuizService {
     }
 
     static async resolveOrderItemsImages(
-        items: OrderItemStored[]
+        items: OrderItemStored[],
+        quizType: string = 'order'
     ): Promise<OrderItemStored[]> {
         const resolved: OrderItemStored[] = [];
         for (const item of items) {
             resolved.push({
                 ...item,
-                imageUrl: await this.resolveImageUrl(item.imageUrl),
+                imageUrl: await this.resolveImageUrl(item.imageUrl, quizType),
             });
         }
         return resolved;
@@ -1739,6 +2009,7 @@ class QuizService {
                 artworkUrl: enriched[0]?.artworkUrl ?? null,
             };
         }
+
 
         return {
             id: this.toNumberId(question.id),
@@ -1935,7 +2206,8 @@ class QuizService {
             const items = await this.resolveOrderItemsImages(
                 payload.items.map((item, index) =>
                     this.normalizeOrderItem(item, index)
-                )
+                ),
+                type
             );
             payload = { ...payload, items };
         }
@@ -1945,7 +2217,7 @@ class QuizService {
                 : type === 'hint_ladder'
                   ? HINT_LADDER_MAX_POINTS
                   : Math.max(1, Number(data.points) || 1);
-        let imageUrl = await this.resolveImageUrl(data.image_url);
+        let imageUrl = await this.resolveImageUrl(data.image_url, type);
         if (type === 'zoom' && !imageUrl) {
             const zoom = this.normalizeZoomPayload(payload);
             imageUrl = zoom.cardId
@@ -2023,7 +2295,10 @@ class QuizService {
                 explanation_image_url:
                     type === 'zoom' || type === 'hint_ladder'
                         ? null
-                        : await this.resolveImageUrl(data.explanation_image_url),
+                        : await this.resolveImageUrl(
+                              data.explanation_image_url,
+                              type
+                          ),
             });
         } catch (error) {
             const message = error instanceof Error ? error.message : '';
@@ -2111,7 +2386,8 @@ class QuizService {
                 const items = await this.resolveOrderItemsImages(
                     payload.items.map((item, index) =>
                         this.normalizeOrderItem(item, index)
-                    )
+                    ),
+                    question.type
                 );
                 payload = { ...payload, items };
             }
@@ -2219,7 +2495,10 @@ class QuizService {
         }
 
         if (data.image_url !== undefined) {
-            question.image_url = await this.resolveImageUrl(data.image_url);
+            question.image_url = await this.resolveImageUrl(
+                data.image_url,
+                question.type
+            );
         }
 
         if (question.type === 'zoom') {
@@ -2228,7 +2507,9 @@ class QuizService {
             );
             if (zoom.cardId) {
                 const fromCard = await this.resolveImageUrl(
-                    data.image_url ?? CardService.croppedArtworkUrlFromId(zoom.cardId)
+                    data.image_url ??
+                        CardService.croppedArtworkUrlFromId(zoom.cardId),
+                    question.type
                 );
                 question.image_url =
                     fromCard ?? CardService.croppedArtworkUrlFromId(zoom.cardId);
@@ -2282,7 +2563,8 @@ class QuizService {
             question.type !== 'zoom'
         ) {
             question.explanation_image_url = await this.resolveImageUrl(
-                data.explanation_image_url
+                data.explanation_image_url,
+                question.type
             );
         }
 
@@ -2332,58 +2614,110 @@ class QuizService {
     }
 
     /**
-     * Stats quiz du joueur : score daily cumulé + perf par type de question (mode de jeu).
+     * Stats quiz du joueur : total daily + points par saison (session).
      */
     static async getMyStats(userId: string): Promise<{
         quizPoints: number;
-        byType: Array<{
-            type: string;
-            answersCount: number;
-            correctCount: number;
+        seasons: Array<{
+            seasonId: number;
+            name: string;
+            startDate: string;
+            endDate: string;
+            imageUrl: string | null;
+            imageFocalX: number;
+            imageFocalY: number;
+            imageZoom: number;
             points: number;
-            accuracy: number;
+            attemptsCount: number;
         }>;
     }> {
         const user = await User.findByPk(userId, { attributes: ['id', 'quiz_points'] });
         if (!user) throw new CustomError('Utilisateur introuvable', 404);
 
         const rows = await sequelize.query<{
-            type: string;
-            answers_count: number;
-            correct_count: number;
-            points: number;
+            season_id: string | number;
+            name: string;
+            start_date: string;
+            end_date: string;
+            image_url: string | null;
+            image_focal_x: string | number | null;
+            image_focal_y: string | number | null;
+            image_zoom: string | number | null;
+            points: string | number;
+            attempts_count: string | number;
         }>(
             `
-            SELECT q.type AS type,
-                   COUNT(*)::int AS answers_count,
-                   SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END)::int AS correct_count,
-                   COALESCE(SUM(a.points_awarded), 0)::int AS points
-            FROM quiz_answer a
-            INNER JOIN quiz_attempt att ON att.id = a.attempt_id
-            INNER JOIN quiz_question q ON q.id = a.question_id
-            WHERE att.user_id = :userId
-            GROUP BY q.type
-            ORDER BY points DESC, answers_count DESC
+            SELECT
+                s.id AS season_id,
+                s.name,
+                s.start_date,
+                s.end_date,
+                s.image_url,
+                s.image_focal_x,
+                s.image_focal_y,
+                s.image_zoom,
+                COALESCE(SUM(ans.points_awarded), 0) AS points,
+                COUNT(DISTINCT a.id)::int AS attempts_count
+            FROM quiz_season s
+            INNER JOIN quiz_attempt a
+                ON a.mode = 'daily'
+               AND a.status = 'finished'
+               AND a.user_id = :userId
+               AND a.daily_date IS NOT NULL
+               AND a.daily_date >= s.start_date
+               AND a.daily_date <= s.end_date
+            INNER JOIN quiz_answer ans ON ans.attempt_id = a.id
+            INNER JOIN quiz_question q ON q.id = ans.question_id
+            LEFT JOIN quiz_daily d
+                ON d.quiz_date = a.daily_date
+               AND (
+                    a.season_id IS NULL
+                    OR d.season_id = a.season_id
+               )
+            WHERE COALESCE(
+                    a.season_id,
+                    q.season_id,
+                    d.season_id,
+                    (
+                        SELECT s3.id
+                        FROM quiz_season s3
+                        WHERE a.daily_date >= s3.start_date
+                          AND a.daily_date <= s3.end_date
+                        ORDER BY s3.allows_overlap ASC, s3.start_date DESC, s3.id DESC
+                        LIMIT 1
+                    )
+                ) = s.id
+            GROUP BY s.id, s.name, s.start_date, s.end_date, s.image_url, s.image_focal_x, s.image_focal_y, s.image_zoom
+            ORDER BY s.start_date DESC
             `,
             { replacements: { userId }, type: QueryTypes.SELECT }
         );
 
+        const clampFocal = (value: unknown, fallback = 50) => {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return fallback;
+            return Math.max(0, Math.min(100, Math.round(n)));
+        };
+        const clampZoom = (value: unknown, fallback = 100) => {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return fallback;
+            return Math.max(100, Math.min(250, Math.round(n)));
+        };
+
         return {
             quizPoints: user.quiz_points ?? 0,
-            byType: rows.map((row) => {
-                const answersCount = Number(row.answers_count) || 0;
-                const correctCount = Number(row.correct_count) || 0;
-                return {
-                    type: row.type,
-                    answersCount,
-                    correctCount,
-                    points: Number(row.points) || 0,
-                    accuracy:
-                        answersCount > 0
-                            ? Math.round((correctCount / answersCount) * 100)
-                            : 0,
-                };
-            }),
+            seasons: rows.map((row) => ({
+                seasonId: Number(row.season_id),
+                name: row.name,
+                startDate: String(row.start_date).slice(0, 10),
+                endDate: String(row.end_date).slice(0, 10),
+                imageUrl: row.image_url ? String(row.image_url) : null,
+                imageFocalX: clampFocal(row.image_focal_x, 50),
+                imageFocalY: clampFocal(row.image_focal_y, 50),
+                imageZoom: clampZoom(row.image_zoom, 100),
+                points: Number(row.points) || 0,
+                attemptsCount: Number(row.attempts_count) || 0,
+            })),
         };
     }
 }

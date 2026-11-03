@@ -17,8 +17,10 @@ const localeFromRequest = (request: Request): string | undefined => {
 class QuizController {
     async getHub(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = (request as Request & { user?: { id?: string } }).user?.id;
-            const hub = await QuizService.getHub(userId);
+            const user = (request as Request & {
+                user?: { id?: string; roles?: string[] };
+            }).user;
+            const hub = await QuizService.getHub(user?.id, user?.roles);
             response.status(200).json(hub);
         } catch (error) {
             next(error);
@@ -36,7 +38,10 @@ class QuizController {
 
     async startFree(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = (request as Request & { user?: { id?: string } }).user?.id;
+            const user = (request as Request & {
+                user?: { id?: string; roles?: string[] };
+            }).user;
+            const userId = user?.id;
             if (!userId) throw new CustomError('Non authentifié', 401);
             const themeSlug = String(request.body.themeSlug ?? '').trim();
             if (!themeSlug) throw new CustomError('themeSlug requis', 400);
@@ -44,7 +49,8 @@ class QuizController {
                 userId,
                 themeSlug,
                 request.body.questionCount,
-                localeFromRequest(request)
+                localeFromRequest(request),
+                user?.roles
             );
             response.status(201).json(attempt);
         } catch (error) {
@@ -56,9 +62,16 @@ class QuizController {
         try {
             const userId = (request as Request & { user?: { id?: string } }).user?.id;
             if (!userId) throw new CustomError('Non authentifié', 401);
+            const seasonId =
+                request.body?.seasonId ??
+                request.body?.season_id ??
+                request.query?.seasonId ??
+                request.query?.season_id ??
+                null;
             const attempt = await QuizService.startDailyAttempt(
                 userId,
-                localeFromRequest(request)
+                localeFromRequest(request),
+                seasonId
             );
             response.status(201).json(attempt);
         } catch (error) {
@@ -128,6 +141,16 @@ class QuizController {
         try {
             const userId = (request as Request & { user?: { id?: string } }).user?.id;
             if (!userId) throw new CustomError('Non authentifié', 401);
+            const stats = await QuizService.getMyStats(userId);
+            response.status(200).json(stats);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getUserStats(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const userId = getUuidParam(request.params.userId);
             const stats = await QuizService.getMyStats(userId);
             response.status(200).json(stats);
         } catch (error) {
@@ -306,6 +329,17 @@ class QuizController {
                 name: request.body.name,
                 startDate: request.body.startDate ?? request.body.start_date,
                 endDate: request.body.endDate ?? request.body.end_date,
+                imageUrl:
+                    request.body.imageUrl ??
+                    request.body.image_url ??
+                    undefined,
+                imageFocalX:
+                    request.body.imageFocalX ?? request.body.image_focal_x,
+                imageFocalY:
+                    request.body.imageFocalY ?? request.body.image_focal_y,
+                imageZoom: request.body.imageZoom ?? request.body.image_zoom,
+                allowsOverlap:
+                    request.body.allowsOverlap ?? request.body.allows_overlap,
             });
             response.status(201).json(season);
         } catch (error) {
@@ -323,6 +357,19 @@ class QuizController {
                 name: request.body.name,
                 startDate: request.body.startDate ?? request.body.start_date,
                 endDate: request.body.endDate ?? request.body.end_date,
+                imageUrl:
+                    request.body.imageUrl !== undefined
+                        ? request.body.imageUrl
+                        : request.body.image_url !== undefined
+                          ? request.body.image_url
+                          : undefined,
+                imageFocalX:
+                    request.body.imageFocalX ?? request.body.image_focal_x,
+                imageFocalY:
+                    request.body.imageFocalY ?? request.body.image_focal_y,
+                imageZoom: request.body.imageZoom ?? request.body.image_zoom,
+                allowsOverlap:
+                    request.body.allowsOverlap ?? request.body.allows_overlap,
             });
             response.status(200).json(season);
         } catch (error) {

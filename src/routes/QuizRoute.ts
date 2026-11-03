@@ -119,6 +119,9 @@ router.delete(
 router.get('/me/stats', authenticateToken, (req: Request, res: Response, next: NextFunction) =>
     QuizController.getMyStats(req, res, next)
 );
+router.get('/users/:userId/stats', (req: Request, res: Response, next: NextFunction) =>
+    QuizController.getUserStats(req, res, next)
+);
 
 router.post('/attempts/free', authenticateToken, (req: Request, res: Response, next: NextFunction) =>
     QuizController.startFree(req, res, next)

@@ -10,6 +10,7 @@ interface QuizAttemptAttributes {
     theme_id: number;
     mode: QuizAttemptMode;
     daily_date: string | null;
+    season_id?: number | null;
     status: QuizAttemptStatus;
     score: number;
     max_score: number;
@@ -23,6 +24,7 @@ type QuizAttemptCreationAttributes = Optional<
     QuizAttemptAttributes,
     | 'id'
     | 'daily_date'
+    | 'season_id'
     | 'status'
     | 'score'
     | 'max_score'
@@ -40,6 +42,7 @@ class QuizAttempt
     declare theme_id: number;
     declare mode: QuizAttemptMode;
     declare daily_date: string | null;
+    declare season_id?: number | null;
     declare status: QuizAttemptStatus;
     declare score: number;
     declare max_score: number;
@@ -70,6 +73,10 @@ QuizAttempt.init(
         },
         daily_date: {
             type: DataTypes.DATEONLY,
+            allowNull: true,
+        },
+        season_id: {
+            type: DataTypes.BIGINT,
             allowNull: true,
         },
         status: {
