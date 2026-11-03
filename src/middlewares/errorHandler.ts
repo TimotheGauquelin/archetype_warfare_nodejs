@@ -18,7 +18,12 @@ interface SequelizeValidationErrorItem {
 }
 
 export const ErrorHandler = (
-    err: Error & { statusCode?: number; multipleErrors?: boolean; errors?: Array<{ field?: string; message: string; value?: unknown } | SequelizeValidationErrorItem> },
+    err: Error & {
+        statusCode?: number;
+        multipleErrors?: boolean;
+        details?: Record<string, unknown>;
+        errors?: Array<{ field?: string; message: string; value?: unknown } | SequelizeValidationErrorItem>;
+    },
     req: Request,
     res: Response,
     _next: NextFunction
@@ -85,10 +90,13 @@ export const ErrorHandler = (
         status: errStatus,
     };
 
-    // Ajouter les détails en développement
+    if (err.details && typeof err.details === 'object') {
+        response.details = err.details;
+    }
+
+    // Ajouter la stack en développement
     if (process.env.NODE_ENV === 'development') {
         response.stack = err.stack;
-        response.details = errorContext;
     }
 
     if (haveMultipleErrors || err.errors) {
