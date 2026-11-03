@@ -61,6 +61,16 @@ class UserController {
         }
     }
 
+    async getPublicProfile(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = getUuidParam(request.params.id);
+            const user = await UserService.getPublicProfile(id);
+            response.status(200).json(user);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getUserByResetPassword(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const token = getStringParam(request.params.token);
@@ -341,12 +351,19 @@ class UserController {
                 throw new CustomError('Utilisateur non trouvé', 404);
             }
 
-            const { locale, biography, country, loved_archetype_id } = request.body;
+            const {
+                locale,
+                biography,
+                country,
+                loved_archetype_id,
+                profile_picture_url,
+            } = request.body;
             const updated = await UserService.updateMyProfile(existingUser, {
                 locale,
                 biography,
                 country,
                 loved_archetype_id,
+                profile_picture_url,
             });
 
             response.status(200).json({

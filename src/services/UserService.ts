@@ -14,6 +14,9 @@ import sequelize from '../config/Sequelize';
 import { hashToken } from '../utils/token';
 import { sendAccountApprovedEmail } from '../mailing/sendAccountApprovedMail';
 import logger from '../utils/logger';
+import UploadImageService from './UploadImageService';
+
+const DEFAULT_PROFILE_PICTURE_FOLDER = 'picture_profile/default';
 
 interface SearchFilters {
     /** Recherche libre sur username et/ou email */
@@ -167,6 +170,37 @@ class UserService {
         return { ...userData, roles };
     }
 
+    /** Profil public (sans email / secrets) pour /users/:id. */
+    static async getPublicProfile(id: string): Promise<Record<string, unknown>> {
+        const user = await User.findOne({
+            where: { id, is_active: true, is_banned: false },
+            attributes: [
+                'id',
+                'username',
+                'biography',
+                'country',
+                'profile_picture_url',
+                'quiz_points',
+                'loved_archetype_id',
+                'created_at',
+            ],
+            include: [
+                {
+                    model: Archetype,
+                    as: 'loved_archetype',
+                    attributes: ['id', 'name', 'slug', 'card_img_url', 'is_active'],
+                    required: false,
+                },
+            ],
+        });
+
+        if (!user) {
+            throw new CustomError('User not found', 404);
+        }
+
+        return user.toJSON() as unknown as Record<string, unknown>;
+    }
+
     static async getUserByResetPassword(token: string): Promise<User> {
         const hashedToken = hashToken(token);
         const user = await User.findOne({
@@ -291,6 +325,29 @@ class UserService {
         }
     }
 
+    /**
+     * Avatars autorisés : doivent figurer dans le dossier Media Library
+     * picture_profile/default (public_id peut ne pas contenir le chemin).
+     */
+    static async isAllowedDefaultProfilePicture(url: string): Promise<boolean> {
+        try {
+            const parsed = new URL(url);
+            if (!parsed.hostname.includes('cloudinary.com')) return false;
+        } catch {
+            return false;
+        }
+
+        const defaults = await UploadImageService.listImagesInFolder(
+            DEFAULT_PROFILE_PICTURE_FOLDER
+        );
+        const normalized = url.trim();
+        return defaults.some((img) => {
+            const secure = String(img.secure_url ?? '').trim();
+            const plain = String(img.url ?? '').trim();
+            return secure === normalized || plain === normalized;
+        });
+    }
+
     static async updateMyProfile(
         existingUser: User,
         data: {
@@ -298,6 +355,7 @@ class UserService {
             biography?: string | null;
             country?: string | null;
             loved_archetype_id?: number | string | null;
+            profile_picture_url?: string | null;
         }
     ): Promise<Record<string, unknown>> {
         if (data.locale !== undefined) {
@@ -341,6 +399,21 @@ class UserService {
                     throw new CustomError('Archétype introuvable.', 404);
                 }
                 existingUser.loved_archetype_id = archetypeId;
+            }
+        }
+
+        if (data.profile_picture_url !== undefined) {
+            if (data.profile_picture_url === null || data.profile_picture_url === '') {
+                existingUser.profile_picture_url = null;
+            } else {
+                const pictureUrl = String(data.profile_picture_url).trim();
+                if (!(await this.isAllowedDefaultProfilePicture(pictureUrl))) {
+                    throw new CustomError(
+                        'Photo de profil invalide : choisissez une image par défaut.',
+                        400
+                    );
+                }
+                existingUser.profile_picture_url = pictureUrl;
             }
         }
 

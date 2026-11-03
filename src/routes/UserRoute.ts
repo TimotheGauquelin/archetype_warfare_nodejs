@@ -12,6 +12,7 @@ router.get('/getUserByResetPassword/:token', (request: Request, response: Respon
 router.get('/getNewUsers', (request: Request, response: Response, next: NextFunction) => UserController.getNewUsers(request, response, next));
 router.get('/:id/admin/quiz', (request: Request, response: Response, next: NextFunction) => UserController.getUserQuizSummary(request, response, next));
 router.get('/:id/admin/tournaments', (request: Request, response: Response, next: NextFunction) => UserController.getUserTournamentsSummary(request, response, next));
+router.get('/:id/public', (request: Request, response: Response, next: NextFunction) => UserController.getPublicProfile(request, response, next));
 router.get('/:id', (request: Request, response: Response, next: NextFunction) => UserController.getUserById(request, response, next));
 
 // POST
