@@ -278,6 +278,7 @@ class ArchetypeRankingService {
             archetypeId: number;
             archetypeName: string;
             slug: string | null;
+            cardImgUrl: string | null;
             points: number;
             rank: number;
             playersCount: number;
@@ -325,7 +326,7 @@ class ArchetypeRankingService {
 
         const archetypes = await Archetype.findAll({
             where: { id: entries.map((e) => e.archetypeId) },
-            attributes: ['id', 'name', 'slug'],
+            attributes: ['id', 'name', 'slug', 'card_img_url'],
         });
         const archetypeMap = new Map(archetypes.map((a) => [a.id, a]));
 
@@ -336,6 +337,7 @@ class ArchetypeRankingService {
                     archetypeId: entry.archetypeId,
                     archetypeName: archetype?.name ?? `#${entry.archetypeId}`,
                     slug: archetype?.slug ?? null,
+                    cardImgUrl: archetype?.card_img_url ?? null,
                     points: entry.points,
                     rank: entry.rank,
                     playersCount: entry.playersCount,

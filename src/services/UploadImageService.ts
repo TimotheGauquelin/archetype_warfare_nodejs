@@ -2,6 +2,7 @@ import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'clo
 import envVars from '../config/envValidation';
 import logger from '../utils/logger';
 import { Request, Response, NextFunction } from 'express';
+import { getStringParam } from '../utils/request';
 
 cloudinary.config({
     cloud_name: envVars.CLOUDINARY_CLOUD_NAME,
@@ -236,7 +237,7 @@ class UploadImageService {
     static async getAllImagesFromFolder(request: Request, response: Response): Promise<void> {
         const folderName =
             (request as Request & { cloudinaryFolder?: string }).cloudinaryFolder ||
-            request.params.folderName;
+            getStringParam(request.params.folderName);
 
         if (!folderName) {
             response.status(400).json({

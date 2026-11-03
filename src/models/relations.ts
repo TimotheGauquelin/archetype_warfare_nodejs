@@ -18,6 +18,8 @@ import Type from './TypeModel';
 import Banlist from './BanlistModel';
 import CardStatus from './CardStatusModel';
 import BanlistArchetypeCard from './BanlistArchetypeCardModel';
+import BanlistReason from './BanlistReasonModel';
+import BanlistArchetypeCardReason from './BanlistArchetypeCardReasonModel';
 import ArchetypeType from './ArchetypeTypeModel';
 import ArchetypeAttribute from './ArchetypeAttributeModel';
 import ArchetypeSummonMechanic from './ArchetypeSummonMechanicModel';
@@ -32,10 +34,18 @@ import QuizDaily from './QuizDailyModel';
 import QuizAttempt from './QuizAttemptModel';
 import QuizAnswer from './QuizAnswerModel';
 import QuizSeason from './QuizSeasonModel';
+import Medal from './MedalModel';
+import UserMedal from './UserMedalModel';
 
 // Relations User
 User.hasMany(Deck, { foreignKey: 'user_id' });
 Deck.belongsTo(User, { foreignKey: 'user_id' });
+
+// Médailles
+User.hasMany(UserMedal, { foreignKey: 'user_id', as: 'medals' });
+UserMedal.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+Medal.hasMany(UserMedal, { foreignKey: 'medal_id', as: 'user_medals' });
+UserMedal.belongsTo(Medal, { foreignKey: 'medal_id', as: 'medal' });
 
 // Relations Tournoi
 Tournament.hasMany(TournamentPlayer, { foreignKey: 'tournament_id', as: 'players' });
@@ -249,6 +259,28 @@ BanlistArchetypeCard.belongsTo(CardStatus, {
     as: 'card_status'
 });
 
+// Raisons de banlist (M2M)
+BanlistArchetypeCard.belongsToMany(BanlistReason, {
+    through: BanlistArchetypeCardReason,
+    foreignKey: 'banlist_archetype_card_id',
+    otherKey: 'banlist_reason_id',
+    as: 'reasons',
+});
+BanlistReason.belongsToMany(BanlistArchetypeCard, {
+    through: BanlistArchetypeCardReason,
+    foreignKey: 'banlist_reason_id',
+    otherKey: 'banlist_archetype_card_id',
+    as: 'banlist_archetype_cards',
+});
+BanlistArchetypeCardReason.belongsTo(BanlistArchetypeCard, {
+    foreignKey: 'banlist_archetype_card_id',
+    as: 'banlist_archetype_card',
+});
+BanlistArchetypeCardReason.belongsTo(BanlistReason, {
+    foreignKey: 'banlist_reason_id',
+    as: 'reason',
+});
+
 export {
     User,
     Deck,
@@ -264,6 +296,8 @@ export {
     Banlist,
     CardStatus,
     BanlistArchetypeCard,
+    BanlistReason,
+    BanlistArchetypeCardReason,
     ArchetypeType,
     ArchetypeAttribute,
     ArchetypeSummonMechanic,
@@ -284,4 +318,6 @@ export {
     QuizAttempt,
     QuizAnswer,
     QuizSeason,
+    Medal,
+    UserMedal,
 };

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.ArchetypeTranslation = exports.CardTranslation = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
+exports.UserMedal = exports.Medal = exports.QuizSeason = exports.QuizAnswer = exports.QuizAttempt = exports.QuizDaily = exports.QuizQuestion = exports.QuizTheme = exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCardReason = exports.BanlistReason = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.ArchetypeTranslation = exports.CardTranslation = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
 const UserModel_1 = __importDefault(require("./UserModel"));
 exports.User = UserModel_1.default;
 const DeckModel_1 = __importDefault(require("./DeckModel"));
@@ -44,6 +44,10 @@ const CardStatusModel_1 = __importDefault(require("./CardStatusModel"));
 exports.CardStatus = CardStatusModel_1.default;
 const BanlistArchetypeCardModel_1 = __importDefault(require("./BanlistArchetypeCardModel"));
 exports.BanlistArchetypeCard = BanlistArchetypeCardModel_1.default;
+const BanlistReasonModel_1 = __importDefault(require("./BanlistReasonModel"));
+exports.BanlistReason = BanlistReasonModel_1.default;
+const BanlistArchetypeCardReasonModel_1 = __importDefault(require("./BanlistArchetypeCardReasonModel"));
+exports.BanlistArchetypeCardReason = BanlistArchetypeCardReasonModel_1.default;
 const ArchetypeTypeModel_1 = __importDefault(require("./ArchetypeTypeModel"));
 exports.ArchetypeType = ArchetypeTypeModel_1.default;
 const ArchetypeAttributeModel_1 = __importDefault(require("./ArchetypeAttributeModel"));
@@ -60,9 +64,30 @@ const PenaltyTypeModel_1 = __importDefault(require("./PenaltyTypeModel"));
 exports.PenaltyType = PenaltyTypeModel_1.default;
 const TournamentPlayerPenaltyModel_1 = __importDefault(require("./TournamentPlayerPenaltyModel"));
 exports.TournamentPlayerPenalty = TournamentPlayerPenaltyModel_1.default;
+const QuizThemeModel_1 = __importDefault(require("./QuizThemeModel"));
+exports.QuizTheme = QuizThemeModel_1.default;
+const QuizQuestionModel_1 = __importDefault(require("./QuizQuestionModel"));
+exports.QuizQuestion = QuizQuestionModel_1.default;
+const QuizDailyModel_1 = __importDefault(require("./QuizDailyModel"));
+exports.QuizDaily = QuizDailyModel_1.default;
+const QuizAttemptModel_1 = __importDefault(require("./QuizAttemptModel"));
+exports.QuizAttempt = QuizAttemptModel_1.default;
+const QuizAnswerModel_1 = __importDefault(require("./QuizAnswerModel"));
+exports.QuizAnswer = QuizAnswerModel_1.default;
+const QuizSeasonModel_1 = __importDefault(require("./QuizSeasonModel"));
+exports.QuizSeason = QuizSeasonModel_1.default;
+const MedalModel_1 = __importDefault(require("./MedalModel"));
+exports.Medal = MedalModel_1.default;
+const UserMedalModel_1 = __importDefault(require("./UserMedalModel"));
+exports.UserMedal = UserMedalModel_1.default;
 // Relations User
 UserModel_1.default.hasMany(DeckModel_1.default, { foreignKey: 'user_id' });
 DeckModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id' });
+// Médailles
+UserModel_1.default.hasMany(UserMedalModel_1.default, { foreignKey: 'user_id', as: 'medals' });
+UserMedalModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id', as: 'user' });
+MedalModel_1.default.hasMany(UserMedalModel_1.default, { foreignKey: 'medal_id', as: 'user_medals' });
+UserMedalModel_1.default.belongsTo(MedalModel_1.default, { foreignKey: 'medal_id', as: 'medal' });
 // Relations Tournoi
 TournamentModel_1.default.hasMany(TournamentPlayerModel_1.default, { foreignKey: 'tournament_id', as: 'players' });
 TournamentPlayerModel_1.default.belongsTo(TournamentModel_1.default, { foreignKey: 'tournament_id', as: 'tournament' });
@@ -99,6 +124,23 @@ TournamentPlayerPenaltyModel_1.default.belongsTo(TournamentMatchModel_1.default,
 TournamentMatchModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'tournament_match_id' });
 TournamentPlayerPenaltyModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'applied_by_user_id', as: 'applied_by' });
 UserModel_1.default.hasMany(TournamentPlayerPenaltyModel_1.default, { foreignKey: 'applied_by_user_id', as: 'applied_penalties' });
+// Relations Quizz
+QuizThemeModel_1.default.hasMany(QuizQuestionModel_1.default, { foreignKey: 'theme_id', as: 'questions' });
+QuizQuestionModel_1.default.belongsTo(QuizThemeModel_1.default, { foreignKey: 'theme_id', as: 'theme' });
+QuizThemeModel_1.default.hasMany(QuizDailyModel_1.default, { foreignKey: 'theme_id', as: 'dailies' });
+QuizDailyModel_1.default.belongsTo(QuizThemeModel_1.default, { foreignKey: 'theme_id', as: 'theme' });
+QuizThemeModel_1.default.hasMany(QuizAttemptModel_1.default, { foreignKey: 'theme_id', as: 'attempts' });
+QuizAttemptModel_1.default.belongsTo(QuizThemeModel_1.default, { foreignKey: 'theme_id', as: 'theme' });
+UserModel_1.default.hasMany(QuizAttemptModel_1.default, { foreignKey: 'user_id', as: 'quiz_attempts' });
+QuizAttemptModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id', as: 'user' });
+QuizAttemptModel_1.default.hasMany(QuizAnswerModel_1.default, { foreignKey: 'attempt_id', as: 'answers' });
+QuizAnswerModel_1.default.belongsTo(QuizAttemptModel_1.default, { foreignKey: 'attempt_id', as: 'attempt' });
+QuizQuestionModel_1.default.hasMany(QuizAnswerModel_1.default, { foreignKey: 'question_id', as: 'answers' });
+QuizAnswerModel_1.default.belongsTo(QuizQuestionModel_1.default, { foreignKey: 'question_id', as: 'question' });
+QuizSeasonModel_1.default.hasMany(QuizQuestionModel_1.default, { foreignKey: 'season_id', as: 'questions' });
+QuizQuestionModel_1.default.belongsTo(QuizSeasonModel_1.default, { foreignKey: 'season_id', as: 'season' });
+QuizSeasonModel_1.default.hasMany(QuizDailyModel_1.default, { foreignKey: 'season_id', as: 'dailies' });
+QuizDailyModel_1.default.belongsTo(QuizSeasonModel_1.default, { foreignKey: 'season_id', as: 'season' });
 // Relations User-Role (Many-to-Many)
 UserModel_1.default.belongsToMany(RoleModel_1.default, {
     through: UserRoleModel_1.default,
@@ -109,6 +151,14 @@ RoleModel_1.default.belongsToMany(UserModel_1.default, {
     through: UserRoleModel_1.default,
     foreignKey: 'role_id',
     as: 'Users'
+});
+UserModel_1.default.belongsTo(ArchetypeModel_1.default, {
+    foreignKey: 'loved_archetype_id',
+    as: 'loved_archetype',
+});
+ArchetypeModel_1.default.hasMany(UserModel_1.default, {
+    foreignKey: 'loved_archetype_id',
+    as: 'fans',
 });
 // Relations Deck
 DeckModel_1.default.hasMany(DeckCardModel_1.default, {
@@ -229,5 +279,26 @@ CardStatusModel_1.default.hasMany(BanlistArchetypeCardModel_1.default, {
 BanlistArchetypeCardModel_1.default.belongsTo(CardStatusModel_1.default, {
     foreignKey: 'card_status_id',
     as: 'card_status'
+});
+// Raisons de banlist (M2M)
+BanlistArchetypeCardModel_1.default.belongsToMany(BanlistReasonModel_1.default, {
+    through: BanlistArchetypeCardReasonModel_1.default,
+    foreignKey: 'banlist_archetype_card_id',
+    otherKey: 'banlist_reason_id',
+    as: 'reasons',
+});
+BanlistReasonModel_1.default.belongsToMany(BanlistArchetypeCardModel_1.default, {
+    through: BanlistArchetypeCardReasonModel_1.default,
+    foreignKey: 'banlist_reason_id',
+    otherKey: 'banlist_archetype_card_id',
+    as: 'banlist_archetype_cards',
+});
+BanlistArchetypeCardReasonModel_1.default.belongsTo(BanlistArchetypeCardModel_1.default, {
+    foreignKey: 'banlist_archetype_card_id',
+    as: 'banlist_archetype_card',
+});
+BanlistArchetypeCardReasonModel_1.default.belongsTo(BanlistReasonModel_1.default, {
+    foreignKey: 'banlist_reason_id',
+    as: 'reason',
 });
 //# sourceMappingURL=relations.js.map

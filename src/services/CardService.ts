@@ -14,6 +14,8 @@ interface SearchFilters {
     page?: number;
     size?: number;
     locale?: string;
+    /** true = cartes sans ligne `card_translation` locale `fr` (texte EN à traduire). */
+    missing_fr?: boolean;
 }
 
 export type CardLocale = 'fr' | 'en';
@@ -325,6 +327,15 @@ class CardService {
         });
     }
 
+    static buildMissingFrWhere(): WhereOptions {
+        return sequelize.literal(`NOT EXISTS (
+            SELECT 1
+            FROM card_translation ct
+            WHERE ct.card_id = "Card"."id"
+              AND ct.locale = 'fr'
+        )`) as unknown as WhereOptions;
+    }
+
     static async searchCards(filters: SearchFilters): Promise<PaginatedResult<Card>> {
         const {
             name,
@@ -337,7 +348,8 @@ class CardService {
             attribute,
             page = 1,
             size = 10,
-            locale
+            locale,
+            missing_fr
         } = filters;
 
         const limit = parseInt(String(size));
@@ -383,6 +395,16 @@ class CardService {
             where.card_type = {
                 [Op.iLike]: `%${card_type}%`
             };
+        }
+
+        if (missing_fr) {
+            const missingFrClause = CardService.buildMissingFrWhere();
+            const existingAnd = (where as any)[Op.and];
+            (where as any)[Op.and] = Array.isArray(existingAnd)
+                ? [...existingAnd, missingFrClause]
+                : existingAnd
+                  ? [existingAnd, missingFrClause]
+                  : [missingFrClause];
         }
 
         const result = await Card.findAndCountAll({

@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     locale VARCHAR(5) NOT NULL DEFAULT 'fr',
     biography TEXT NULL,
     country VARCHAR(2) NULL,
+    profile_picture_url TEXT NULL,
     loved_archetype_id BIGINT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -206,6 +207,30 @@ CREATE TABLE IF NOT EXISTS banlist_archetype_card (
     CONSTRAINT fk_bac_archetype FOREIGN KEY (archetype_id) REFERENCES archetype (id) ON DELETE CASCADE,
     CONSTRAINT fk_bac_card FOREIGN KEY (card_id) REFERENCES card (id) ON DELETE CASCADE,
     CONSTRAINT fk_bac_card_status FOREIGN KEY (card_status_id) REFERENCES card_status (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS banlist_reason (
+    id SERIAL PRIMARY KEY,
+    slug VARCHAR(80) NOT NULL UNIQUE,
+    label VARCHAR(120) NOT NULL,
+    text TEXT NOT NULL,
+    logo_url TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS banlist_archetype_card_reason (
+    id SERIAL PRIMARY KEY,
+    banlist_archetype_card_id BIGINT NOT NULL,
+    banlist_reason_id BIGINT NOT NULL,
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_bacr_bac FOREIGN KEY (banlist_archetype_card_id)
+        REFERENCES banlist_archetype_card (id) ON DELETE CASCADE,
+    CONSTRAINT fk_bacr_reason FOREIGN KEY (banlist_reason_id)
+        REFERENCES banlist_reason (id) ON DELETE CASCADE,
+    CONSTRAINT uq_bacr_bac_reason UNIQUE (banlist_archetype_card_id, banlist_reason_id)
 );
 
 CREATE TABLE IF NOT EXISTS website_actions (

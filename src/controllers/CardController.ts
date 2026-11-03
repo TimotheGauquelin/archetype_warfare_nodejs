@@ -59,6 +59,7 @@ class CardController {
 
     async searchCards(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
+            const missingFrRaw = String(request.query.missing_fr ?? '').toLowerCase();
             const filters = {
                 name: request.query.name as string | undefined,
                 card_type: request.query.card_type as string | undefined,
@@ -70,7 +71,8 @@ class CardController {
                 attribute: request.query.attribute as string | undefined,
                 page: request.query.page ? parseInt(request.query.page as string) : 1,
                 size: request.query.size ? parseInt(request.query.size as string) : 10,
-                locale: request.query.locale as string | undefined
+                locale: request.query.locale as string | undefined,
+                missing_fr: missingFrRaw === '1' || missingFrRaw === 'true',
             };
 
             const cards = await CardService.searchCards(filters);

@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { Deck, DeckCard, Card, Archetype, BanlistArchetypeCard } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import sequelize from '../config/Sequelize';
+import MedalService from './MedalService';
 
 interface DeckCardData {
     card?: { id: string };
@@ -605,6 +606,9 @@ class DeckService {
             }
 
             await transaction.commit();
+            MedalService.evaluateSafe('onDeckCreated', () =>
+                MedalService.onDeckCreated(userId)
+            );
         } catch (error) {
             await transaction.rollback();
             throw error;

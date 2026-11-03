@@ -7,6 +7,9 @@ const router = Router();
 router.get('/me', authenticateToken, (req: Request, res: Response, next: NextFunction) =>
     ArchetypeRankingController.getMyRankings(req, res, next)
 );
+router.get('/users/:userId', (req: Request, res: Response, next: NextFunction) =>
+    ArchetypeRankingController.getUserRankings(req, res, next)
+);
 router.get('/masters', (req: Request, res: Response, next: NextFunction) =>
     ArchetypeRankingController.getAllMasters(req, res, next)
 );

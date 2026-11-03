@@ -1,5 +1,6 @@
 import { Op, WhereOptions } from 'sequelize';
-import { Archetype, Era, Type, Attribute, SummonMechanic, Card, Banlist, CardStatus, BanlistArchetypeCard, ArchetypeTranslation } from '../models/relations';
+import { Archetype, Era, Type, Attribute, SummonMechanic, Card, Banlist, CardStatus, BanlistArchetypeCard, BanlistReason, ArchetypeTranslation } from '../models/relations';
+import BanlistReasonService from './BanlistReasonService';
 import { CustomError } from '../errors/CustomError';
 import sequelize from '../config/Sequelize';
 import UploadImageService from './UploadImageService';
@@ -504,7 +505,13 @@ class ArchetypeService {
                             model: CardStatus,
                             as: 'card_status',
                             attributes: ['id', 'label']
-                        }
+                        },
+                        {
+                            model: BanlistReason,
+                            as: 'reasons',
+                            attributes: ['id', 'slug', 'label', 'text', 'logo_url'],
+                            through: { attributes: [] },
+                        },
                     ]
                 }
             ]
@@ -883,15 +890,56 @@ class ArchetypeService {
                         order: [['release_date', 'DESC']]
                     });
 
-                    const banlistCardData = cards.map((banlistCard: any) => ({
-                        banlist_id: banlistCard.banlist_id || currentBanlist?.id,
-                        archetype_id: newArchetype.id,
-                        card_id: banlistCard.card?.id ? String(banlistCard.card.id) : undefined,
-                        card_status_id: banlistCard.card_status_id || null,
-                        explanation_text: banlistCard.explanation_text || null
-                    }));
+                    const unlimitedStatus = await CardStatus.findOne({
+                        where: { label: { [Op.iLike]: 'unlimited' } },
+                        attributes: ['id'],
+                        transaction: t,
+                    });
+                    const unlimitedId = unlimitedStatus?.id ?? null;
 
-                    await BanlistArchetypeCard.bulkCreate(banlistCardData, { transaction: t });
+                    const banlistCardData = cards.map((banlistCard: any) => {
+                        const statusId = banlistCard.card_status_id || banlistCard.card_status?.id || null;
+                        const isUnlimited =
+                            unlimitedId != null && Number(statusId) === Number(unlimitedId);
+                        return {
+                            banlist_id: banlistCard.banlist_id || currentBanlist?.id,
+                            archetype_id: newArchetype.id,
+                            card_id: banlistCard.card?.id ? String(banlistCard.card.id) : undefined,
+                            card_status_id: statusId,
+                            explanation_text: isUnlimited
+                                ? null
+                                : banlistCard.explanation_text || null,
+                        };
+                    });
+
+                    const createdBac = await BanlistArchetypeCard.bulkCreate(banlistCardData, {
+                        transaction: t,
+                        returning: true,
+                    });
+
+                    for (let i = 0; i < createdBac.length; i++) {
+                        const source = cards[i] as {
+                            reason_ids?: number[];
+                            reasons?: Array<{ id: number }>;
+                            card_status_id?: number;
+                            card_status?: { id?: number };
+                        };
+                        const statusId = source?.card_status_id || source?.card_status?.id || null;
+                        const isUnlimited =
+                            unlimitedId != null && Number(statusId) === Number(unlimitedId);
+                        const reasonIds = isUnlimited
+                            ? []
+                            : Array.isArray(source?.reason_ids)
+                              ? source.reason_ids
+                              : Array.isArray(source?.reasons)
+                                ? source.reasons.map((r) => r.id)
+                                : [];
+                        await BanlistReasonService.syncCardReasons(
+                            createdBac[i].id,
+                            reasonIds,
+                            t
+                        );
+                    }
 
                     const assignedCardIds = banlistCardData
                         .map((row: { card_id?: string }) => row.card_id)
@@ -979,7 +1027,13 @@ class ArchetypeService {
             }
 
             const banlistCardErrors: Array<{ index: number; error: string }> = [];
-            const validCards: Array<{ banlist_id?: number; card_id: string; card_status_id: number; explanation_text?: string | null }> = [];
+            const validCards: Array<{
+                banlist_id?: number;
+                card_id: string;
+                card_status_id: number;
+                explanation_text?: string | null;
+                reason_ids?: number[];
+            }> = [];
 
             if (cards.length > 0) {
                 for (let i = 0; i < cards.length; i++) {
@@ -1026,11 +1080,29 @@ class ArchetypeService {
                         continue;
                     }
 
+                    const isUnlimited =
+                        (existingCardStatus.label ?? '').toLowerCase() === 'unlimited';
+
+                    const reasonIds = isUnlimited
+                        ? []
+                        : Array.isArray(banlistCard.reason_ids)
+                          ? banlistCard.reason_ids
+                                .map((id: unknown) => Number(id))
+                                .filter((id: number) => !Number.isNaN(id) && id > 0)
+                          : Array.isArray(banlistCard.reasons)
+                            ? banlistCard.reasons
+                                  .map((r: { id: number }) => Number(r.id))
+                                  .filter((id: number) => !Number.isNaN(id) && id > 0)
+                            : [];
+
                     validCards.push({
                         banlist_id: banlistId,
                         card_id: String(cardId),
                         card_status_id: cardStatusId,
-                        explanation_text: banlistCard.explanation_text || null
+                        explanation_text: isUnlimited
+                            ? null
+                            : banlistCard.explanation_text || null,
+                        reason_ids: reasonIds,
                     });
                 }
 
@@ -1178,7 +1250,19 @@ class ArchetypeService {
                         explanation_text: banlistCard.explanation_text || null
                     }));
 
-                    await BanlistArchetypeCard.bulkCreate(banlistCardData, { transaction: t });
+                    const createdBac = await BanlistArchetypeCard.bulkCreate(banlistCardData, {
+                        transaction: t,
+                        returning: true,
+                    });
+
+                    for (let i = 0; i < createdBac.length; i++) {
+                        await BanlistReasonService.syncCardReasons(
+                            createdBac[i].id,
+                            validCards[i]?.reason_ids ?? [],
+                            t
+                        );
+                    }
+
                     const assignedCardIds = validCards.map((card) => card.card_id);
                     await ArchetypeService.removeGenericBanlistEntriesForCards(assignedCardIds, t);
                     await DeckService.recomputePlayabilityForDecksContainingCards(assignedCardIds, t);

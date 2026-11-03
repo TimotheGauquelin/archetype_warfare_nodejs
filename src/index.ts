@@ -2,6 +2,7 @@ import express, { Express } from 'express';
 import cors from 'cors';
 import authenticateRoutes from './routes/AuthenticateRoute';
 import banlistRoutes from './routes/BanlistRoute';
+import banlistReasonRoutes from './routes/BanlistReasonRoute';
 import archetypeRoutes from './routes/ArchetypeRoute';
 import typeRoutes from './routes/TypeRoute';
 import summonMechanicRoutes from './routes/SummonMechanicRoute';
@@ -21,6 +22,7 @@ import './models/relations';
 import websiteActionsRoutes from './routes/WebsiteActionsRoute';
 import archetypeRankingRoutes from './routes/ArchetypeRankingRoute';
 import quizRoutes from './routes/QuizRoute';
+import medalRoutes from './routes/MedalRoute';
 import envVars from './config/envValidation';
 import logger from './utils/logger';
 
@@ -47,6 +49,7 @@ app.use('/assets', express.static(path.join(__dirname, '../assets')));
 // Routes
 apiRouter.use('/authenticate', authenticateRoutes);
 apiRouter.use('/banlists', banlistRoutes);
+apiRouter.use('/banlist-reasons', banlistReasonRoutes);
 apiRouter.use('/archetypes', archetypeRoutes);
 apiRouter.use('/types', typeRoutes);
 apiRouter.use('/summon-mechanics', summonMechanicRoutes);
@@ -62,6 +65,7 @@ apiRouter.use('/tournaments', tournamentRoutes);
 apiRouter.use('/website-actions', websiteActionsRoutes);
 apiRouter.use('/archetype-rankings', archetypeRankingRoutes);
 apiRouter.use('/quizzes', quizRoutes);
+apiRouter.use('/medals', medalRoutes);
 
 // ErrorHandler doit être après toutes les routes
 app.use(ErrorHandler);

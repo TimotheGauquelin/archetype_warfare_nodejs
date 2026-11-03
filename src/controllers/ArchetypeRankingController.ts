@@ -16,6 +16,16 @@ class ArchetypeRankingController {
         }
     }
 
+    async getUserRankings(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const userId = getUuidParam(request.params.userId);
+            const rankings = await ArchetypeRankingService.getUserArchetypeRankings(userId);
+            response.json(rankings);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getTournamentWinner(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const tournamentId = getUuidParam(request.params.tournamentId);
