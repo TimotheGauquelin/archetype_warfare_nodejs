@@ -482,6 +482,18 @@ class TournamentService {
                             model: User,
                             as: 'user',
                             attributes: ['id', 'username', 'email']
+                        },
+                        {
+                            model: TournamentPlayerPenalty,
+                            as: 'penalties',
+                            attributes: ['id'],
+                            include: [
+                                {
+                                    model: PenaltyType,
+                                    as: 'penalty_type',
+                                    attributes: ['id', 'code', 'label']
+                                }
+                            ]
                         }
                     ]
                 }
@@ -553,6 +565,7 @@ class TournamentService {
             until_winner?: boolean;
             require_deck_list?: boolean;
             is_official?: boolean;
+            allow_penalities?: boolean;
             event_date: string | null;
             event_date_end?: string | null;
             location?: string | null;
@@ -590,6 +603,7 @@ class TournamentService {
             until_winner: plain.until_winner ?? false,
             require_deck_list: plain.require_deck_list ?? false,
             is_official: plain.is_official ?? false,
+            allow_penalities: plain.allow_penalities ?? false,
             event_date: plain.event_date,
             ...(plain.event_date_end != null && { event_date_end: plain.event_date_end }),
             ...(plain.location != null && { location: plain.location }),
@@ -605,6 +619,7 @@ class TournamentService {
                 games_won: tournamentPlayer.games_won,
                 games_played: tournamentPlayer.games_played,
                 dropped: tournamentPlayer.dropped,
+                late_deck_penalty: tournamentPlayer.late_deck_penalty ?? false,
                 penalties: penalties.map((p) => {
                     const plainPenalty = p.get({ plain: true }) as any;
                     return {
@@ -743,6 +758,13 @@ class TournamentService {
                                 as: 'snapshot_by',
                                 attributes: ['id', 'username']
                             }
+                        ]
+                    },
+                    {
+                        model: TournamentPlayerPenalty,
+                        as: 'penalties',
+                        include: [
+                            { model: PenaltyType, as: 'penalty_type' }
                         ]
                     }
                 ]
@@ -2226,12 +2248,25 @@ class TournamentService {
                             as: 'archetype'
                         }
                     ]
+                },
+                {
+                    model: TournamentPlayerPenalty,
+                    as: 'penalties',
+                    attributes: ['id'],
+                    include: [
+                        {
+                            model: PenaltyType,
+                            as: 'penalty_type',
+                            attributes: ['id', 'code', 'label']
+                        }
+                    ]
                 }
             ],
             order: [['match_wins', 'DESC'], ['match_draws', 'DESC'], ['games_won', 'DESC']]
         });
         return players.map((player, index) => {
             const snapshot = (player as any).deck_snapshot ?? null;
+            const penalties = ((player as any).penalties ?? []) as Array<{ id: number }>;
             return {
                 rank: index + 1,
                 tournament_player_id: player.id,
@@ -2239,6 +2274,9 @@ class TournamentService {
                 username: (player as any).user?.username ?? null,
                 deck: snapshot,
                 late_deck_penalty: player.late_deck_penalty ?? false,
+                penalties_count: penalties.length,
+                has_penalties:
+                    penalties.length > 0 || Boolean(player.late_deck_penalty),
                 matches_breakdown: {
                     wins: {
                         count: player.match_wins,
@@ -2289,6 +2327,185 @@ class TournamentService {
         }
 
         return snapshot;
+    }
+
+    static async listPenaltyTypes() {
+        return PenaltyType.findAll({ order: [['severity', 'ASC'], ['id', 'ASC']] });
+    }
+
+    private static async assertPlayerInTournament(
+        tournamentId: string,
+        tournamentPlayerId: number
+    ) {
+        const tournament = await Tournament.findByPk(tournamentId);
+        if (!tournament) throw new CustomError('Tournoi introuvable', 404);
+        const player = await TournamentPlayer.findOne({
+            where: { id: tournamentPlayerId, tournament_id: tournamentId }
+        });
+        if (!player) {
+            throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
+        }
+        return { tournament, player };
+    }
+
+    static async listPlayerPenalties(tournamentId: string, tournamentPlayerId: number) {
+        await this.assertPlayerInTournament(tournamentId, tournamentPlayerId);
+        const penalties = await TournamentPlayerPenalty.findAll({
+            where: { tournament_player_id: tournamentPlayerId },
+            include: [
+                { model: PenaltyType, as: 'penalty_type' },
+                { model: TournamentRound, as: 'round' },
+                {
+                    model: User,
+                    as: 'applied_by',
+                    attributes: ['id', 'username']
+                }
+            ],
+            order: [['applied_at', 'DESC']]
+        });
+        return penalties;
+    }
+
+    static async createPlayerPenalty(
+        tournamentId: string,
+        tournamentPlayerId: number,
+        adminUserId: string,
+        data: {
+            penalty_type_id: number;
+            reason?: string | null;
+            notes?: string | null;
+            round_id?: number | null;
+            tournament_match_id?: number | null;
+            disqualification_with_prize?: boolean | null;
+        }
+    ) {
+        const { tournament } = await this.assertPlayerInTournament(
+            tournamentId,
+            tournamentPlayerId
+        );
+        if (!tournament.allow_penalities) {
+            throw new CustomError(
+                'Les pénalités ne sont pas autorisées pour ce tournoi',
+                400
+            );
+        }
+        const penaltyType = await PenaltyType.findByPk(data.penalty_type_id);
+        if (!penaltyType) {
+            throw new CustomError('Type de pénalité introuvable', 404);
+        }
+        const created = await TournamentPlayerPenalty.create({
+            tournament_player_id: tournamentPlayerId,
+            penalty_type_id: penaltyType.id,
+            round_id: data.round_id ?? null,
+            tournament_match_id: data.tournament_match_id ?? null,
+            applied_by_user_id: adminUserId,
+            reason: data.reason?.trim() || null,
+            notes: data.notes?.trim() || null,
+            disqualification_with_prize:
+                data.disqualification_with_prize ?? null
+        });
+        return TournamentPlayerPenalty.findByPk(created.id, {
+            include: [
+                { model: PenaltyType, as: 'penalty_type' },
+                { model: TournamentRound, as: 'round' },
+                {
+                    model: User,
+                    as: 'applied_by',
+                    attributes: ['id', 'username']
+                }
+            ]
+        });
+    }
+
+    static async updatePlayerPenalty(
+        tournamentId: string,
+        tournamentPlayerId: number,
+        penaltyId: number,
+        data: {
+            penalty_type_id?: number;
+            reason?: string | null;
+            notes?: string | null;
+            round_id?: number | null;
+            tournament_match_id?: number | null;
+            disqualification_with_prize?: boolean | null;
+        }
+    ) {
+        const { tournament } = await this.assertPlayerInTournament(
+            tournamentId,
+            tournamentPlayerId
+        );
+        if (!tournament.allow_penalities) {
+            throw new CustomError(
+                'Les pénalités ne sont pas autorisées pour ce tournoi',
+                400
+            );
+        }
+        const penalty = await TournamentPlayerPenalty.findOne({
+            where: {
+                id: penaltyId,
+                tournament_player_id: tournamentPlayerId
+            }
+        });
+        if (!penalty) {
+            throw new CustomError('Pénalité introuvable', 404);
+        }
+        if (data.penalty_type_id !== undefined) {
+            const penaltyType = await PenaltyType.findByPk(data.penalty_type_id);
+            if (!penaltyType) {
+                throw new CustomError('Type de pénalité introuvable', 404);
+            }
+            penalty.penalty_type_id = penaltyType.id;
+        }
+        if (data.reason !== undefined) {
+            penalty.reason =
+                typeof data.reason === 'string' && data.reason.trim()
+                    ? data.reason.trim()
+                    : null;
+        }
+        if (data.notes !== undefined) {
+            penalty.notes =
+                typeof data.notes === 'string' && data.notes.trim()
+                    ? data.notes.trim()
+                    : null;
+        }
+        if (data.round_id !== undefined) penalty.round_id = data.round_id;
+        if (data.tournament_match_id !== undefined) {
+            penalty.tournament_match_id = data.tournament_match_id;
+        }
+        if (data.disqualification_with_prize !== undefined) {
+            penalty.disqualification_with_prize = data.disqualification_with_prize;
+        }
+        await penalty.save();
+        return TournamentPlayerPenalty.findByPk(penalty.id, {
+            include: [
+                { model: PenaltyType, as: 'penalty_type' },
+                { model: TournamentRound, as: 'round' },
+                {
+                    model: User,
+                    as: 'applied_by',
+                    attributes: ['id', 'username']
+                }
+            ]
+        });
+    }
+
+    static async deletePlayerPenalty(
+        tournamentId: string,
+        tournamentPlayerId: number,
+        penaltyId: number
+    ) {
+        await this.assertPlayerInTournament(tournamentId, tournamentPlayerId);
+        const penalty = await TournamentPlayerPenalty.findOne({
+            where: {
+                id: penaltyId,
+                tournament_player_id: tournamentPlayerId
+            }
+        });
+        if (!penalty) {
+            throw new CustomError('Pénalité introuvable', 404);
+        }
+        await penalty.destroy();
+        return { deleted: true, id: penaltyId };
     }
 }
 

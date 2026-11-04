@@ -574,6 +574,193 @@ class TournamentController {
             next(error);
         }
     }
+
+    async listPenaltyTypes(
+        _request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const types = await TournamentService.listPenaltyTypes();
+            response.status(200).json(types);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async listPlayerPenalties(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const playerId = getIntParam(request.params.playerId);
+            const penalties = await TournamentService.listPlayerPenalties(
+                tournamentId,
+                playerId
+            );
+            response.status(200).json(penalties);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async createPlayerPenalty(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const playerId = getIntParam(request.params.playerId);
+            const adminUserId = request.user?.id;
+            if (!adminUserId) {
+                response.status(401).json({ message: 'Authentification requise' });
+                return;
+            }
+            const penaltyTypeId = Number(
+                request.body?.penalty_type_id ?? request.body?.penaltyTypeId
+            );
+            if (!Number.isFinite(penaltyTypeId) || penaltyTypeId <= 0) {
+                response
+                    .status(400)
+                    .json({ message: 'penalty_type_id est requis' });
+                return;
+            }
+            const rawRoundId =
+                request.body?.round_id !== undefined
+                    ? request.body.round_id
+                    : request.body?.roundId;
+            const roundId =
+                rawRoundId === undefined ||
+                rawRoundId === null ||
+                rawRoundId === '' ||
+                rawRoundId === 'null'
+                    ? null
+                    : Number(rawRoundId);
+            const penalty = await TournamentService.createPlayerPenalty(
+                tournamentId,
+                playerId,
+                adminUserId,
+                {
+                    penalty_type_id: penaltyTypeId,
+                    reason: request.body?.reason,
+                    notes: request.body?.notes,
+                    round_id:
+                        roundId != null && Number.isFinite(roundId)
+                            ? roundId
+                            : null,
+                    tournament_match_id:
+                        request.body?.tournament_match_id !== undefined
+                            ? request.body.tournament_match_id
+                            : request.body?.tournamentMatchId,
+                    disqualification_with_prize:
+                        request.body?.disqualification_with_prize !== undefined
+                            ? request.body.disqualification_with_prize
+                            : request.body?.disqualificationWithPrize,
+                }
+            );
+            response.status(201).json(penalty);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async updatePlayerPenalty(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const playerId = getIntParam(request.params.playerId);
+            const penaltyId = getIntParam(request.params.penaltyId);
+            const data: {
+                penalty_type_id?: number;
+                reason?: string | null;
+                notes?: string | null;
+                round_id?: number | null;
+                tournament_match_id?: number | null;
+                disqualification_with_prize?: boolean | null;
+            } = {};
+            const rawType =
+                request.body?.penalty_type_id ?? request.body?.penaltyTypeId;
+            if (rawType !== undefined) {
+                data.penalty_type_id = Number(rawType);
+            }
+            if (request.body?.reason !== undefined) data.reason = request.body.reason;
+            if (request.body?.notes !== undefined) data.notes = request.body.notes;
+            if (
+                request.body?.round_id !== undefined ||
+                request.body?.roundId !== undefined
+            ) {
+                const rawRoundId =
+                    request.body.round_id !== undefined
+                        ? request.body.round_id
+                        : request.body.roundId;
+                data.round_id =
+                    rawRoundId === null ||
+                    rawRoundId === '' ||
+                    rawRoundId === 'null'
+                        ? null
+                        : Number(rawRoundId);
+                if (
+                    data.round_id != null &&
+                    !Number.isFinite(data.round_id)
+                ) {
+                    data.round_id = null;
+                }
+            }
+            if (
+                request.body?.tournament_match_id !== undefined ||
+                request.body?.tournamentMatchId !== undefined
+            ) {
+                data.tournament_match_id =
+                    request.body.tournament_match_id !== undefined
+                        ? request.body.tournament_match_id
+                        : request.body.tournamentMatchId;
+            }
+            if (
+                request.body?.disqualification_with_prize !== undefined ||
+                request.body?.disqualificationWithPrize !== undefined
+            ) {
+                data.disqualification_with_prize =
+                    request.body.disqualification_with_prize !== undefined
+                        ? request.body.disqualification_with_prize
+                        : request.body.disqualificationWithPrize;
+            }
+            const penalty = await TournamentService.updatePlayerPenalty(
+                tournamentId,
+                playerId,
+                penaltyId,
+                data
+            );
+            response.status(200).json(penalty);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async deletePlayerPenalty(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const playerId = getIntParam(request.params.playerId);
+            const penaltyId = getIntParam(request.params.penaltyId);
+            const result = await TournamentService.deletePlayerPenalty(
+                tournamentId,
+                playerId,
+                penaltyId
+            );
+            response.status(200).json(result);
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export default new TournamentController();

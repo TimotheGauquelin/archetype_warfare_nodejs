@@ -12,6 +12,7 @@ router.put('/matches/:matchId/result', authenticateToken, requireRole(['User', '
 router.get('/current', (req: Request, res: Response, next: NextFunction) => TournamentController.getAllCurrentTournaments(req, res, next));
 router.get('/all', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.searchAllTournaments(req, res, next));
 router.get('/my-tournaments', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.getUserTournaments(req, res, next));
+router.get('/penalty-types', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.listPenaltyTypes(req, res, next));
 router.get('/players/:tournamentPlayerId/deck-snapshot', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.getPlayerDeckSnapshot(req, res, next));
 router.get('/:tournamentId/standings', (req: Request, res: Response, next: NextFunction) => TournamentController.getStandings(req, res, next));
 router.get('/:tournamentId/my-details', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.getMyTournamentDetails(req, res, next));
@@ -28,6 +29,10 @@ router.post('/:tournamentId/drop', authenticateToken, (req: Request, res: Respon
 
 router.post('/:tournamentId/players/:userId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.addPlayerToTournament(req, res, next));
 router.put('/:tournamentId/players/:playerId/deck', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.adminSetDeckForTournamentPlayer(req, res, next));
+router.get('/:tournamentId/players/:playerId/penalties', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.listPlayerPenalties(req, res, next));
+router.post('/:tournamentId/players/:playerId/penalties', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.createPlayerPenalty(req, res, next));
+router.put('/:tournamentId/players/:playerId/penalties/:penaltyId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.updatePlayerPenalty(req, res, next));
+router.delete('/:tournamentId/players/:playerId/penalties/:penaltyId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.deletePlayerPenalty(req, res, next));
 router.delete('/:tournamentId/players/:playerId/remove', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.removePlayerFromTournament(req, res, next));
 router.put('/:tournamentId/players/:playerId/drop', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.adminSetPlayerDropped(req, res, next));
 
