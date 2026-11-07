@@ -14589,6 +14589,7 @@ INSERT INTO website_actions (id, stream_banner_enabled, registration_enabled) VA
 ('1', false, true);
 
 INSERT INTO penalty_type (id, code, label, severity) VALUES
+
     (2, 'warning', 'Warning', 2),
     (3, 'game_loss', 'Game Loss', 3),
     (4, 'match_loss', 'Match Loss', 4),

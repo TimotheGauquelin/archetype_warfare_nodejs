@@ -267,14 +267,38 @@ class QuizController {
     }
 
     async switchAllToInactive(
-        _request: Request,
+        request: Request,
         response: Response,
         next: NextFunction
     ): Promise<void> {
         try {
-            const result = await QuizService.switchAllToInactive();
+            const rawIds = request.body?.ids;
+            const ids = Array.isArray(rawIds)
+                ? rawIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+                : [];
+            const result = await QuizService.switchAllToInactive(ids);
             response.status(200).json({
-                message: 'Toutes les questions sont désormais inactives',
+                message: 'Les questions sélectionnées sont désormais inactives',
+                ...result,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async switchAllToActive(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const rawIds = request.body?.ids;
+            const ids = Array.isArray(rawIds)
+                ? rawIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+                : [];
+            const result = await QuizService.switchAllToActive(ids);
+            response.status(200).json({
+                message: 'Les questions sélectionnées sont désormais actives',
                 ...result,
             });
         } catch (error) {
@@ -283,14 +307,18 @@ class QuizController {
     }
 
     async switchAllToNonDaily(
-        _request: Request,
+        request: Request,
         response: Response,
         next: NextFunction
     ): Promise<void> {
         try {
-            const result = await QuizService.switchAllToNonDaily();
+            const rawIds = request.body?.ids;
+            const ids = Array.isArray(rawIds)
+                ? rawIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+                : [];
+            const result = await QuizService.switchAllToNonDaily(ids);
             response.status(200).json({
-                message: 'Toutes les questions sont désormais hors défi du jour',
+                message: 'Les créneaux Daily des questions sélectionnées ont été libérés',
                 ...result,
             });
         } catch (error) {

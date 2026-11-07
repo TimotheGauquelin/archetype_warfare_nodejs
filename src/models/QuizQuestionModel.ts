@@ -29,7 +29,7 @@ interface QuizQuestionAttributes {
     for_daily: boolean;
     /** Historique : déjà sortie au moins une fois en Daily */
     was_daily_question: boolean;
-    /** Secondes pour le défi du jour : 0 = pas de chrono, max 30 */
+    /** Secondes pour le défi du jour : 0 = pas de chrono ; défaut 30 */
     daily_time_limit_seconds: number;
     /** Saison de Daily Quizz (si créneau planifié) */
     season_id?: number | null;
@@ -152,7 +152,7 @@ QuizQuestion.init(
         daily_time_limit_seconds: {
             type: DataTypes.INTEGER,
             allowNull: false,
-            defaultValue: 0,
+            defaultValue: 30,
         },
         season_id: {
             type: DataTypes.BIGINT,

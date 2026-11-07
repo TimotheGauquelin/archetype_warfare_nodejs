@@ -95,6 +95,13 @@ router.put(
         QuizController.switchAllToInactive(req, res, next)
 );
 router.put(
+    '/admin/questions/switchAllToActive',
+    authenticateToken,
+    requireRole(['Admin']),
+    (req: Request, res: Response, next: NextFunction) =>
+        QuizController.switchAllToActive(req, res, next)
+);
+router.put(
     '/admin/questions/switchAllToNonDaily',
     authenticateToken,
     requireRole(['Admin']),

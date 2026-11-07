@@ -217,11 +217,12 @@ class QuizService {
         return 1;
     }
 
-    /** 0 = pas de chrono ; sinon 1–30 secondes */
+    /** 0 = pas de chrono ; sinon N secondes (pas de plafond) */
     static normalizeDailyTimeLimitSeconds(value: unknown): number {
+        if (value === undefined || value === null || value === '') return 30;
         const n = Math.floor(Number(value));
-        if (!Number.isFinite(n) || n <= 0) return 0;
-        return Math.min(30, n);
+        if (!Number.isFinite(n) || n < 0) return 30;
+        return n;
     }
 
     static normalizeMcqChoice(raw: unknown): McqChoiceStored {
@@ -2593,22 +2594,44 @@ class QuizService {
         return { success: true };
     }
 
-    static async switchAllToInactive(): Promise<{ updated: number }> {
+    static async switchAllToInactive(ids?: number[]): Promise<{ updated: number }> {
+        if (!ids || ids.length === 0) {
+            throw new CustomError('Aucune question sélectionnée', 400);
+        }
         const [updated] = await QuizQuestion.update(
             { is_active: false },
-            { where: {} }
+            { where: { id: { [Op.in]: ids } } }
+        );
+        return { updated };
+    }
+
+    static async switchAllToActive(ids?: number[]): Promise<{ updated: number }> {
+        if (!ids || ids.length === 0) {
+            throw new CustomError('Aucune question sélectionnée', 400);
+        }
+        const [updated] = await QuizQuestion.update(
+            { is_active: true },
+            { where: { id: { [Op.in]: ids } } }
         );
         return { updated };
     }
 
     /**
-     * Libère tous les créneaux (saison/date).
+     * Libère les créneaux (saison/date) des questions ciblées.
      * Les questions restent dans le pool Daily (`for_daily`) si elles y étaient.
      */
-    static async switchAllToNonDaily(): Promise<{ updated: number }> {
+    static async switchAllToNonDaily(ids?: number[]): Promise<{ updated: number }> {
+        if (!ids || ids.length === 0) {
+            throw new CustomError('Aucune question sélectionnée', 400);
+        }
         const [updated] = await QuizQuestion.update(
             { season_id: null, scheduled_date: null },
-            { where: { season_id: { [Op.ne]: null } } }
+            {
+                where: {
+                    id: { [Op.in]: ids },
+                    season_id: { [Op.ne]: null },
+                },
+            }
         );
         return { updated };
     }
