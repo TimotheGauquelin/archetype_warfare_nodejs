@@ -2,6 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import Banlist from '../models/BanlistModel';
 import BanlistService from '../services/BanlistService';
 import { getIntParam } from '../utils/request';
+import {
+    clearCurrentBanlistCache,
+    getCurrentBanlistCacheKey,
+    readCurrentBanlistCache,
+    writeCurrentBanlistCache,
+} from '../utils/currentBanlistCache';
 
 class BanlistController {
     async getCurrentBanlist(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -10,8 +16,27 @@ class BanlistController {
             const includeArchetypeCards = includeArchetypeCardsParam === undefined
                 ? true
                 : includeArchetypeCardsParam === 'true' || includeArchetypeCardsParam === '1';
-            const banlist = await BanlistService.getCurrentBanlist(includeArchetypeCards);
-            response.json(banlist);
+            const cacheKey = getCurrentBanlistCacheKey(includeArchetypeCards);
+            let entry = readCurrentBanlistCache(cacheKey);
+            if (!entry) {
+                const banlist = await BanlistService.getCurrentBanlist(includeArchetypeCards);
+                const compact = BanlistService.toCompactCurrentBanlist(banlist);
+                entry = writeCurrentBanlistCache(cacheKey, compact);
+            }
+
+            const clientEtag = request.headers['if-none-match'];
+            if (clientEtag && clientEtag === entry.etag) {
+                response.status(304).end();
+                return;
+            }
+
+            response.setHeader('ETag', entry.etag);
+            response.setHeader(
+                'Cache-Control',
+                'public, max-age=60, stale-while-revalidate=600'
+            );
+            response.setHeader('Vary', 'Accept-Encoding');
+            response.json(entry.body);
         } catch (error) {
             next(error);
         }
@@ -60,6 +85,7 @@ class BanlistController {
             }
 
             await BanlistService.addBanlist(banlistData);
+            clearCurrentBanlistCache();
             response.status(201).json({ success: true, message: 'Banlist créé !' });
         } catch (error) {
             next(error);
@@ -78,6 +104,7 @@ class BanlistController {
             }
 
             await BanlistService.updateBanlist(id, databaseBanlist, banlistData);
+            clearCurrentBanlistCache();
             response.status(200).json({
                 message: 'Banlist mise à jour avec succès',
             });
@@ -96,6 +123,7 @@ class BanlistController {
             }
 
             await BanlistService.deleteBanlist(id);
+            clearCurrentBanlistCache();
             response.status(200).json({ message: 'Banlist supprimée avec succès' });
         } catch (error) {
             next(error);

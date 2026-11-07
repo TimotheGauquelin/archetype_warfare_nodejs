@@ -36,6 +36,8 @@ const corsOptions: cors.CorsOptions = {
     origin: [envVars.FRONTEND_URL, 'https://archetype-warfare-reactjs.onrender.com/'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
+    exposedHeaders: ['ETag'],
 };
 
 app.use(cors(corsOptions));

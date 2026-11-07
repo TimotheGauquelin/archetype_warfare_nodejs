@@ -154,6 +154,95 @@ class BanlistService {
         });
     }
 
+    /**
+     * Payload public allégé pour /banlists/current (grille + hover raisons).
+     * Filtre les Unlimited et ne garde que les champs utiles au front.
+     */
+    static toCompactCurrentBanlist(banlist: Banlist | null): Record<string, unknown> | null {
+        if (!banlist) return null;
+        const plain = banlist.get({ plain: true }) as {
+            id: number;
+            label: string;
+            release_date: Date | string;
+            description: string;
+            is_active: boolean;
+            updated_at?: Date | string;
+            banlist_archetype_cards?: Array<{
+                id: number;
+                explanation_text?: string | null;
+                card?: {
+                    id: string | number;
+                    name?: string;
+                    img_url?: string | null;
+                    level?: number | null;
+                    atk?: number | null;
+                    def?: number | null;
+                    card_type?: string | null;
+                } | null;
+                card_status?: { id: number; label?: string } | null;
+                archetype?: { id: number; name?: string } | null;
+                reasons?: Array<{
+                    id: number;
+                    slug?: string;
+                    label?: string;
+                    text?: string;
+                    logo_url?: string | null;
+                }>;
+            }>;
+        };
+
+        const cards = (plain.banlist_archetype_cards ?? [])
+            .filter((entry) => {
+                const label = entry.card_status?.label?.toLowerCase() ?? '';
+                return label !== 'unlimited';
+            })
+            .map((entry) => ({
+                id: entry.id,
+                explanation_text: entry.explanation_text ?? null,
+                card: entry.card
+                    ? {
+                          id: entry.card.id,
+                          name: entry.card.name ?? '',
+                          img_url: entry.card.img_url ?? null,
+                          level: entry.card.level ?? null,
+                          atk: entry.card.atk ?? null,
+                          def: entry.card.def ?? null,
+                          card_type: entry.card.card_type ?? null,
+                      }
+                    : null,
+                card_status: entry.card_status
+                    ? {
+                          id: entry.card_status.id,
+                          label: entry.card_status.label ?? '',
+                      }
+                    : null,
+                archetype: entry.archetype
+                    ? {
+                          id: entry.archetype.id,
+                          name: entry.archetype.name ?? '',
+                      }
+                    : null,
+                reasons: (entry.reasons ?? []).map((reason) => ({
+                    id: reason.id,
+                    slug: reason.slug ?? '',
+                    label: reason.label ?? '',
+                    text: reason.text ?? '',
+                    logo_url: reason.logo_url ?? null,
+                })),
+            }));
+
+        return {
+            id: plain.id,
+            label: plain.label,
+            name: plain.label,
+            release_date: plain.release_date,
+            description: plain.description,
+            is_active: plain.is_active,
+            updated_at: plain.updated_at ?? null,
+            banlist_archetype_cards: cards,
+        };
+    }
+
     static async addBanlist(banlistData: BanlistData): Promise<void> {
         const transaction = await sequelize.transaction();
         try {
