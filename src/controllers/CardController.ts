@@ -82,6 +82,35 @@ class CardController {
         }
     }
 
+    /** Nom exact (FR/EN selon locale) → artwork cropped pour survol quiz. */
+    async findCardByExactName(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const name = String(request.query.name ?? '').trim();
+            if (!name) {
+                response.status(400).json({
+                    success: false,
+                    message: 'Paramètre name requis',
+                });
+                return;
+            }
+            const card = await CardService.findCardByExactName(
+                name,
+                request.query.locale as string | undefined
+            );
+            if (!card) {
+                response.status(404).json({ success: false, message: 'Carte introuvable' });
+                return;
+            }
+            response.status(200).json(card);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async addCards(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const cards = request.body;

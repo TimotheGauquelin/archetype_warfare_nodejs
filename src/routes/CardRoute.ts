@@ -5,6 +5,9 @@ const router = Router();
 
 router.get('/search', (request: Request, response: Response, next: NextFunction) => CardController.searchCards(request, response, next));
 router.get('/searchByArchetype/:archetypeId', (request: Request, response: Response, next: NextFunction) => CardController.searchCardsByArchetypeBanlist(request, response, next));
+router.get('/by-exact-name', (request: Request, response: Response, next: NextFunction) =>
+    CardController.findCardByExactName(request, response, next)
+);
 
 router.get('/:id', (request: Request, response: Response, next: NextFunction) => CardController.getCardDetail(request, response, next));
 router.put('/:id', (request: Request, response: Response, next: NextFunction) => CardController.updateCardDetail(request, response, next));

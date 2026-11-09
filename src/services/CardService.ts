@@ -151,6 +151,60 @@ class CardService {
     }
 
     /**
+     * Lookup exact (insensible à la casse) sur card.name ou card_translation.name.
+     * Sert au survol des noms en gras dans les quiz.
+     */
+    static async findCardByExactName(
+        name: string,
+        locale?: string | null
+    ): Promise<{
+        id: string;
+        name: string;
+        artwork_url: string | null;
+    } | null> {
+        const needle = String(name ?? '').trim();
+        if (!needle) return null;
+
+        const normalizedLocale = CardService.normalizeLocale(locale);
+        const needleLower = needle.toLowerCase();
+        const escapedNeedle = sequelize.escape(needleLower);
+        const escapedLocale = sequelize.escape(normalizedLocale);
+
+        const card = await Card.findOne({
+            where: {
+                [Op.or]: [
+                    sequelize.where(
+                        sequelize.fn('LOWER', sequelize.col('Card.name')),
+                        needleLower
+                    ),
+                    sequelize.literal(`EXISTS (
+                        SELECT 1
+                        FROM card_translation ct
+                        WHERE ct.card_id = "Card"."id"
+                          AND ct.locale = ${escapedLocale}
+                          AND LOWER(ct.name) = ${escapedNeedle}
+                    )`),
+                ],
+            },
+            attributes: ['id', 'name', 'artwork_url'],
+        });
+
+        if (!card) return null;
+
+        const [localized] = await CardService.applyLocaleToCardRecords(
+            [card.toJSON() as Card],
+            normalizedLocale
+        );
+
+        const id = String(localized.id);
+        return {
+            id,
+            name: localized.name,
+            artwork_url: CardService.resolveArtworkUrl(id, localized.artwork_url),
+        };
+    }
+
+    /**
      * Recherche sous-chaîne dans le nom uniquement (table card + traduction locale).
      * Ex. "Poly" → "Polymerization", "Super Polymerization" ; "7" → carte nommée "7".
      */
