@@ -17,6 +17,8 @@ interface QuizQuestionAttributes {
     theme_id: number;
     type: QuizQuestionType;
     prompt: string;
+    /** Mots-clés admin (recherche) */
+    keywords: string[];
     payload: Record<string, unknown>;
     points: number;
     is_active: boolean;
@@ -43,6 +45,7 @@ type QuizQuestionCreationAttributes = Optional<
     QuizQuestionAttributes,
     | 'id'
     | 'payload'
+    | 'keywords'
     | 'points'
     | 'is_active'
     | 'image_url'
@@ -67,6 +70,7 @@ class QuizQuestion
     declare theme_id: number;
     declare type: QuizQuestionType;
     declare prompt: string;
+    declare keywords: string[];
     declare payload: Record<string, unknown>;
     declare points: number;
     declare is_active: boolean;
@@ -102,6 +106,11 @@ QuizQuestion.init(
         prompt: {
             type: DataTypes.TEXT,
             allowNull: false,
+        },
+        keywords: {
+            type: DataTypes.ARRAY(DataTypes.TEXT),
+            allowNull: false,
+            defaultValue: [],
         },
         payload: {
             type: DataTypes.JSONB,

@@ -574,6 +574,27 @@ class QuizService {
         return text.length > 0 ? text : null;
     }
 
+    /** Mots-clés admin : tableau ou chaîne séparée par des virgules. */
+    static normalizeKeywords(value: unknown): string[] {
+        const parts: string[] = [];
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                parts.push(String(item ?? ''));
+            }
+        } else if (value != null && String(value).trim() !== '') {
+            parts.push(...String(value).split(','));
+        }
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const part of parts) {
+            const keyword = part.trim().toLowerCase();
+            if (!keyword || seen.has(keyword)) continue;
+            seen.add(keyword);
+            out.push(keyword);
+        }
+        return out;
+    }
+
     /** Dossier Cloudinary `quizz/<type>` pour les uploads PC (base64). */
     static cloudinaryFolderForQuizType(type?: string | null): string {
         const normalized = String(type ?? '').trim().toLowerCase();
@@ -2024,6 +2045,9 @@ class QuizService {
                 : null,
             type: question.type,
             prompt: question.prompt,
+            keywords: Array.isArray(question.keywords)
+                ? question.keywords.map((k) => String(k))
+                : [],
             payload: adminPayload,
             points: this.questionMaxPoints(question),
             is_active: question.is_active,
@@ -2169,6 +2193,7 @@ class QuizService {
         themeSlug: string;
         type: string;
         prompt: string;
+        keywords?: unknown;
         payload: Record<string, unknown>;
         points?: number;
         is_active?: boolean;
@@ -2270,6 +2295,7 @@ class QuizService {
                 theme_id: this.toNumberId(theme.id),
                 type: type as (typeof PLAYABLE_TYPES)[number],
                 prompt,
+                keywords: this.normalizeKeywords(data.keywords),
                 payload,
                 points,
                 is_active: data.is_active !== false,
@@ -2322,6 +2348,7 @@ class QuizService {
             themeSlug?: string;
             type?: string;
             prompt?: string;
+            keywords?: unknown;
             payload?: Record<string, unknown>;
             points?: number;
             is_active?: boolean;
@@ -2379,6 +2406,10 @@ class QuizService {
             const prompt = String(data.prompt).trim();
             if (!prompt) throw new CustomError('Énoncé requis', 400);
             question.prompt = prompt;
+        }
+
+        if (data.keywords !== undefined) {
+            question.keywords = this.normalizeKeywords(data.keywords);
         }
 
         if (data.payload !== undefined) {
