@@ -40,6 +40,7 @@ interface TournamentAttributes {
     allow_penalities: boolean;
     max_players: number | null;
     location: string | null;
+    description: string | null;
     event_date: Date | null;
     event_date_end: Date | null;
     is_online: boolean;
@@ -65,6 +66,7 @@ interface TournamentCreationAttributes
         | 'allow_penalities'
         | 'max_players'
         | 'location'
+        | 'description'
         | 'event_date'
         | 'event_date_end'
         | 'is_online'
@@ -91,6 +93,7 @@ class Tournament extends Model<TournamentAttributes, TournamentCreationAttribute
     declare allow_penalities: boolean;
     declare max_players: number | null;
     declare location: string | null;
+    declare description: string | null;
     declare event_date: Date | null;
     declare event_date_end: Date | null;
     declare is_online: boolean;
@@ -166,6 +169,10 @@ Tournament.init(
         },
         location: {
             type: DataTypes.STRING(255),
+            allowNull: true
+        },
+        description: {
+            type: DataTypes.TEXT,
             allowNull: true
         },
         event_date: {

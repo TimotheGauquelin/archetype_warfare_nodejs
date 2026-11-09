@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS tournament (
     is_official BOOLEAN NOT NULL DEFAULT FALSE,
     max_players INT NULL,
     location VARCHAR(255) NULL,
+    description TEXT NULL,
     event_date TIMESTAMP NULL,
     event_date_end TIMESTAMP NULL,
     is_online BOOLEAN NOT NULL DEFAULT TRUE,

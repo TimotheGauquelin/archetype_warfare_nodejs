@@ -7,7 +7,7 @@ import { CustomError } from '../errors/CustomError';
 class TournamentController {
     async create(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const { name, max_number_of_rounds, matches_per_round, match_resolution_mode, until_winner, max_players, location, event_date, event_date_end, is_online } = request.body;
+            const { name, max_number_of_rounds, matches_per_round, match_resolution_mode, until_winner, max_players, location, description, event_date, event_date_end, is_online } = request.body;
             if (!name || max_number_of_rounds == null || matches_per_round == null) {
                 response.status(400).json({ message: 'name, max_number_of_rounds et matches_per_round sont requis' });
                 return;
@@ -31,6 +31,7 @@ class TournamentController {
                 allow_penalities: request.body.allow_penalities === true,
                 max_players: max_players != null ? Number(max_players) : null,
                 location: location ?? null,
+                description: description ?? null,
                 event_date: event_date ?? null,
                 event_date_end: event_date_end ?? null,
                 is_online: is_online !== false,
@@ -175,6 +176,7 @@ class TournamentController {
                 until_winner,
                 max_players,
                 location,
+                description,
                 event_date,
                 event_date_end,
                 is_online,
@@ -204,6 +206,7 @@ class TournamentController {
                 is_official: request.body.is_official !== undefined ? request.body.is_official === true : undefined,
                 max_players,
                 location,
+                description,
                 event_date,
                 event_date_end,
                 is_online,

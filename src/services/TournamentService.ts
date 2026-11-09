@@ -120,6 +120,7 @@ interface CreateTournamentData {
     allow_penalities?: boolean;
     max_players?: number | null;
     location?: string | null;
+    description?: string | null;
     event_date?: Date | string | null;
     event_date_end?: Date | string | null;
     is_online?: boolean;
@@ -357,7 +358,16 @@ class TournamentService {
             is_official: data.is_official ?? false,
             allow_penalities: data.allow_penalities ?? false,
             max_players: data.max_players ?? null,
-            location: data.location ?? null,
+            location:
+                (data.is_online ?? true)
+                    ? null
+                    : typeof data.location === 'string' && data.location.trim()
+                      ? data.location.trim()
+                      : data.location ?? null,
+            description:
+                typeof data.description === 'string' && data.description.trim()
+                    ? data.description.trim()
+                    : null,
             event_date,
             event_date_end,
             is_online: data.is_online ?? true,
@@ -569,6 +579,7 @@ class TournamentService {
             event_date: string | null;
             event_date_end?: string | null;
             location?: string | null;
+            description?: string | null;
             max_players?: number | null;
             is_online?: boolean;
             rounds?: Array<{
@@ -607,6 +618,7 @@ class TournamentService {
             event_date: plain.event_date,
             ...(plain.event_date_end != null && { event_date_end: plain.event_date_end }),
             ...(plain.location != null && { location: plain.location }),
+            ...(plain.description != null && { description: plain.description }),
             ...(plain.max_players != null && { max_players: plain.max_players }),
             ...(plain.is_online != null && { is_online: plain.is_online }),
             tournament_player: {
@@ -788,6 +800,7 @@ class TournamentService {
             is_official?: boolean;
             max_players?: number | null;
             location?: string | null;
+            description?: string | null;
             event_date?: Date | string | null;
             event_date_end?: Date | string | null;
             is_online?: boolean;
@@ -821,9 +834,16 @@ class TournamentService {
         if (updates.is_official !== undefined) t.is_official = updates.is_official;
         if (updates.max_players !== undefined) t.max_players = updates.max_players;
         if (updates.location !== undefined) t.location = updates.location;
+        if (updates.description !== undefined) {
+            t.description =
+                typeof updates.description === 'string' && updates.description.trim()
+                    ? updates.description.trim()
+                    : null;
+        }
         if (updates.event_date !== undefined) t.event_date = updates.event_date != null ? new Date(updates.event_date) : null;
         if (updates.event_date_end !== undefined) t.event_date_end = updates.event_date_end != null ? new Date(updates.event_date_end) : null;
         if (updates.is_online !== undefined) t.is_online = updates.is_online;
+        if (t.is_online) t.location = null;
         if (updates.allow_penalities !== undefined) t.allow_penalities = updates.allow_penalities;
         if (updates.registration_close_hours_before !== undefined) {
             t.registration_close_hours_before = normalizeRegistrationCloseHours(
