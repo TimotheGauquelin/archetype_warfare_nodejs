@@ -5,9 +5,9 @@ import { validateRequest } from '../middlewares/validation';
 import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 
 const router = Router();
+const adminOnly = [authenticateToken, requireRole(['Admin'])];
 
-// GET
-
+// GET — public
 router.get('/getFiveRandomHighlightedArchetypes', ArchetypeController.getFiveRandomHighlightedArchetypes.bind(ArchetypeController));
 router.get('/getEightMostFamousArchetypes', ArchetypeController.getEightMostFamousArchetypes.bind(ArchetypeController));
 router.get('/getEightMostRecentArchetypes', ArchetypeController.getEightMostRecentArchetypes.bind(ArchetypeController));
@@ -16,8 +16,7 @@ router.get('/random', ArchetypeController.getRandomArchetype.bind(ArchetypeContr
 router.get('/allNames', ArchetypeController.getAllArchetypeNames.bind(ArchetypeController));
 router.get(
     '/admin/:id',
-    authenticateToken,
-    requireRole(['Admin']),
+    ...adminOnly,
     validateRequest(validateGetArchetypeById),
     ArchetypeController.getAdminArchetypeById.bind(ArchetypeController)
 );
@@ -27,28 +26,21 @@ router.get(
     ArchetypeController.getArchetypeById.bind(ArchetypeController)
 );
 
-// ADD
-
-router.post('/', (request: Request, response: Response, next: NextFunction): void => {
+// Mutations — admin
+router.post('/', ...adminOnly, (request: Request, response: Response, next: NextFunction): void => {
     ArchetypeController.addArchetype(request, response, next).catch(next);
 });
 
-// PUT
-
-router.put('/:archetypeId/update', (request: Request, response: Response, next: NextFunction): void => {
+router.put('/:archetypeId/update', ...adminOnly, (request: Request, response: Response, next: NextFunction): void => {
     ArchetypeController.updateArchetype(request, response, next).catch(next);
 });
-router.put('/:archetypeId/switchIsHighlighted', ArchetypeController.switchIsHighlighted.bind(ArchetypeController));
-router.put('/:archetypeId/switchIsActive', ArchetypeController.switchIsActive.bind(ArchetypeController));
+router.put('/:archetypeId/switchIsHighlighted', ...adminOnly, ArchetypeController.switchIsHighlighted.bind(ArchetypeController));
+router.put('/:archetypeId/switchIsActive', ...adminOnly, ArchetypeController.switchIsActive.bind(ArchetypeController));
 
-// PUT ALL
+router.put('/switchAllToIsNotHighlighted', ...adminOnly, ArchetypeController.switchAllToIsNotHighlighted.bind(ArchetypeController));
+router.put('/switchAllToIsUnactive', ...adminOnly, ArchetypeController.switchAllToIsUnactive.bind(ArchetypeController));
+router.put('/resetPopularity', ...adminOnly, ArchetypeController.resetPopularity.bind(ArchetypeController));
 
-router.put('/switchAllToIsNotHighlighted', ArchetypeController.switchAllToIsNotHighlighted.bind(ArchetypeController));
-router.put('/switchAllToIsUnactive', ArchetypeController.switchAllToIsUnactive.bind(ArchetypeController));
-router.put('/resetPopularity', ArchetypeController.resetPopularity.bind(ArchetypeController));
-
-// DELETE
-
-router.delete('/:archetypeId', ArchetypeController.deleteArchetype.bind(ArchetypeController));
+router.delete('/:archetypeId', ...adminOnly, ArchetypeController.deleteArchetype.bind(ArchetypeController));
 
 export default router;

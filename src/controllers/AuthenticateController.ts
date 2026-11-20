@@ -1,13 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
 import { User, Role } from '../models/relations';
 import { CustomError } from '../errors/CustomError';
 import { sendPasswordResetEmail } from '../mailing/sendPasswordResetMail';
 import AuthenticateService from '../services/AuthenticateService';
 import DiscordAuthService from '../services/DiscordAuthService';
+import UserService from '../services/UserService';
 import { generateRandomToken } from '../utils/token';
 import envVars from '../config/envValidation';
 import { getUuidParam } from '../utils/request';
+import { createDiscordOAuthState, verifyDiscordOAuthState } from '../utils/oauthState';
+import { clearAuthCookie, getJwtExpiryUnix, setAuthCookie } from '../utils/authCookie';
 
 class AuthenticateController {
     async discordRedirect(request: Request, response: Response, next: NextFunction): Promise<void> {
@@ -15,14 +17,7 @@ class AuthenticateController {
             DiscordAuthService.assertConfigured();
             const locale = request.query.locale === 'en' ? 'en' : 'fr';
             const acceptedTerms = request.query.accepted_terms === '1' || request.query.accepted_terms === 'true';
-            const statePayload = Buffer.from(
-                JSON.stringify({
-                    nonce: crypto.randomBytes(16).toString('hex'),
-                    locale,
-                    acceptedTerms,
-                }),
-                'utf8'
-            ).toString('base64url');
+            const statePayload = createDiscordOAuthState({ locale, acceptedTerms });
 
             response.redirect(DiscordAuthService.getAuthorizeUrl(statePayload));
         } catch (error) {
@@ -48,17 +43,17 @@ class AuthenticateController {
                 return;
             }
 
-            let locale = 'fr';
+            let locale: 'fr' | 'en' = 'fr';
             let acceptedTerms = false;
             try {
-                const parsed = JSON.parse(Buffer.from(stateRaw, 'base64url').toString('utf8')) as {
-                    locale?: string;
-                    acceptedTerms?: boolean;
-                };
-                locale = parsed.locale === 'en' ? 'en' : 'fr';
-                acceptedTerms = Boolean(parsed.acceptedTerms);
+                const verified = verifyDiscordOAuthState(stateRaw);
+                locale = verified.locale;
+                acceptedTerms = verified.acceptedTerms;
             } catch {
-                // state optionnel / invalide
+                response.redirect(
+                    `${frontCallback}?error=${encodeURIComponent('Session Discord invalide ou expirée. Réessayez.')}`
+                );
+                return;
             }
 
             const result = await DiscordAuthService.handleOAuthCallback(code, {
@@ -67,7 +62,9 @@ class AuthenticateController {
             });
 
             if (result.status === 'authenticated') {
-                response.redirect(`${frontCallback}?token=${encodeURIComponent(result.token)}`);
+                setAuthCookie(response, result.token);
+                // Cookie httpOnly : pas de JWT dans l'URL
+                response.redirect(`${frontCallback}?auth=1`);
                 return;
             }
 
@@ -129,18 +126,48 @@ class AuthenticateController {
             }
 
             const token = await User.generateToken(user);
+            setAuthCookie(response, token);
 
             const userWithRoles = user as User & { roles?: Role[] };
             response.status(200).json({
                 success: true,
                 message: 'Connexion réussie !',
-                token: token,
+                expiresAt: getJwtExpiryUnix(token),
                 user: {
                     id: user.id,
                     email: user.email || '',
                     username: user.username,
                     roles: userWithRoles.roles ? userWithRoles.roles.map((role: Role) => role.label) : []
                 }
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async me(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const user = request.user!;
+            response.status(200).json({
+                success: true,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    username: user.username,
+                    roles: user.roles,
+                },
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async logout(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            clearAuthCookie(response);
+            response.status(200).json({
+                success: true,
+                message: 'Déconnexion réussie',
             });
         } catch (error) {
             next(error);
@@ -188,12 +215,21 @@ class AuthenticateController {
 
     async updatePassword(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
-            const userId = getUuidParam(request.params.userId);
             const {
+                token,
                 password,
                 confirmPassword,
                 has_accepted_terms_and_conditions: hasAcceptedTermsAndConditions,
-            } = request.body;
+            } = request.body as {
+                token?: string;
+                password?: string;
+                confirmPassword?: string;
+                has_accepted_terms_and_conditions?: boolean;
+            };
+
+            if (!token || typeof token !== 'string' || !token.trim()) {
+                throw new CustomError('Le token de réinitialisation est requis.', 400);
+            }
 
             if (!password || !confirmPassword) {
                 throw new CustomError('Le mot de passe et la confirmation du mot de passe sont requis.', 400);
@@ -207,11 +243,7 @@ class AuthenticateController {
                 throw new CustomError('Vous devez accepter les conditions d\'utilisation', 400);
             }
 
-            const user = await User.findByPk(userId);
-
-            if (!user) {
-                throw new CustomError('L\'utilisateur n\'a pas été trouvé.', 404);
-            }
+            const user = await UserService.getUserByResetPassword(token.trim());
 
             await AuthenticateService.updatePassword(user, password, true);
 

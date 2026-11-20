@@ -54,6 +54,11 @@ class UserController {
     async getUserById(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const id = getUuidParam(request.params.id);
+            const requester = request.user;
+            const isAdmin = Boolean(requester?.roles?.includes('Admin'));
+            if (!requester || (String(requester.id) !== String(id) && !isAdmin)) {
+                throw new CustomError('Accès non autorisé', 403);
+            }
             const user = await UserService.getUserById(id);
             response.status(200).json(user);
         } catch (error) {
@@ -75,7 +80,12 @@ class UserController {
         try {
             const token = getStringParam(request.params.token);
             const user = await UserService.getUserByResetPassword(token);
-            response.status(200).json(user);
+            // Ne jamais exposer password / reset_password_token
+            response.status(200).json({
+                id: user.id,
+                username: user.username,
+                email: user.email,
+            });
         } catch (error) {
             next(error);
         }

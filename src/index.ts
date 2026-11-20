@@ -1,5 +1,7 @@
 import express, { Express } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import authenticateRoutes from './routes/AuthenticateRoute';
 import banlistRoutes from './routes/BanlistRoute';
 import banlistReasonRoutes from './routes/BanlistReasonRoute';
@@ -18,7 +20,7 @@ import tournamentRoutes from './routes/TournamentRoute';
 import { ErrorHandler } from './middlewares/errorHandler';
 import path from 'path';
 import './models/relations';
-// import { limiter } from './middlewares/rateLimitMiddleware';
+import { limiter } from './middlewares/rateLimitMiddleware';
 import websiteActionsRoutes from './routes/WebsiteActionsRoute';
 import archetypeRankingRoutes from './routes/ArchetypeRankingRoute';
 import quizRoutes from './routes/QuizRoute';
@@ -32,8 +34,31 @@ logger.info('✅ Variables d\'environnement validées avec succès');
 const app: Express = express();
 const apiRouter = express.Router();
 
+// Derrière Docker / reverse-proxy (rate-limit IP réelle)
+app.set('trust proxy', 1);
+
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            useDefaults: false,
+            directives: {
+                defaultSrc: ["'none'"],
+                frameAncestors: ["'none'"],
+                baseUri: ["'none'"],
+                formAction: ["'none'"],
+            },
+        },
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+);
+
 const corsOptions: cors.CorsOptions = {
-    origin: [envVars.FRONTEND_URL, 'https://archetype-warfare-reactjs.onrender.com/'],
+    origin: [
+        envVars.FRONTEND_URL,
+        envVars.FRONTEND_URL.replace(/\/$/, ''),
+        'https://archetype-warfare-reactjs.onrender.com',
+        'https://archetype-warfare-reactjs.onrender.com/',
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
@@ -41,9 +66,16 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
-// app.use(limiter);
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(cookieParser());
+app.use(limiter);
+// Upload images (base64) : limite plus haute uniquement sur /api/images
+app.use('/api/images', express.json({ limit: '10mb' }));
+app.use('/api/images', express.urlencoded({ limit: '10mb', extended: true }));
+// Sync cartes YGO (dump complet) : POST /api/cards
+app.use('/api/cards', express.json({ limit: '50mb' }));
+app.use('/api/cards', express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
 app.use('/api', apiRouter);
 app.use('/assets', express.static(path.join(__dirname, '../assets')));

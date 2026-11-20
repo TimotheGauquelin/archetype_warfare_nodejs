@@ -36,8 +36,21 @@ router.post('/request-new-password',
         .normalizeEmail(),
     validate,
     (request: Request, result: Response, next: NextFunction) => AuthenticateController.requestNewPassword(request, result, next));
-router.put('/user/:userId/update-password', passwordRuler, (request: Request, response: Response, next: NextFunction) => AuthenticateController.updatePassword(request, response, next));
+router.put(
+    '/reset-password',
+    requestNewPasswordLimiter,
+    passwordRuler,
+    (request: Request, response: Response, next: NextFunction) =>
+        AuthenticateController.updatePassword(request, response, next)
+);
 router.post('/register', usernameRuler, passwordRuler, registerLimiter, (request: Request, result: Response, next: NextFunction) => AuthenticateController.register(request, result, next));
 router.put('/admin/approve-user/:userId', authenticateToken, requireRole(['Admin']), (request: Request, result: Response, next: NextFunction) => AuthenticateController.adminApproveUser(request, result, next));
+
+router.get('/me', authenticateToken, (request: Request, result: Response, next: NextFunction) =>
+    AuthenticateController.me(request, result, next)
+);
+router.post('/logout', (request: Request, result: Response, next: NextFunction) =>
+    AuthenticateController.logout(request, result, next)
+);
 
 export default router;

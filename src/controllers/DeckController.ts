@@ -6,9 +6,18 @@ import DeckService from '../services/DeckService';
 import { getUuidParam } from '../utils/request';
 
 class DeckController {
+    private isAdmin(request: Request): boolean {
+        return Boolean(request.user?.roles?.includes('Admin'));
+    }
+
     async getAllDecksByUserId(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const userId = getUuidParam(request.params.userId);
+            const requesterId = String(request.user!.id);
+            if (requesterId !== String(userId) && !this.isAdmin(request)) {
+                throw new CustomError('Accès non autorisé à ces decks', 403);
+            }
+
             const isPlayableParam = request.query.is_playable;
             const isActiveParam = request.query.is_active;
             let isPlayable: boolean | undefined;
@@ -31,6 +40,10 @@ class DeckController {
             const deck = await DeckService.getDeckById(id);
             if (!deck) {
                 throw new CustomError('Deck non trouvé', 404);
+            }
+            const requesterId = String(request.user!.id);
+            if (String(deck.user_id) !== requesterId && !this.isAdmin(request)) {
+                throw new CustomError('Accès non autorisé à ce deck', 403);
             }
             response.status(200).json(deck);
         } catch (error) {

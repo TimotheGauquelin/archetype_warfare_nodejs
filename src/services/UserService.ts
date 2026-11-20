@@ -206,7 +206,8 @@ class UserService {
         const user = await User.findOne({
             where: {
                 reset_password_token: hashedToken
-            }
+            },
+            attributes: { exclude: ['password'] },
         });
 
         if (!user) {

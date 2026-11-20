@@ -26,6 +26,9 @@ interface UpdateDeckData {
 
 type LinkedArchetype = { id: number; name: string };
 
+/** Limite de decks par joueur (hors Premium). */
+const MAX_DECKS_PER_USER = 5;
+
 class DeckService {
     /**
      * Annote chaque deck_card avec :
@@ -498,6 +501,17 @@ class DeckService {
         const transaction = await sequelize.transaction();
 
         try {
+            const existingCount = await Deck.count({
+                where: { user_id: userId },
+                transaction,
+            });
+            if (existingCount >= MAX_DECKS_PER_USER) {
+                throw new CustomError(
+                    `Limite de ${MAX_DECKS_PER_USER} decks atteinte`,
+                    400
+                );
+            }
+
             const deck = await Deck.create({
                 label: body.label.trim(),
                 comment: body.comment || '',
