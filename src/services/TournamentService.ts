@@ -25,6 +25,9 @@ import { sendPlayerRemovedFromTournamentMail } from '../mailing/sendPlayerRemove
 import { sendPlayerAddedToTournamentMail } from '../mailing/sendPlayerAddedToTournamentMail';
 import { getMaxOpponentGamesWon, getWinsNeeded, resolveMatchOutcome } from '../utils/bestOfScore';
 import MedalService from './MedalService';
+import QuizSeason from '../models/QuizSeasonModel';
+import QuizSeasonService from './QuizSeasonService';
+import SeasonPointAwardService from './SeasonPointAwardService';
 
 const MATCH_RESOLUTION_MODES: MatchResolutionMode[] = ['strict_wins', 'highest_score'];
 
@@ -129,6 +132,7 @@ interface CreateTournamentData {
     image_focal_x?: number;
     image_focal_y?: number;
     image_zoom?: number;
+    season_id?: number | null;
 }
 
 interface RegisterPlayerData {
@@ -329,6 +333,80 @@ class TournamentService {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate());
     }
 
+    private static toDateKey(value: Date | string | null | undefined): string {
+        if (value == null) return '';
+        if (value instanceof Date) {
+            if (Number.isNaN(value.getTime())) return '';
+            const y = value.getFullYear();
+            const m = String(value.getMonth() + 1).padStart(2, '0');
+            const d = String(value.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+        return String(value).trim().slice(0, 10);
+    }
+
+    /** Début et fin du tournoi entièrement inclus dans [seasonStart, seasonEnd]. */
+    private static assertTournamentFullyWithinSeason(
+        eventStart: Date | string | null | undefined,
+        eventEnd: Date | string | null | undefined,
+        seasonStart: string,
+        seasonEnd: string
+    ): void {
+        const start = this.toDateKey(eventStart);
+        const end = this.toDateKey(eventEnd ?? eventStart);
+        const sStart = this.toDateKey(seasonStart);
+        const sEnd = this.toDateKey(seasonEnd);
+        if (!start || !end || !sStart || !sEnd) {
+            throw new CustomError(
+                'Les dates du tournoi doivent être entièrement comprises dans la saison sélectionnée',
+                400
+            );
+        }
+        if (start < sStart || end > sEnd) {
+            throw new CustomError(
+                'Les dates du tournoi doivent être entièrement comprises dans la saison sélectionnée',
+                400
+            );
+        }
+    }
+
+    private static async resolveSeasonId(
+        raw: unknown,
+        eventStart?: Date | string | null,
+        eventEnd?: Date | string | null
+    ): Promise<number | null> {
+        if (raw === null || raw === '' || raw === 'null') return null;
+        const id = Number(raw);
+        if (!Number.isFinite(id) || id <= 0) {
+            throw new CustomError('season_id invalide', 400);
+        }
+        const season = await QuizSeason.findByPk(id);
+        if (!season) throw new CustomError('Saison introuvable', 404);
+        if (eventStart !== undefined || eventEnd !== undefined) {
+            this.assertTournamentFullyWithinSeason(
+                eventStart ?? null,
+                eventEnd ?? null,
+                String(season.start_date),
+                String(season.end_date)
+            );
+        }
+        return id;
+    }
+
+    private static async syncSeasonPointsSafe(tournamentId: string) {
+        try {
+            await SeasonPointAwardService.syncTournamentSwissAwards(
+                tournamentId
+            );
+        } catch (err) {
+            console.error(
+                '[TournamentService] sync season points failed',
+                tournamentId,
+                err
+            );
+        }
+    }
+
     static async create(data: CreateTournamentData) {
         // Ne jamais passer id : la base (SERIAL) l'auto-incrémente.
         const event_date =
@@ -377,6 +455,14 @@ class TournamentService {
             image_url:
                 typeof data.image_url === 'string' && data.image_url.trim()
                     ? data.image_url.trim()
+                    : null,
+            season_id:
+                data.season_id !== undefined
+                    ? await this.resolveSeasonId(
+                          data.season_id,
+                          event_date,
+                          event_date_end
+                      )
                     : null,
             image_focal_x: clampImageFocal(data.image_focal_x, 50),
             image_focal_y: clampImageFocal(data.image_focal_y, 50),
@@ -429,16 +515,25 @@ class TournamentService {
                     as: 'players',
                     attributes: ['id', 'user_id', 'dropped'],
                 },
+                {
+                    model: QuizSeason,
+                    as: 'season',
+                    attributes: ['id', 'name'],
+                    required: false,
+                },
             ],
         });
     }
 
-    /** Recherche tous les tournois (admin). Filtres optionnels : name, status, location (mot dans le lieu), is_online. */
+    /** Recherche tous les tournois (admin). Filtres optionnels : name, status, location, is_online, season_id. */
     static async searchAllTournaments(filters?: {
         name?: string;
         status?: TournamentStatus;
         location?: string;
         is_online?: boolean;
+        season_id?: number | null;
+        /** true = uniquement les tournois sans saison */
+        without_season?: boolean;
     }) {
         await TournamentService.expireUnstartedPastTournaments();
         const where: Record<string, unknown> = {};
@@ -453,6 +548,11 @@ class TournamentService {
         }
         if (filters?.is_online !== undefined) {
             where.is_online = filters.is_online;
+        }
+        if (filters?.without_season) {
+            where.season_id = null;
+        } else if (filters?.season_id !== undefined && filters.season_id !== null) {
+            where.season_id = Number(filters.season_id);
         }
         return Tournament.findAll({
             where,
@@ -576,6 +676,7 @@ class TournamentService {
             require_deck_list?: boolean;
             is_official?: boolean;
             allow_penalities?: boolean;
+            season_id?: number | null;
             event_date: string | null;
             event_date_end?: string | null;
             location?: string | null;
@@ -603,6 +704,12 @@ class TournamentService {
             }>;
         };
 
+        const allowedArchetypeIds =
+            await QuizSeasonService.getAllowedArchetypeIdsForTournament({
+                is_official: plain.is_official ?? false,
+                season_id: plain.season_id ?? null,
+            });
+
         return {
             id: plain.id,
             name: plain.name,
@@ -615,6 +722,8 @@ class TournamentService {
             require_deck_list: plain.require_deck_list ?? false,
             is_official: plain.is_official ?? false,
             allow_penalities: plain.allow_penalities ?? false,
+            season_id: plain.season_id ?? null,
+            allowedArchetypeIds,
             event_date: plain.event_date,
             ...(plain.event_date_end != null && { event_date_end: plain.event_date_end }),
             ...(plain.location != null && { location: plain.location }),
@@ -735,7 +844,13 @@ class TournamentService {
         await TournamentService.expireUnstartedPastTournaments();
         const includePlayers = options?.includePlayers !== false;
         const include: Array<Record<string, unknown>> = [
-            { model: TournamentRound, as: 'rounds', order: [['round_number', 'ASC']], include: [{ model: TournamentMatch, as: 'matches' }] }
+            { model: TournamentRound, as: 'rounds', order: [['round_number', 'ASC']], include: [{ model: TournamentMatch, as: 'matches' }] },
+            {
+                model: QuizSeason,
+                as: 'season',
+                attributes: ['id', 'name'],
+                required: false,
+            },
         ];
         if (includePlayers) {
             include.unshift({
@@ -810,6 +925,7 @@ class TournamentService {
             image_focal_x?: number;
             image_focal_y?: number;
             image_zoom?: number;
+            season_id?: number | null;
         }
     ) {
         const t = await Tournament.findByPk(id);
@@ -874,7 +990,33 @@ class TournamentService {
             t.event_date ? new Date(t.event_date) : null,
             t.event_date_end ? new Date(t.event_date_end) : null
         );
+        if (updates.season_id !== undefined) {
+            t.season_id = await this.resolveSeasonId(
+                updates.season_id,
+                t.event_date,
+                t.event_date_end
+            );
+        } else if (t.season_id != null) {
+            // Dates modifiées avec une saison déjà liée → revalider le containment.
+            const season = await QuizSeason.findByPk(t.season_id);
+            if (!season) {
+                throw new CustomError('Saison introuvable', 404);
+            }
+            this.assertTournamentFullyWithinSeason(
+                t.event_date,
+                t.event_date_end,
+                String(season.start_date),
+                String(season.end_date)
+            );
+        }
         await t.save();
+        if (
+            updates.status !== undefined ||
+            updates.is_official !== undefined ||
+            updates.season_id !== undefined
+        ) {
+            await this.syncSeasonPointsSafe(String(t.id));
+        }
         return t;
     }
 
@@ -1072,25 +1214,48 @@ class TournamentService {
         await ensureNoOverlappingRegistration(userId, tournamentId, tournament);
 
         if (deckId != null) {
-            await DeckService.assertDeckSelectableForTournament(deckId, userId);
+            const deck = await DeckService.assertDeckSelectableForTournament(deckId, userId);
+            await QuizSeasonService.assertDeckArchetypeAllowedForTournament(tournament, deck);
         }
 
-        const tournamentPlayer = await TournamentPlayer.create({ tournament_id: tournamentId, user_id: userId, deck_id: deckId ?? null });
+        const tournamentPlayer = await TournamentPlayer.create({
+            tournament_id: tournamentId,
+            user_id: userId,
+            deck_id: deckId ?? null,
+        });
 
         if (deckId != null) {
             await this.ensureSnapshotForTournamentPlayer(tournamentPlayer);
         }
 
         if (user.email) {
-            await sendPlayerAddedToTournamentMail({
-                email: user.email,
-                username: user.username ?? 'Joueur',
-                tournamentName: tournament.name,
-                locale: user.locale,
-            });
+            try {
+                await sendPlayerAddedToTournamentMail({
+                    email: user.email,
+                    username: user.username ?? 'Joueur',
+                    tournamentName: tournament.name,
+                    locale: user.locale,
+                });
+            } catch (err) {
+                console.error(
+                    '[TournamentService] sendPlayerAddedToTournamentMail failed',
+                    tournamentId,
+                    userId,
+                    err
+                );
+            }
         }
 
-        return tournamentPlayer;
+        const withUser = await TournamentPlayer.findByPk(tournamentPlayer.id, {
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['id', 'username', 'email', 'country'],
+                },
+            ],
+        });
+        return withUser ?? tournamentPlayer;
     }
 
     static async unregisterToATournament(data: RegisterPlayerData) {
@@ -1152,6 +1317,10 @@ class TournamentService {
                 deckId,
                 userId,
                 transaction
+            );
+            await QuizSeasonService.assertDeckArchetypeAllowedForTournament(
+                tournament,
+                deck
             );
 
             const oldDeckId = tp.deck_id as string | null;
@@ -1235,6 +1404,10 @@ class TournamentService {
                 deckId,
                 tp.user_id,
                 transaction
+            );
+            await QuizSeasonService.assertDeckArchetypeAllowedForTournament(
+                tournament,
+                deck
             );
 
             const oldDeckId = tp.deck_id as string | null;
@@ -1325,21 +1498,30 @@ class TournamentService {
             throw new CustomError('Ce joueur n\'est pas inscrit à ce tournoi', 404);
         }
 
-        tournamentPlayer.destroy();
+        await tournamentPlayer.destroy();
 
         const user = (tournamentPlayer as any).user;
         if (user?.email) {
-            await sendPlayerRemovedFromTournamentMail({
-                email: user.email,
-                username: user.username ?? 'Joueur',
-                tournamentName: tournament.name,
-                reason: reason?.trim() || 'Non précisé.',
-                locale: user.locale,
-            });
+            try {
+                await sendPlayerRemovedFromTournamentMail({
+                    email: user.email,
+                    username: user.username ?? 'Joueur',
+                    tournamentName: tournament.name,
+                    reason: reason?.trim() || 'Non précisé.',
+                    locale: user.locale,
+                });
+            } catch (err) {
+                console.error(
+                    '[TournamentService] sendPlayerRemovedFromTournamentMail failed',
+                    tournamentId,
+                    playerId,
+                    err
+                );
+            }
         }
 
         return {
-            message: `${user?.username ?? 'Joueur'} a été retiré du tournoi et un email lui a été envoyé.`,
+            message: `${user?.username ?? 'Joueur'} a été retiré du tournoi.`,
         };
     }
 
@@ -1642,13 +1824,15 @@ class TournamentService {
 
                 const byePlayer = await TournamentPlayer.findByPk(canReceiveBye[0].id, { transaction });
                 if (byePlayer) {
+                    // BYE = vraie victoire : +1 match win et games au seuil du best-of (pas 0).
+                    const byeGames = getWinsNeeded(tournament.matches_per_round);
                     await TournamentMatch.create(
                         {
                             round_id: nextRound.id,
                             tournament_id: tournamentId,
                             player1_tournament_player_id: byePlayer.id,
                             player2_tournament_player_id: null,
-                            player1_games_won: 0,
+                            player1_games_won: byeGames,
                             player2_games_won: 0,
                             winner_tournament_player_id: byePlayer.id,
                             status: 'completed',
@@ -1657,6 +1841,8 @@ class TournamentService {
                         { transaction }
                     );
                     byePlayer.match_wins += 1;
+                    byePlayer.games_won += byeGames;
+                    byePlayer.games_played += byeGames;
                     await byePlayer.save({ transaction });
                 }
             }
@@ -1739,8 +1925,11 @@ class TournamentService {
 
                 // BYE : uniquement p1 existe, p2 est null
                 if (match.player2_tournament_player_id == null) {
-                    if (p1 && p1.match_wins > 0) {
-                        p1.match_wins -= 1;
+                    if (p1) {
+                        if (p1.match_wins > 0) p1.match_wins -= 1;
+                        const byeGames = match.player1_games_won ?? 0;
+                        p1.games_won = Math.max(0, p1.games_won - byeGames);
+                        p1.games_played = Math.max(0, p1.games_played - byeGames);
                     }
                     continue;
                 }
@@ -1881,10 +2070,15 @@ class TournamentService {
                 const byePlayer = await TournamentPlayer.findByPk(byePlayerId, {
                     transaction,
                 });
-                if (byePlayer && byePlayer.match_wins > 0) {
-                    byePlayer.match_wins -= 1;
-                    await byePlayer.save({ transaction });
-                }
+                if (!byePlayer) continue;
+                const byeGames = match.player1_games_won ?? 0;
+                if (byePlayer.match_wins > 0) byePlayer.match_wins -= 1;
+                byePlayer.games_won = Math.max(0, byePlayer.games_won - byeGames);
+                byePlayer.games_played = Math.max(
+                    0,
+                    byePlayer.games_played - byeGames
+                );
+                await byePlayer.save({ transaction });
             }
 
             await TournamentMatch.destroy({
@@ -1957,13 +2151,15 @@ class TournamentService {
                     { transaction }
                 );
                 if (byePlayer) {
+                    // BYE = vraie victoire : +1 match win et games au seuil du best-of (pas 0).
+                    const byeGames = getWinsNeeded(tournament.matches_per_round);
                     await TournamentMatch.create(
                         {
                             round_id: round.id,
                             tournament_id: tournamentId,
                             player1_tournament_player_id: byePlayer.id,
                             player2_tournament_player_id: null,
-                            player1_games_won: 0,
+                            player1_games_won: byeGames,
                             player2_games_won: 0,
                             winner_tournament_player_id: byePlayer.id,
                             status: 'completed',
@@ -1972,6 +2168,8 @@ class TournamentService {
                         { transaction }
                     );
                     byePlayer.match_wins += 1;
+                    byePlayer.games_won += byeGames;
+                    byePlayer.games_played += byeGames;
                     await byePlayer.save({ transaction });
                 }
             }
@@ -2089,6 +2287,7 @@ class TournamentService {
         MedalService.evaluateSafe('onOfficialTournamentFinished', () =>
             MedalService.onOfficialTournamentFinished(tournamentId)
         );
+        await this.syncSeasonPointsSafe(tournamentId);
         return result;
     }
 
@@ -2196,6 +2395,9 @@ class TournamentService {
             await player1.save({ transaction });
             await player2.save({ transaction });
             await transaction.commit();
+            if (tour.status === 'tournament_finished') {
+                await this.syncSeasonPointsSafe(String(tour.id));
+            }
             return TournamentMatch.findByPk(match.id, {
                 include: [
                     { model: TournamentPlayer, as: 'player1', include: [{ model: User, as: 'user', attributes: ['id', 'username'] }] },
@@ -2238,6 +2440,7 @@ class TournamentService {
                 MedalService.evaluateSafe('onOfficialTournamentFinished', () =>
                     MedalService.onOfficialTournamentFinished(String(tournament.id))
                 );
+                await this.syncSeasonPointsSafe(String(tournament.id));
             }
         }
 

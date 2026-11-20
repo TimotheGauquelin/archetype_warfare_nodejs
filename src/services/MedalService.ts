@@ -6,8 +6,10 @@ import {
     Tournament,
     TournamentPlayer,
     QuizAttempt,
+    SeasonTournamentRankSnapshot,
 } from '../models/relations';
 import ArchetypeRankingService from './ArchetypeRankingService';
+import QuizSeasonService from './QuizSeasonService';
 import logger from '../utils/logger';
 
 export type AwardedMedal = {
@@ -49,6 +51,16 @@ const ARCHETYPE_WIN_CODES = [
     'OFFICIAL_ARCHETYPE_WINS_3',
 ] as const;
 
+/** Paliers circuit saison (lifetime) — Novice exclu. threshold = minPoints. */
+const SEASON_TOURNAMENT_TIER_CODES = [
+    'SEASON_TIER_BRONZE',
+    'SEASON_TIER_ARGENT',
+    'SEASON_TIER_OR',
+    'SEASON_TIER_PLATINE',
+    'SEASON_TIER_DIAMANT',
+    'SEASON_TIER_MASTER',
+] as const;
+
 class MedalService {
     private static medalCache: Map<string, Medal> | null = null;
 
@@ -57,7 +69,123 @@ class MedalService {
             const medals = await Medal.findAll();
             this.medalCache = new Map(medals.map((m) => [m.code, m]));
         }
-        return this.medalCache.get(code) ?? null;
+        let medal = this.medalCache.get(code) ?? null;
+        if (!medal) {
+            // Catalogue peut avoir été enrichi après le 1er chargement (migration).
+            const medals = await Medal.findAll();
+            this.medalCache = new Map(medals.map((m) => [m.code, m]));
+            medal = this.medalCache.get(code) ?? null;
+        }
+        return medal;
+    }
+
+    /**
+     * Médailles lifetime des paliers circuit (Bronze→Master) selon les points figés.
+     * Attribue tous les paliers atteints (ex. Or ⇒ Bronze + Argent + Or).
+     */
+    static async awardSeasonTournamentTiersForPoints(
+        userId: string,
+        points: number
+    ): Promise<AwardedMedal[]> {
+        return this.awardThresholds(
+            userId,
+            SEASON_TOURNAMENT_TIER_CODES,
+            Math.max(0, Math.floor(Number(points) || 0))
+        );
+    }
+
+    /**
+     * Appelé juste après le freeze des rangs tournoi d'une saison.
+     * - paliers Bronze→Master (lifetime)
+     * - QUIZ_SESSION_FIRST (= 1er circuit tournois)
+     * - SEASON_DOUBLE_FIRST si aussi 1er du classement quiz de la même saison
+     */
+    static async onSeasonTournamentRanksFrozen(
+        seasonId: number,
+        entries: Array<{ userId: string; points: number; rank: number }>
+    ): Promise<AwardedMedal[]> {
+        const awarded: AwardedMedal[] = [];
+        for (const entry of entries) {
+            awarded.push(
+                ...(await this.awardSeasonTournamentTiersForPoints(
+                    entry.userId,
+                    entry.points
+                ))
+            );
+        }
+
+        const tournamentWinner = entries.find(
+            (entry) => entry.rank === 1 && entry.points > 0
+        );
+        if (tournamentWinner) {
+            awarded.push(
+                ...(await this.awardSeasonTournamentFirst(
+                    tournamentWinner.userId
+                ))
+            );
+
+            try {
+                const { podium } = await QuizSeasonService.getSeasonPodium(
+                    seasonId
+                );
+                const quizWinner = podium[0];
+                if (
+                    quizWinner &&
+                    String(quizWinner.userId) ===
+                        String(tournamentWinner.userId) &&
+                    Number(quizWinner.totalScore) > 0
+                ) {
+                    awarded.push(
+                        ...(await this.awardSeasonDoubleFirst(
+                            tournamentWinner.userId
+                        ))
+                    );
+                }
+            } catch (error) {
+                logger.logWarn(
+                    'Médaille double champion : podium quiz indisponible',
+                    {
+                        seasonId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+            }
+        }
+
+        return awarded;
+    }
+
+    /** 1er du circuit tournois d'une saison (lifetime). Code historique QUIZ_SESSION_FIRST. */
+    static async awardSeasonTournamentFirst(
+        userId: string
+    ): Promise<AwardedMedal[]> {
+        const awarded = await this.awardIfMissing(userId, 'QUIZ_SESSION_FIRST');
+        return awarded ? [awarded] : [];
+    }
+
+    /** 1er circuit tournois + 1er quiz sur la même saison (lifetime). */
+    static async awardSeasonDoubleFirst(
+        userId: string
+    ): Promise<AwardedMedal[]> {
+        const awarded = await this.awardIfMissing(userId, 'SEASON_DOUBLE_FIRST');
+        return awarded ? [awarded] : [];
+    }
+
+    /** Backfill : meilleur score figé toutes saisons confondues. */
+    static async evaluateSeasonTournamentTiersForUser(
+        userId: string
+    ): Promise<AwardedMedal[]> {
+        const maxPoints =
+            (await SeasonTournamentRankSnapshot.max('points', {
+                where: { user_id: userId },
+            })) ?? 0;
+        return this.awardSeasonTournamentTiersForPoints(
+            userId,
+            Number(maxPoints) || 0
+        );
     }
 
     private static async awardIfMissing(
@@ -174,12 +302,12 @@ class MedalService {
     }
 
     /**
-     * À brancher quand les sessions classées fermées existeront.
-     * Attribue QUIZ_SESSION_FIRST au vainqueur (1× lifetime).
+     * @deprecated utiliser awardSeasonTournamentFirst / onSeasonTournamentRanksFrozen
      */
-    static async onRankedQuizSessionClosed(winnerUserId: string): Promise<AwardedMedal[]> {
-        const awarded = await this.awardIfMissing(winnerUserId, 'QUIZ_SESSION_FIRST');
-        return awarded ? [awarded] : [];
+    static async onRankedQuizSessionClosed(
+        winnerUserId: string
+    ): Promise<AwardedMedal[]> {
+        return this.awardSeasonTournamentFirst(winnerUserId);
     }
 
     static async onOfficialTournamentFinished(tournamentId: string): Promise<AwardedMedal[]> {
@@ -409,6 +537,55 @@ class MedalService {
         }
 
         awarded.push(...(await this.evaluateMastersForUser(userId)));
+        awarded.push(
+            ...(await this.evaluateSeasonTournamentTiersForUser(userId))
+        );
+        awarded.push(
+            ...(await this.evaluateSeasonChampionMedalsForUser(userId))
+        );
+        return awarded;
+    }
+
+    /**
+     * Backfill : 1er circuit tournois / double champion d'après les snapshots figés.
+     */
+    static async evaluateSeasonChampionMedalsForUser(
+        userId: string
+    ): Promise<AwardedMedal[]> {
+        const firstPlaces = await SeasonTournamentRankSnapshot.findAll({
+            where: {
+                user_id: userId,
+                leaderboard_rank: 1,
+            },
+            attributes: ['season_id', 'points'],
+        });
+        const eligible = firstPlaces.filter(
+            (row) => (Number(row.points) || 0) > 0
+        );
+        if (eligible.length === 0) return [];
+
+        const awarded: AwardedMedal[] = [];
+        awarded.push(...(await this.awardSeasonTournamentFirst(userId)));
+
+        for (const snap of eligible) {
+            try {
+                const { podium } = await QuizSeasonService.getSeasonPodium(
+                    Number(snap.season_id)
+                );
+                const quizWinner = podium[0];
+                if (
+                    quizWinner &&
+                    String(quizWinner.userId) === String(userId) &&
+                    Number(quizWinner.totalScore) > 0
+                ) {
+                    awarded.push(...(await this.awardSeasonDoubleFirst(userId)));
+                    break;
+                }
+            } catch {
+                /* saison / podium indisponible */
+            }
+        }
+
         return awarded;
     }
 

@@ -20,6 +20,13 @@ router.get('/:tournamentId', (req: Request, res: Response, next: NextFunction) =
 
 router.post('/', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.create(req, res, next));
 router.put('/:tournamentId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.update(req, res, next));
+router.post(
+    '/:tournamentId/season-points/recalculate',
+    authenticateToken,
+    requireRole(['Admin']),
+    (req: Request, res: Response, next: NextFunction) =>
+        TournamentController.recalculateSeasonPoints(req, res, next)
+);
 router.put('/:tournamentId/registration/toggle', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.toggleRegistrationStatus(req, res, next));
 router.delete('/:tournamentId', authenticateToken, requireRole(['Admin']), (req: Request, res: Response, next: NextFunction) => TournamentController.deleteTournament(req, res, next));
 router.post('/:tournamentId/register', authenticateToken, (req: Request, res: Response, next: NextFunction) => TournamentController.registerToATournament(req, res, next));

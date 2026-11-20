@@ -49,6 +49,7 @@ interface TournamentAttributes {
     image_focal_x: number;
     image_focal_y: number;
     image_zoom: number;
+    season_id: number | null;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -75,6 +76,7 @@ interface TournamentCreationAttributes
         | 'image_focal_x'
         | 'image_focal_y'
         | 'image_zoom'
+        | 'season_id'
         | 'created_at'
         | 'updated_at'
     > {}
@@ -102,6 +104,7 @@ class Tournament extends Model<TournamentAttributes, TournamentCreationAttribute
     declare image_focal_x: number;
     declare image_focal_y: number;
     declare image_zoom: number;
+    declare season_id: number | null;
     declare created_at?: Date;
     declare updated_at?: Date;
 }
@@ -211,6 +214,11 @@ Tournament.init(
             type: DataTypes.SMALLINT,
             allowNull: false,
             defaultValue: 100,
+        },
+        season_id: {
+            type: DataTypes.BIGINT,
+            allowNull: true,
+            references: { model: 'quiz_season', key: 'id' },
         },
         created_at: {
             type: DataTypes.DATE,

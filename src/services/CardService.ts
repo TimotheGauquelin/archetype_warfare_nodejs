@@ -205,8 +205,8 @@ class CardService {
     }
 
     /**
-     * Recherche sous-chaîne dans le nom uniquement (table card + traduction locale).
-     * Ex. "Poly" → "Polymerization", "Super Polymerization" ; "7" → carte nommée "7".
+     * Recherche sous-chaîne dans le nom ou la description (table card + traduction locale).
+     * Ex. "Poly" → "Polymerization" ; "détruit un monstre" → cartes dont l'effet contient ce texte.
      */
     static buildNameSearchWhere(name: string, locale?: string | null): WhereOptions {
         const normalizedLocale = CardService.normalizeLocale(locale);
@@ -218,12 +218,16 @@ class CardService {
         return {
             [Op.or]: [
                 { name: { [Op.iLike]: pattern } },
+                { description: { [Op.iLike]: pattern } },
                 sequelize.literal(`EXISTS (
                     SELECT 1
                     FROM card_translation ct
                     WHERE ct.card_id = "Card"."id"
                       AND ct.locale = ${escapedLocale}
-                      AND ct.name ILIKE ${escapedPattern}
+                      AND (
+                        ct.name ILIKE ${escapedPattern}
+                        OR ct.description ILIKE ${escapedPattern}
+                      )
                 )`),
             ],
         };

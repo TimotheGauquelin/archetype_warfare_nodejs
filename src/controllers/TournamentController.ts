@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import TournamentService from '../services/TournamentService';
+import SeasonPointAwardService from '../services/SeasonPointAwardService';
+import QuizSeasonService from '../services/QuizSeasonService';
 import { getIntParam, getUuidParam } from '../utils/request';
 import Tournament from '../models/TournamentModel';
 import { CustomError } from '../errors/CustomError';
@@ -49,6 +51,12 @@ class TournamentController {
                 image_focal_y:
                     request.body.image_focal_y ?? request.body.imageFocalY,
                 image_zoom: request.body.image_zoom ?? request.body.imageZoom,
+                season_id:
+                    request.body.season_id !== undefined
+                        ? request.body.season_id
+                        : request.body.seasonId !== undefined
+                          ? request.body.seasonId
+                          : null,
             });
             response.status(201).json(tournament);
         } catch (error) {
@@ -72,14 +80,25 @@ class TournamentController {
             const status = request.query.status as string | undefined;
             const location = request.query.location as string | undefined;
             const is_onlineParam = request.query.is_online as string | undefined;
+            const seasonIdParam = request.query.season_id as string | undefined;
+            const withoutSeasonParam = request.query.without_season as
+                | string
+                | undefined;
             let is_online: boolean | undefined;
             if (is_onlineParam === 'true') is_online = true;
             else if (is_onlineParam === 'false') is_online = false;
+            let season_id: number | undefined;
+            if (seasonIdParam != null && String(seasonIdParam).trim() !== '') {
+                const n = Number(seasonIdParam);
+                if (Number.isFinite(n)) season_id = n;
+            }
             const tournaments = await TournamentService.searchAllTournaments({
                 name,
                 status: status as import('../models/TournamentModel').TournamentStatus | undefined,
                 location,
-                is_online
+                is_online,
+                season_id,
+                without_season: withoutSeasonParam === 'true',
             });
             response.status(200).json(tournaments);
         } catch (error) {
@@ -109,6 +128,12 @@ class TournamentController {
             const tournament = await TournamentService.getById(id, { includePlayers });
 
             const plain = (tournament as any).get ? (tournament as any).get({ plain: true }) : tournament;
+            const allowedArchetypeIds =
+                await QuizSeasonService.getAllowedArchetypeIdsForTournament({
+                    is_official: plain.is_official ?? false,
+                    season_id: plain.season_id ?? null,
+                });
+            plain.allowedArchetypeIds = allowedArchetypeIds;
 
             if (!includePlayers || !plain.players) {
                 response.status(200).json(plain);
@@ -240,6 +265,12 @@ class TournamentController {
                         ? image_zoom
                         : request.body.imageZoom !== undefined
                           ? request.body.imageZoom
+                          : undefined,
+                season_id:
+                    request.body.season_id !== undefined
+                        ? request.body.season_id
+                        : request.body.seasonId !== undefined
+                          ? request.body.seasonId
                           : undefined,
             });
             response.status(200).json(tournament);
@@ -540,6 +571,23 @@ class TournamentController {
             const tournamentId = getUuidParam(request.params.tournamentId);
             const standings = await TournamentService.getStandings(tournamentId);
             response.status(200).json(standings);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async recalculateSeasonPoints(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const tournamentId = getUuidParam(request.params.tournamentId);
+            const result =
+                await SeasonPointAwardService.recalculateTournamentSeasonPoints(
+                    tournamentId
+                );
+            response.status(200).json(result);
         } catch (error) {
             next(error);
         }
