@@ -735,9 +735,11 @@ class ArchetypeService {
                 translations = []
             } = request.body;
 
-            const slug = slugInput && typeof slugInput === 'string' && slugInput.trim()
-                ? slugInput.trim()
-                : slugify(name);
+            const slug = slugify(
+                slugInput && typeof slugInput === 'string' && slugInput.trim()
+                    ? slugInput
+                    : name
+            );
 
             // Extraction des IDs
             const attributeIds = attributes.map((attr: { id?: number } | number) =>
@@ -1208,7 +1210,7 @@ class ArchetypeService {
                 }
 
                 if (slugInput !== undefined && typeof slugInput === 'string' && slugInput.trim()) {
-                    updatePayload.slug = slugInput.trim();
+                    updatePayload.slug = slugify(slugInput);
                 }
                 await existingArchetype.update(updatePayload, { transaction: t });
 
