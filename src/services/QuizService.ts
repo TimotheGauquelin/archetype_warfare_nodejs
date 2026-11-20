@@ -14,6 +14,7 @@ import Card from '../models/CardModel';
 import UploadImageService from './UploadImageService';
 import CardService from './CardService';
 import QuizSeasonService from './QuizSeasonService';
+import SeasonPointAwardService from './SeasonPointAwardService';
 import MedalService from './MedalService';
 
 const DEFAULT_QUESTION_COUNT = 5;
@@ -122,10 +123,57 @@ class QuizService {
         return Number(value);
     }
 
-    static questionMaxPoints(question: { type: string; points: number }): number {
+    static normalizeNameTheCardsScoringMode(
+        value: unknown
+    ): 'per_card' | 'all_or_nothing' {
+        return String(value ?? '').trim() === 'per_card'
+            ? 'per_card'
+            : 'all_or_nothing';
+    }
+
+    static questionMaxPoints(question: {
+        type: string;
+        points: number;
+        payload?: Record<string, unknown> | null;
+    }): number {
         if (question.type === 'zoom') return ZOOM_MAX_POINTS;
         if (question.type === 'hint_ladder') return HINT_LADDER_MAX_POINTS;
+        if (question.type === 'name_the_cards') {
+            const payload = question.payload ?? {};
+            const scoringMode = this.normalizeNameTheCardsScoringMode(
+                payload.scoringMode
+            );
+            if (scoringMode === 'per_card') {
+                return Math.max(
+                    1,
+                    Math.min(10, Number(payload.monsterCount) || 1)
+                );
+            }
+        }
         return Math.max(1, Number(question.points) || 1);
+    }
+
+    /** Nombre de cartes correctement identifiées (ordre respecté). */
+    static countNameTheCardsMatches(
+        payload: Record<string, unknown>,
+        answer: Record<string, unknown>
+    ): { correct: number; total: number } {
+        const answers = Array.isArray(payload.answers)
+            ? payload.answers.map((raw) => this.normalizeNameTheCardsAnswer(raw))
+            : [];
+        const userCardIds = Array.isArray(answer.cardIds)
+            ? answer.cardIds.map((id) => String(id ?? '').trim())
+            : [];
+        const total = answers.length;
+        let correct = 0;
+        for (let i = 0; i < total; i += 1) {
+            const expected = answers[i]?.cardId ?? '';
+            const actual = userCardIds[i] ?? '';
+            if (expected && actual && expected === actual) {
+                correct += 1;
+            }
+        }
+        return { correct, total };
     }
 
     static normalizeHintLadderLevel(value: unknown): HintLadderLevel {
@@ -337,7 +385,12 @@ class QuizService {
                 1,
                 Math.min(10, Number(payload.monsterCount) || 1)
             );
-            return { monsterCount };
+            return {
+                monsterCount,
+                scoringMode: this.normalizeNameTheCardsScoringMode(
+                    payload.scoringMode
+                ),
+            };
         }
         if (type === 'summoner') {
             const propositions = this.extractSummonerPropositions(payload);
@@ -401,6 +454,9 @@ class QuizService {
                     1,
                     Math.min(10, Number(payload.monsterCount) || 1)
                 ),
+                scoringMode: this.normalizeNameTheCardsScoringMode(
+                    payload.scoringMode
+                ),
             };
         }
         if (type === 'summoner') {
@@ -463,18 +519,11 @@ class QuizService {
             return correctOrder.every((id, index) => id === userOrder[index]);
         }
         if (type === 'name_the_cards') {
-            const answers = Array.isArray(payload.answers)
-                ? payload.answers.map((raw) => this.normalizeNameTheCardsAnswer(raw))
-                : [];
-            const userCardIds = Array.isArray(answer.cardIds)
-                ? answer.cardIds.map((id) => String(id ?? '').trim())
-                : [];
-            if (answers.length === 0 || answers.length !== userCardIds.length) {
-                return false;
-            }
-            return answers.every(
-                (expected, index) => expected.cardId === userCardIds[index]
+            const { correct, total } = this.countNameTheCardsMatches(
+                payload,
+                answer
             );
+            return total > 0 && correct === total;
         }
         if (type === 'summoner') {
             const expected = this.extractSummonerPropositions(payload)
@@ -659,13 +708,19 @@ class QuizService {
     static async markQuestionsAsPlayedDaily(questionIds: number[]): Promise<void> {
         const ids = [...new Set(questionIds.filter((id) => Number.isFinite(id) && id > 0))];
         if (ids.length === 0) return;
-        await QuizQuestion.update(
-            {
-                was_daily_question: true,
-                for_daily: false,
-            },
-            { where: { id: { [Op.in]: ids } } }
-        );
+        const now = new Date();
+        const rows = await QuizQuestion.findAll({
+            where: { id: { [Op.in]: ids } },
+            attributes: ['id', 'first_daily_played_at'],
+        });
+        for (const row of rows) {
+            row.was_daily_question = true;
+            row.for_daily = false;
+            if (!row.first_daily_played_at) {
+                row.first_daily_played_at = now;
+            }
+            await row.save();
+        }
     }
 
     static async getTodayDailyQuestionIds(quizDate: string): Promise<number[]> {
@@ -1608,33 +1663,57 @@ class QuizService {
             (HINT_FORFEIT_TYPES as readonly string[]).includes(question.type);
 
         let pointsAwarded = 0;
-        if (isCorrect && !timedOut && !skipped && !hintForfeitsPoints) {
-            if (question.type === 'zoom') {
-                const zoom = this.normalizeZoomPayload(question.payload ?? {});
-                const clientPhase = Math.max(
-                    1,
-                    Math.min(3, Math.floor(Number(answer.phase) || 3))
+        if (!timedOut && !skipped && !hintForfeitsPoints) {
+            if (question.type === 'name_the_cards') {
+                const payload = (question.payload ?? {}) as Record<
+                    string,
+                    unknown
+                >;
+                const scoringMode = this.normalizeNameTheCardsScoringMode(
+                    payload.scoringMode
                 );
-                // Anti-triche légère : elapsed client → phase min (pire score)
-                const elapsedMs = Number(answer.elapsedMs);
-                let phase = clientPhase;
-                if (Number.isFinite(elapsedMs) && elapsedMs >= 0) {
-                    const fromElapsed = this.zoomPhaseFromElapsedMs(
-                        elapsedMs,
-                        zoom.phaseDurationSeconds
-                    );
-                    phase = Math.max(clientPhase, fromElapsed);
+                const { correct } = this.countNameTheCardsMatches(
+                    payload,
+                    answer
+                );
+                if (scoringMode === 'per_card') {
+                    pointsAwarded = correct;
+                } else if (isCorrect) {
+                    pointsAwarded =
+                        attempt.mode === 'daily'
+                            ? 1
+                            : Math.max(1, Number(question.points) || 1);
                 }
-                pointsAwarded = this.zoomPointsForPhase(phase);
-            } else if (question.type === 'hint_ladder') {
-                const level = this.normalizeHintLadderLevel(
-                    answer.level ?? answer.hintLevel ?? answer.hint_level
-                );
-                pointsAwarded = this.hintLadderPointsForLevel(level);
-            } else if (attempt.mode === 'daily') {
-                pointsAwarded = 1;
-            } else {
-                pointsAwarded = question.points;
+            } else if (isCorrect) {
+                if (question.type === 'zoom') {
+                    const zoom = this.normalizeZoomPayload(
+                        question.payload ?? {}
+                    );
+                    const clientPhase = Math.max(
+                        1,
+                        Math.min(3, Math.floor(Number(answer.phase) || 3))
+                    );
+                    // Anti-triche légère : elapsed client → phase min (pire score)
+                    const elapsedMs = Number(answer.elapsedMs);
+                    let phase = clientPhase;
+                    if (Number.isFinite(elapsedMs) && elapsedMs >= 0) {
+                        const fromElapsed = this.zoomPhaseFromElapsedMs(
+                            elapsedMs,
+                            zoom.phaseDurationSeconds
+                        );
+                        phase = Math.max(clientPhase, fromElapsed);
+                    }
+                    pointsAwarded = this.zoomPointsForPhase(phase);
+                } else if (question.type === 'hint_ladder') {
+                    const level = this.normalizeHintLadderLevel(
+                        answer.level ?? answer.hintLevel ?? answer.hint_level
+                    );
+                    pointsAwarded = this.hintLadderPointsForLevel(level);
+                } else if (attempt.mode === 'daily') {
+                    pointsAwarded = 1;
+                } else {
+                    pointsAwarded = question.points;
+                }
             }
         }
 
@@ -1650,11 +1729,11 @@ class QuizService {
             points_awarded: pointsAwarded,
         });
 
-        if (isCorrect) {
+        if (pointsAwarded > 0) {
             attempt.score += pointsAwarded;
             await attempt.save();
 
-            if (attempt.mode === 'daily' && pointsAwarded > 0) {
+            if (attempt.mode === 'daily') {
                 const user = await User.findByPk(userId);
                 if (user) {
                     user.quiz_points = (user.quiz_points ?? 0) + pointsAwarded;
@@ -1823,6 +1902,9 @@ class QuizService {
                 1,
                 Math.min(10, Number(payload.monsterCount) || 0)
             );
+            const scoringMode = this.normalizeNameTheCardsScoringMode(
+                payload.scoringMode
+            );
             const answers = (Array.isArray(payload.answers) ? payload.answers : []).map(
                 (raw) => this.normalizeNameTheCardsAnswer(raw)
             );
@@ -1846,6 +1928,7 @@ class QuizService {
             }
             return {
                 monsterCount,
+                scoringMode,
                 answers: answers.map((a) => ({
                     cardId: a.cardId,
                     label: a.label,
@@ -1948,10 +2031,48 @@ class QuizService {
         return resolved;
     }
 
+    /** Dates de publication Daily par question (depuis quiz_daily). */
+    static async loadDailyPublicationDatesMap(
+        questionIds: number[]
+    ): Promise<Map<number, string[]>> {
+        const ids = [
+            ...new Set(
+                questionIds.filter((id) => Number.isFinite(id) && id > 0)
+            ),
+        ];
+        const map = new Map<number, string[]>();
+        if (ids.length === 0) return map;
+
+        const rows = (await sequelize.query(
+            `
+            SELECT d.quiz_date::text AS quiz_date, qid::bigint AS question_id
+            FROM quiz_daily d
+            CROSS JOIN LATERAL unnest(d.question_ids) AS qid
+            WHERE qid = ANY(ARRAY[:ids]::bigint[])
+            ORDER BY d.quiz_date ASC
+            `,
+            {
+                replacements: { ids },
+                type: QueryTypes.SELECT,
+            }
+        )) as Array<{ quiz_date: string; question_id: string | number }>;
+
+        for (const row of rows) {
+            const questionId = Number(row.question_id);
+            const date = String(row.quiz_date ?? '').slice(0, 10);
+            if (!Number.isFinite(questionId) || !date) continue;
+            const list = map.get(questionId) ?? [];
+            if (!list.includes(date)) list.push(date);
+            map.set(questionId, list);
+        }
+        return map;
+    }
+
     static async serializeAdminQuestion(
         question: QuizQuestion,
         theme?: QuizTheme | null,
-        season?: QuizSeason | null
+        season?: QuizSeason | null,
+        dailyPublicationDates?: string[] | null
     ) {
         const payload = question.payload ?? {};
         let adminPayload: Record<string, unknown> = { ...payload };
@@ -1986,6 +2107,9 @@ class QuizService {
                 monsterCount: Math.max(
                     1,
                     Math.min(10, Number(payload.monsterCount) || answers.length || 1)
+                ),
+                scoringMode: this.normalizeNameTheCardsScoringMode(
+                    payload.scoringMode
                 ),
                 answers: enriched,
             };
@@ -2054,6 +2178,10 @@ class QuizService {
             difficulty: question.difficulty ?? 'medium',
             for_daily: Boolean(question.for_daily),
             was_daily_question: Boolean(question.was_daily_question),
+            first_daily_played_at: question.first_daily_played_at
+                ? new Date(question.first_daily_played_at).toISOString()
+                : null,
+            daily_publication_dates: [...(dailyPublicationDates ?? [])].sort(),
             daily_time_limit_seconds: this.normalizeDailyTimeLimitSeconds(
                 question.daily_time_limit_seconds
             ),
@@ -2178,12 +2306,17 @@ class QuizService {
                     : undefined,
         });
 
+        const publicationMap = await this.loadDailyPublicationDatesMap(
+            questions.map((q) => this.toNumberId(q.id))
+        );
+
         return Promise.all(
             questions.map((q) =>
                 this.serializeAdminQuestion(
                     q,
                     (q as QuizQuestion & { theme?: QuizTheme }).theme,
-                    (q as QuizQuestion & { season?: QuizSeason }).season
+                    (q as QuizQuestion & { season?: QuizSeason }).season,
+                    publicationMap.get(this.toNumberId(q.id)) ?? []
                 )
             )
         );
@@ -2242,7 +2375,21 @@ class QuizService {
                 ? ZOOM_MAX_POINTS
                 : type === 'hint_ladder'
                   ? HINT_LADDER_MAX_POINTS
-                  : Math.max(1, Number(data.points) || 1);
+                  : type === 'name_the_cards' &&
+                      this.normalizeNameTheCardsScoringMode(
+                          (payload as Record<string, unknown>).scoringMode
+                      ) === 'per_card'
+                    ? Math.max(
+                          1,
+                          Math.min(
+                              10,
+                              Number(
+                                  (payload as Record<string, unknown>)
+                                      .monsterCount
+                              ) || 1
+                          )
+                      )
+                    : Math.max(1, Number(data.points) || 1);
         let imageUrl = await this.resolveImageUrl(data.image_url, type);
         if (type === 'zoom' && !imageUrl) {
             const zoom = this.normalizeZoomPayload(payload);
@@ -2275,18 +2422,22 @@ class QuizService {
             const rawDate = String(data.scheduled_date ?? '').trim();
             const hasSeason = rawSeason != null && Number(rawSeason) > 0;
             const hasDate = Boolean(rawDate);
-            if (hasSeason !== hasDate) {
+            // Saison seule = réservée à la saison (jour via planificateur).
+            // Date seule interdite.
+            if (hasDate && !hasSeason) {
                 throw new CustomError(
-                    'Saison et date sont requises ensemble pour planifier une question (sinon laissez les deux vides pour le pool)',
+                    'Une date de défi nécessite une saison Daily',
                     400
                 );
             }
             if (hasSeason) {
                 seasonId = await this.resolveSeasonIdForSchedule(data.season_id);
-                scheduledDate = await this.resolveScheduledDateForSchedule(
-                    seasonId,
-                    data.scheduled_date
-                );
+                if (hasDate) {
+                    scheduledDate = await this.resolveScheduledDateForSchedule(
+                        seasonId,
+                        data.scheduled_date
+                    );
+                }
             }
         }
         let question: QuizQuestion;
@@ -2339,7 +2490,15 @@ class QuizService {
         }
 
         const season = seasonId ? await QuizSeason.findByPk(seasonId) : null;
-        return this.serializeAdminQuestion(question, theme, season);
+        const publicationMap = await this.loadDailyPublicationDatesMap([
+            this.toNumberId(question.id),
+        ]);
+        return this.serializeAdminQuestion(
+            question,
+            theme,
+            season,
+            publicationMap.get(this.toNumberId(question.id)) ?? []
+        );
     }
 
     static async updateAdminQuestion(
@@ -2429,7 +2588,14 @@ class QuizService {
         if (
             data.points !== undefined &&
             question.type !== 'zoom' &&
-            question.type !== 'hint_ladder'
+            question.type !== 'hint_ladder' &&
+            !(
+                question.type === 'name_the_cards' &&
+                this.normalizeNameTheCardsScoringMode(
+                    (question.payload as Record<string, unknown> | null)
+                        ?.scoringMode
+                ) === 'per_card'
+            )
         ) {
             question.points = Math.max(1, Number(data.points) || 1);
         }
@@ -2438,6 +2604,21 @@ class QuizService {
         }
         if (question.type === 'hint_ladder') {
             question.points = HINT_LADDER_MAX_POINTS;
+        }
+        if (question.type === 'name_the_cards') {
+            const qPayload = (question.payload ?? {}) as Record<
+                string,
+                unknown
+            >;
+            if (
+                this.normalizeNameTheCardsScoringMode(qPayload.scoringMode) ===
+                'per_card'
+            ) {
+                question.points = Math.max(
+                    1,
+                    Math.min(10, Number(qPayload.monsterCount) || 1)
+                );
+            }
         }
 
         if (data.is_active !== undefined) {
@@ -2449,12 +2630,10 @@ class QuizService {
         }
 
         if (question.for_daily === false) {
-            // Question libre : pas de créneau Daily
-            if (
-                data.for_daily === false ||
-                data.season_id !== undefined ||
-                data.scheduled_date !== undefined
-            ) {
+            // Question libre : pas de créneau Daily (sauf historique déjà planifié
+            // : on retire saison/date seulement si le client le demande explicitement
+            // via for_daily=false).
+            if (data.for_daily === false) {
                 question.season_id = null;
                 question.scheduled_date = null;
             }
@@ -2462,28 +2641,27 @@ class QuizService {
             data.season_id !== undefined ||
             data.scheduled_date !== undefined
         ) {
+            const previousSeasonId = question.season_id
+                ? this.toNumberId(question.season_id)
+                : null;
             const nextSeasonId =
                 data.season_id !== undefined
                     ? await this.resolveSeasonIdForSchedule(data.season_id)
-                    : question.season_id
-                      ? this.toNumberId(question.season_id)
-                      : null;
+                    : previousSeasonId;
 
-            const clearingSchedule =
-                data.season_id === null || data.scheduled_date === null;
-            let nextScheduledDate: string | null = null;
-            if (clearingSchedule && nextSeasonId == null) {
-                nextScheduledDate = null;
-            } else if (
-                data.scheduled_date !== undefined ||
-                data.season_id !== undefined
-            ) {
-                const rawDate =
-                    data.scheduled_date !== undefined
-                        ? data.scheduled_date
-                        : question.scheduled_date;
-                if (nextSeasonId == null && (rawDate == null || rawDate === '')) {
+            let nextScheduledDate: string | null = question.scheduled_date
+                ? String(question.scheduled_date).slice(0, 10)
+                : null;
+
+            if (data.scheduled_date !== undefined) {
+                const rawDate = data.scheduled_date;
+                if (rawDate == null || String(rawDate).trim() === '') {
                     nextScheduledDate = null;
+                } else if (nextSeasonId == null) {
+                    throw new CustomError(
+                        'Une date de défi nécessite une saison Daily',
+                        400
+                    );
                 } else {
                     nextScheduledDate =
                         await this.resolveScheduledDateForSchedule(
@@ -2491,15 +2669,17 @@ class QuizService {
                             rawDate
                         );
                 }
-            } else {
-                nextScheduledDate = question.scheduled_date
-                    ? String(question.scheduled_date).slice(0, 10)
-                    : null;
+            } else if (
+                data.season_id !== undefined &&
+                nextSeasonId !== previousSeasonId
+            ) {
+                // Changement de saison depuis le formulaire : le jour se replanifie
+                nextScheduledDate = null;
             }
 
-            if ((nextSeasonId && !nextScheduledDate) || (!nextSeasonId && nextScheduledDate)) {
+            if (!nextSeasonId && nextScheduledDate) {
                 throw new CustomError(
-                    'Saison et date sont requises ensemble pour planifier une question (sinon laissez les deux vides pour le pool)',
+                    'Une date de défi nécessite une saison Daily',
                     400
                 );
             }
@@ -2615,7 +2795,15 @@ class QuizService {
         const season = question.season_id
             ? await QuizSeason.findByPk(question.season_id)
             : null;
-        return this.serializeAdminQuestion(question, theme, season);
+        const publicationMap = await this.loadDailyPublicationDatesMap([
+            this.toNumberId(question.id),
+        ]);
+        return this.serializeAdminQuestion(
+            question,
+            theme,
+            season,
+            publicationMap.get(this.toNumberId(question.id)) ?? []
+        );
     }
 
     static async deleteAdminQuestion(questionId: number) {
@@ -2668,7 +2856,8 @@ class QuizService {
     }
 
     /**
-     * Stats quiz du joueur : total daily + points par saison (session).
+     * Stats quiz du joueur : total daily + points par saison,
+     * plus circuit tournois officiels par saison.
      */
     static async getMyStats(userId: string): Promise<{
         quizPoints: number;
@@ -2683,6 +2872,30 @@ class QuizService {
             imageZoom: number;
             points: number;
             attemptsCount: number;
+        }>;
+        tournamentPoints: number;
+        tournamentSeasons: Array<{
+            seasonId: number;
+            name: string;
+            startDate: string;
+            endDate: string;
+            imageUrl: string | null;
+            imageFocalX: number;
+            imageFocalY: number;
+            imageZoom: number;
+            points: number;
+            tournamentsCount: number;
+            tier: string;
+            tournaments: Array<{
+                tournamentId: string;
+                tournamentName: string;
+                eventDate: string | null;
+                place: number | null;
+                playersCount: number | null;
+                points: number;
+                matchPoints: number | null;
+                placementBonus: number | null;
+            }>;
         }>;
     }> {
         const user = await User.findByPk(userId, { attributes: ['id', 'quiz_points'] });
@@ -2758,6 +2971,9 @@ class QuizService {
             return Math.max(100, Math.min(250, Math.round(n)));
         };
 
+        const tournamentStats =
+            await SeasonPointAwardService.getUserTournamentSeasonStats(userId);
+
         return {
             quizPoints: user.quiz_points ?? 0,
             seasons: rows.map((row) => ({
@@ -2772,6 +2988,8 @@ class QuizService {
                 points: Number(row.points) || 0,
                 attemptsCount: Number(row.attempts_count) || 0,
             })),
+            tournamentPoints: tournamentStats.tournamentPoints,
+            tournamentSeasons: tournamentStats.seasons,
         };
     }
 }

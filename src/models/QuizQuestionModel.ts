@@ -31,6 +31,8 @@ interface QuizQuestionAttributes {
     for_daily: boolean;
     /** Historique : déjà sortie au moins une fois en Daily */
     was_daily_question: boolean;
+    /** Première date réelle de passage en Daily */
+    first_daily_played_at?: Date | null;
     /** Secondes pour le défi du jour : 0 = pas de chrono ; défaut 30 */
     daily_time_limit_seconds: number;
     /** Saison de Daily Quizz (si créneau planifié) */
@@ -55,6 +57,7 @@ type QuizQuestionCreationAttributes = Optional<
     | 'difficulty'
     | 'for_daily'
     | 'was_daily_question'
+    | 'first_daily_played_at'
     | 'daily_time_limit_seconds'
     | 'season_id'
     | 'scheduled_date'
@@ -81,6 +84,7 @@ class QuizQuestion
     declare difficulty: QuizQuestionDifficulty;
     declare for_daily: boolean;
     declare was_daily_question: boolean;
+    declare first_daily_played_at?: Date | null;
     declare daily_time_limit_seconds: number;
     declare season_id?: number | null;
     declare scheduled_date?: string | null;
@@ -157,6 +161,10 @@ QuizQuestion.init(
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: false,
+        },
+        first_daily_played_at: {
+            type: DataTypes.DATE,
+            allowNull: true,
         },
         daily_time_limit_seconds: {
             type: DataTypes.INTEGER,

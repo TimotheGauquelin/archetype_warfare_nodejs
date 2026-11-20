@@ -34,6 +34,9 @@ import QuizDaily from './QuizDailyModel';
 import QuizAttempt from './QuizAttemptModel';
 import QuizAnswer from './QuizAnswerModel';
 import QuizSeason from './QuizSeasonModel';
+import QuizSeasonArchetype from './QuizSeasonArchetypeModel';
+import SeasonPointAward from './SeasonPointAwardModel';
+import SeasonTournamentRankSnapshot from './SeasonTournamentRankSnapshotModel';
 import Medal from './MedalModel';
 import UserMedal from './UserMedalModel';
 
@@ -48,6 +51,59 @@ Medal.hasMany(UserMedal, { foreignKey: 'medal_id', as: 'user_medals' });
 UserMedal.belongsTo(Medal, { foreignKey: 'medal_id', as: 'medal' });
 
 // Relations Tournoi
+Tournament.belongsTo(QuizSeason, { foreignKey: 'season_id', as: 'season' });
+QuizSeason.hasMany(Tournament, { foreignKey: 'season_id', as: 'tournaments' });
+QuizSeason.hasMany(SeasonPointAward, { foreignKey: 'season_id', as: 'point_awards' });
+SeasonPointAward.belongsTo(QuizSeason, { foreignKey: 'season_id', as: 'season' });
+SeasonPointAward.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(SeasonPointAward, { foreignKey: 'user_id', as: 'season_point_awards' });
+QuizSeason.hasMany(SeasonTournamentRankSnapshot, {
+    foreignKey: 'season_id',
+    as: 'tournament_rank_snapshots',
+});
+SeasonTournamentRankSnapshot.belongsTo(QuizSeason, {
+    foreignKey: 'season_id',
+    as: 'season',
+});
+SeasonTournamentRankSnapshot.belongsTo(User, {
+    foreignKey: 'user_id',
+    as: 'user',
+});
+
+// Pool d'archétypes jouables par saison
+QuizSeason.belongsToMany(Archetype, {
+    through: QuizSeasonArchetype,
+    foreignKey: 'season_id',
+    otherKey: 'archetype_id',
+    as: 'playable_archetypes',
+});
+Archetype.belongsToMany(QuizSeason, {
+    through: QuizSeasonArchetype,
+    foreignKey: 'archetype_id',
+    otherKey: 'season_id',
+    as: 'playable_seasons',
+});
+QuizSeason.hasMany(QuizSeasonArchetype, {
+    foreignKey: 'season_id',
+    as: 'season_archetypes',
+});
+QuizSeasonArchetype.belongsTo(QuizSeason, {
+    foreignKey: 'season_id',
+    as: 'season',
+});
+QuizSeasonArchetype.belongsTo(Archetype, {
+    foreignKey: 'archetype_id',
+    as: 'archetype',
+});
+Archetype.hasMany(QuizSeasonArchetype, {
+    foreignKey: 'archetype_id',
+    as: 'season_archetypes',
+});
+User.hasMany(SeasonTournamentRankSnapshot, {
+    foreignKey: 'user_id',
+    as: 'season_tournament_rank_snapshots',
+});
+
 Tournament.hasMany(TournamentPlayer, { foreignKey: 'tournament_id', as: 'players' });
 TournamentPlayer.belongsTo(Tournament, { foreignKey: 'tournament_id', as: 'tournament' });
 TournamentPlayer.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -318,6 +374,9 @@ export {
     QuizAttempt,
     QuizAnswer,
     QuizSeason,
+    QuizSeasonArchetype,
+    SeasonPointAward,
+    SeasonTournamentRankSnapshot,
     Medal,
     UserMedal,
 };

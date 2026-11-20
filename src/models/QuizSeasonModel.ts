@@ -6,6 +6,7 @@ interface QuizSeasonAttributes {
     name: string;
     start_date: string;
     end_date: string;
+    description: string | null;
     image_url: string | null;
     image_focal_x: number;
     image_focal_y: number;
@@ -18,6 +19,7 @@ interface QuizSeasonAttributes {
 type QuizSeasonCreationAttributes = Optional<
     QuizSeasonAttributes,
     | 'id'
+    | 'description'
     | 'image_url'
     | 'image_focal_x'
     | 'image_focal_y'
@@ -35,6 +37,7 @@ class QuizSeason
     declare name: string;
     declare start_date: string;
     declare end_date: string;
+    declare description: string | null;
     declare image_url: string | null;
     declare image_focal_x: number;
     declare image_focal_y: number;
@@ -62,6 +65,10 @@ QuizSeason.init(
         end_date: {
             type: DataTypes.DATEONLY,
             allowNull: false,
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: true,
         },
         image_url: {
             type: DataTypes.TEXT,

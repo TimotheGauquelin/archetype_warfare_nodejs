@@ -22,6 +22,11 @@ router.get(
     (req: Request, res: Response, next: NextFunction) =>
         QuizController.getSeasonRanking(req, res, next)
 );
+router.get(
+    '/seasons/:seasonId/tournament-ranking',
+    (req: Request, res: Response, next: NextFunction) =>
+        QuizController.getSeasonTournamentRanking(req, res, next)
+);
 
 router.get(
     '/admin/seasons',

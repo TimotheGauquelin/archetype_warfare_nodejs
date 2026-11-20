@@ -2,6 +2,8 @@ import { Op, QueryTypes, Transaction } from 'sequelize';
 import sequelize from '../config/Sequelize';
 import { CustomError } from '../errors/CustomError';
 import QuizSeason from '../models/QuizSeasonModel';
+import QuizSeasonArchetype from '../models/QuizSeasonArchetypeModel';
+import Archetype from '../models/ArchetypeModel';
 import QuizQuestion, {
     QuizQuestionDifficulty,
     QuizQuestionType,
@@ -64,12 +66,202 @@ class QuizSeasonService {
         return raw;
     }
 
-    static async serializeSeason(season: QuizSeason) {
-        const questionCount = await QuizQuestion.count({
-            where: {
-                season_id: season.id,
-            },
+    private static mapArchetypeToPlayable(archetype: {
+        id: number;
+        name: string;
+        slug?: string | null;
+        card_img_url?: string | null;
+    }): {
+        id: number;
+        name: string;
+        slug: string | null;
+        cardImgUrl: string | null;
+    } {
+        return {
+            id: Number(archetype.id),
+            name: archetype.name,
+            slug: archetype.slug?.trim() || null,
+            cardImgUrl: archetype.card_img_url?.trim() || null,
+        };
+    }
+
+    /** Tous les archétypes en ligne (affichage pool saison non restreint). */
+    static async getAllActivePlayableArchetypes(): Promise<
+        Array<{
+            id: number;
+            name: string;
+            slug: string | null;
+            cardImgUrl: string | null;
+        }>
+    > {
+        const rows = await Archetype.findAll({
+            where: { is_active: true },
+            attributes: ['id', 'name', 'slug', 'card_img_url'],
+            order: [['name', 'ASC']],
         });
+        return rows
+            .map((row) =>
+                this.mapArchetypeToPlayable(
+                    row.get({ plain: true }) as {
+                        id: number;
+                        name: string;
+                        slug?: string | null;
+                        card_img_url?: string | null;
+                    }
+                )
+            )
+            .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    }
+
+    static async getPlayableArchetypes(
+        seasonId: number
+    ): Promise<
+        Array<{
+            id: number;
+            name: string;
+            slug: string | null;
+            cardImgUrl: string | null;
+        }>
+    > {
+        const rows = await QuizSeasonArchetype.findAll({
+            where: { season_id: seasonId },
+            include: [
+                {
+                    model: Archetype,
+                    as: 'archetype',
+                    attributes: ['id', 'name', 'slug', 'card_img_url'],
+                    required: true,
+                },
+            ],
+        });
+        return rows
+            .map((row) => {
+                const archetype = row.get('archetype') as
+                    | {
+                          id: number;
+                          name: string;
+                          slug?: string | null;
+                          card_img_url?: string | null;
+                      }
+                    | undefined;
+                if (!archetype) return null;
+                return this.mapArchetypeToPlayable(archetype);
+            })
+            .filter(
+                (
+                    item
+                ): item is {
+                    id: number;
+                    name: string;
+                    slug: string | null;
+                    cardImgUrl: string | null;
+                } => item != null
+            )
+            .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    }
+
+    /**
+     * Pour un tournoi officiel rattaché à une saison : ids autorisés, ou null si aucun filtre
+     * (non officiel, sans saison, ou pool vide = tous autorisés).
+     */
+    static async getAllowedArchetypeIdsForTournament(tournament: {
+        is_official?: boolean | null;
+        season_id?: number | null;
+    }): Promise<number[] | null> {
+        if (!tournament.is_official || tournament.season_id == null) {
+            return null;
+        }
+        const archetypes = await this.getPlayableArchetypes(
+            Number(tournament.season_id)
+        );
+        if (archetypes.length === 0) return null;
+        return archetypes.map((a) => a.id);
+    }
+
+    static async assertDeckArchetypeAllowedForTournament(
+        tournament: {
+            is_official?: boolean | null;
+            season_id?: number | null;
+        },
+        deck: { archetype_id?: number | null }
+    ): Promise<void> {
+        const allowed = await this.getAllowedArchetypeIdsForTournament(tournament);
+        if (allowed == null) return;
+        const archetypeId =
+            deck.archetype_id == null ? null : Number(deck.archetype_id);
+        if (archetypeId == null || !allowed.includes(archetypeId)) {
+            throw new CustomError(
+                "Ce deck n'est pas autorisé : son archétype n'est pas dans le pool de la saison",
+                400
+            );
+        }
+    }
+
+    private static normalizeArchetypeIds(value: unknown): number[] | undefined {
+        if (value === undefined) return undefined;
+        if (value === null) return [];
+        if (!Array.isArray(value)) {
+            throw new CustomError('playableArchetypeIds invalide', 400);
+        }
+        const ids = [
+            ...new Set(
+                value
+                    .map((item) => Number(item))
+                    .filter((id) => Number.isFinite(id) && id > 0)
+                    .map((id) => Math.trunc(id))
+            ),
+        ];
+        return ids;
+    }
+
+    private static async replaceSeasonArchetypes(
+        seasonId: number,
+        archetypeIds: number[],
+        transaction?: Transaction
+    ): Promise<void> {
+        if (archetypeIds.length > 0) {
+            const found = await Archetype.findAll({
+                where: { id: { [Op.in]: archetypeIds } },
+                attributes: ['id'],
+                transaction,
+            });
+            if (found.length !== archetypeIds.length) {
+                throw new CustomError(
+                    'Un ou plusieurs archétypes sont introuvables',
+                    400
+                );
+            }
+        }
+
+        await QuizSeasonArchetype.destroy({
+            where: { season_id: seasonId },
+            transaction,
+        });
+        if (archetypeIds.length === 0) return;
+
+        await QuizSeasonArchetype.bulkCreate(
+            archetypeIds.map((archetype_id) => ({
+                season_id: seasonId,
+                archetype_id,
+            })),
+            { transaction }
+        );
+    }
+
+    static async serializeSeason(season: QuizSeason) {
+        const seasonId = this.toNumberId(season.id);
+        const [questionCount, playableArchetypes] = await Promise.all([
+            QuizQuestion.count({
+                where: {
+                    season_id: season.id,
+                },
+            }),
+            this.getPlayableArchetypes(seasonId),
+        ]);
+        const playableArchetypesRestricted = playableArchetypes.length > 0;
+        const playableArchetypesDisplay = playableArchetypesRestricted
+            ? playableArchetypes
+            : await this.getAllActivePlayableArchetypes();
         const today = this.todayDateString();
         let status: 'past' | 'current' | 'upcoming' = 'upcoming';
         if (season.end_date < today) status = 'past';
@@ -78,10 +270,11 @@ class QuizSeasonService {
         }
 
         return {
-            id: this.toNumberId(season.id),
+            id: seasonId,
             name: season.name,
             startDate: season.start_date,
             endDate: season.end_date,
+            description: season.description ?? null,
             imageUrl: season.image_url ?? null,
             imageFocalX: this.clampFocal(season.image_focal_x, 50),
             imageFocalY: this.clampFocal(season.image_focal_y, 50),
@@ -89,10 +282,22 @@ class QuizSeasonService {
             allowsOverlap: Boolean(season.allows_overlap),
             dayCount: this.daysInclusive(season.start_date, season.end_date),
             questionCount,
+            /** Pool enregistré (vide = pas de restriction). */
+            playableArchetypes,
+            /** true si un sous-ensemble est imposé aux tournois officiels. */
+            playableArchetypesRestricted,
+            /** Liste à afficher (pool, ou tous les archétypes en ligne). */
+            playableArchetypesDisplay,
             status,
             createdAt: season.created_at ?? null,
             updatedAt: season.updated_at ?? null,
         };
+    }
+
+    private static normalizeDescription(value: unknown): string | null {
+        if (value === undefined || value === null) return null;
+        const text = String(value).trim();
+        return text ? text : null;
     }
 
     private static clampFocal(value: unknown, fallback = 50): number {
@@ -252,11 +457,13 @@ class QuizSeasonService {
         name?: string;
         startDate?: string;
         endDate?: string;
+        description?: string | null;
         imageUrl?: string | null;
         imageFocalX?: number;
         imageFocalY?: number;
         imageZoom?: number;
         allowsOverlap?: boolean;
+        playableArchetypeIds?: number[] | null;
     }) {
         const name = String(data.name ?? '').trim();
         if (!name) throw new CustomError('Nom de saison requis', 400);
@@ -288,17 +495,44 @@ class QuizSeasonService {
                 ? await this.resolveSeasonImageUrl(data.imageUrl)
                 : null;
 
-        const season = await QuizSeason.create({
-            name,
-            start_date: startDate,
-            end_date: endDate,
-            image_url: imageUrl,
-            image_focal_x: this.clampFocal(data.imageFocalX, 50),
-            image_focal_y: this.clampFocal(data.imageFocalY, 50),
-            image_zoom: this.clampZoom(data.imageZoom, 100),
-            allows_overlap: allowsOverlap,
-        });
-        return this.serializeSeason(season);
+        const playableArchetypeIds = this.normalizeArchetypeIds(
+            data.playableArchetypeIds
+        );
+
+        const transaction = await sequelize.transaction();
+        try {
+            const season = await QuizSeason.create(
+                {
+                    name,
+                    start_date: startDate,
+                    end_date: endDate,
+                    description:
+                        data.description !== undefined
+                            ? this.normalizeDescription(data.description)
+                            : null,
+                    image_url: imageUrl,
+                    image_focal_x: this.clampFocal(data.imageFocalX, 50),
+                    image_focal_y: this.clampFocal(data.imageFocalY, 50),
+                    image_zoom: this.clampZoom(data.imageZoom, 100),
+                    allows_overlap: allowsOverlap,
+                },
+                { transaction }
+            );
+
+            if (playableArchetypeIds !== undefined) {
+                await this.replaceSeasonArchetypes(
+                    this.toNumberId(season.id),
+                    playableArchetypeIds,
+                    transaction
+                );
+            }
+
+            await transaction.commit();
+            return this.serializeSeason(season);
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 
     static async updateSeason(
@@ -307,15 +541,20 @@ class QuizSeasonService {
             name?: string;
             startDate?: string;
             endDate?: string;
+            description?: string | null;
             imageUrl?: string | null;
             imageFocalX?: number;
             imageFocalY?: number;
             imageZoom?: number;
             allowsOverlap?: boolean;
+            playableArchetypeIds?: number[] | null;
         }
     ) {
         const season = await QuizSeason.findByPk(seasonId);
         if (!season) throw new CustomError('Saison introuvable', 404);
+        const playableArchetypeIds = this.normalizeArchetypeIds(
+            data.playableArchetypeIds
+        );
 
         if (data.name !== undefined) {
             const name = String(data.name).trim();
@@ -327,6 +566,9 @@ class QuizSeasonService {
         }
         if (data.endDate !== undefined) {
             season.end_date = this.normalizeDate(data.endDate, 'endDate');
+        }
+        if (data.description !== undefined) {
+            season.description = this.normalizeDescription(data.description);
         }
         if (season.end_date < season.start_date) {
             throw new CustomError(
@@ -392,7 +634,21 @@ class QuizSeasonService {
             throw new CustomError(this.overlapErrorMessage(blocking), 400);
         }
 
-        await season.save();
+        const transaction = await sequelize.transaction();
+        try {
+            await season.save({ transaction });
+            if (playableArchetypeIds !== undefined) {
+                await this.replaceSeasonArchetypes(
+                    seasonId,
+                    playableArchetypeIds,
+                    transaction
+                );
+            }
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
         return this.serializeSeason(season);
     }
 
@@ -555,11 +811,15 @@ class QuizSeasonService {
                 where: { id: { [Op.in]: candidateIds } },
             });
         } else {
-            // Fallback : pool Daily (for_daily) sans créneau encore assigné
+            // Fallback : pool Daily sans créneau, non réservé à une autre saison
             const poolWhere: Record<string, unknown> = {
                 for_daily: true,
                 scheduled_date: { [Op.is]: null },
                 type: { [Op.in]: AUTO_SCHEDULE_PLAYABLE_TYPES },
+                [Op.or]: [
+                    { season_id: null },
+                    { season_id: seasonId },
+                ],
             };
             if (usedIds.size > 0) {
                 poolWhere.id = { [Op.notIn]: [...usedIds] };

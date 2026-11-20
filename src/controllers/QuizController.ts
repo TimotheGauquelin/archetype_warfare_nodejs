@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import QuizService from '../services/QuizService';
 import QuizSeasonService from '../services/QuizSeasonService';
+import SeasonPointAwardService from '../services/SeasonPointAwardService';
 import { getUuidParam } from '../utils/request';
 import { CustomError } from '../errors/CustomError';
 
@@ -359,6 +360,7 @@ class QuizController {
                 name: request.body.name,
                 startDate: request.body.startDate ?? request.body.start_date,
                 endDate: request.body.endDate ?? request.body.end_date,
+                description: request.body.description,
                 imageUrl:
                     request.body.imageUrl ??
                     request.body.image_url ??
@@ -370,6 +372,9 @@ class QuizController {
                 imageZoom: request.body.imageZoom ?? request.body.image_zoom,
                 allowsOverlap:
                     request.body.allowsOverlap ?? request.body.allows_overlap,
+                playableArchetypeIds:
+                    request.body.playableArchetypeIds ??
+                    request.body.playable_archetype_ids,
             });
             response.status(201).json(season);
         } catch (error) {
@@ -387,6 +392,10 @@ class QuizController {
                 name: request.body.name,
                 startDate: request.body.startDate ?? request.body.start_date,
                 endDate: request.body.endDate ?? request.body.end_date,
+                description:
+                    request.body.description !== undefined
+                        ? request.body.description
+                        : undefined,
                 imageUrl:
                     request.body.imageUrl !== undefined
                         ? request.body.imageUrl
@@ -400,6 +409,12 @@ class QuizController {
                 imageZoom: request.body.imageZoom ?? request.body.image_zoom,
                 allowsOverlap:
                     request.body.allowsOverlap ?? request.body.allows_overlap,
+                playableArchetypeIds:
+                    request.body.playableArchetypeIds !== undefined
+                        ? request.body.playableArchetypeIds
+                        : request.body.playable_archetype_ids !== undefined
+                          ? request.body.playable_archetype_ids
+                          : undefined,
             });
             response.status(200).json(season);
         } catch (error) {
@@ -460,6 +475,21 @@ class QuizController {
                 }
             }
             const ranking = await QuizSeasonService.getSeasonPodium(seasonId);
+            response.status(200).json(ranking);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getSeasonTournamentRanking(
+        request: Request,
+        response: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const raw = String(request.params.seasonId ?? 'current');
+            const ranking =
+                await SeasonPointAwardService.getSeasonTournamentRanking(raw);
             response.status(200).json(ranking);
         } catch (error) {
             next(error);
