@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UserMedal = exports.Medal = exports.QuizSeason = exports.QuizAnswer = exports.QuizAttempt = exports.QuizDaily = exports.QuizQuestion = exports.QuizTheme = exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCardReason = exports.BanlistReason = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.ArchetypeTranslation = exports.CardTranslation = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
+exports.UserMedal = exports.Medal = exports.SeasonTournamentRankSnapshot = exports.SeasonPointAward = exports.QuizSeasonArchetype = exports.QuizSeason = exports.QuizAnswer = exports.QuizAttempt = exports.QuizDaily = exports.QuizQuestion = exports.QuizTheme = exports.TournamentPlayerPenalty = exports.PenaltyType = exports.TournamentMatch = exports.TournamentRound = exports.TournamentPlayerDeckCard = exports.TournamentPlayerDeck = exports.TournamentPlayer = exports.Tournament = exports.WebsiteActions = exports.UserRole = exports.Role = exports.ArchetypeSummonMechanic = exports.ArchetypeAttribute = exports.ArchetypeType = exports.BanlistArchetypeCardReason = exports.BanlistReason = exports.BanlistArchetypeCard = exports.CardStatus = exports.Banlist = exports.Type = exports.SummonMechanic = exports.Attribute = exports.Era = exports.Archetype = exports.ArchetypeTranslation = exports.CardTranslation = exports.Card = exports.DeckCard = exports.Deck = exports.User = void 0;
 const UserModel_1 = __importDefault(require("./UserModel"));
 exports.User = UserModel_1.default;
 const DeckModel_1 = __importDefault(require("./DeckModel"));
@@ -76,6 +76,12 @@ const QuizAnswerModel_1 = __importDefault(require("./QuizAnswerModel"));
 exports.QuizAnswer = QuizAnswerModel_1.default;
 const QuizSeasonModel_1 = __importDefault(require("./QuizSeasonModel"));
 exports.QuizSeason = QuizSeasonModel_1.default;
+const QuizSeasonArchetypeModel_1 = __importDefault(require("./QuizSeasonArchetypeModel"));
+exports.QuizSeasonArchetype = QuizSeasonArchetypeModel_1.default;
+const SeasonPointAwardModel_1 = __importDefault(require("./SeasonPointAwardModel"));
+exports.SeasonPointAward = SeasonPointAwardModel_1.default;
+const SeasonTournamentRankSnapshotModel_1 = __importDefault(require("./SeasonTournamentRankSnapshotModel"));
+exports.SeasonTournamentRankSnapshot = SeasonTournamentRankSnapshotModel_1.default;
 const MedalModel_1 = __importDefault(require("./MedalModel"));
 exports.Medal = MedalModel_1.default;
 const UserMedalModel_1 = __importDefault(require("./UserMedalModel"));
@@ -89,6 +95,57 @@ UserMedalModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id',
 MedalModel_1.default.hasMany(UserMedalModel_1.default, { foreignKey: 'medal_id', as: 'user_medals' });
 UserMedalModel_1.default.belongsTo(MedalModel_1.default, { foreignKey: 'medal_id', as: 'medal' });
 // Relations Tournoi
+TournamentModel_1.default.belongsTo(QuizSeasonModel_1.default, { foreignKey: 'season_id', as: 'season' });
+QuizSeasonModel_1.default.hasMany(TournamentModel_1.default, { foreignKey: 'season_id', as: 'tournaments' });
+QuizSeasonModel_1.default.hasMany(SeasonPointAwardModel_1.default, { foreignKey: 'season_id', as: 'point_awards' });
+SeasonPointAwardModel_1.default.belongsTo(QuizSeasonModel_1.default, { foreignKey: 'season_id', as: 'season' });
+SeasonPointAwardModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id', as: 'user' });
+UserModel_1.default.hasMany(SeasonPointAwardModel_1.default, { foreignKey: 'user_id', as: 'season_point_awards' });
+QuizSeasonModel_1.default.hasMany(SeasonTournamentRankSnapshotModel_1.default, {
+    foreignKey: 'season_id',
+    as: 'tournament_rank_snapshots',
+});
+SeasonTournamentRankSnapshotModel_1.default.belongsTo(QuizSeasonModel_1.default, {
+    foreignKey: 'season_id',
+    as: 'season',
+});
+SeasonTournamentRankSnapshotModel_1.default.belongsTo(UserModel_1.default, {
+    foreignKey: 'user_id',
+    as: 'user',
+});
+// Pool d'archétypes jouables par saison
+QuizSeasonModel_1.default.belongsToMany(ArchetypeModel_1.default, {
+    through: QuizSeasonArchetypeModel_1.default,
+    foreignKey: 'season_id',
+    otherKey: 'archetype_id',
+    as: 'playable_archetypes',
+});
+ArchetypeModel_1.default.belongsToMany(QuizSeasonModel_1.default, {
+    through: QuizSeasonArchetypeModel_1.default,
+    foreignKey: 'archetype_id',
+    otherKey: 'season_id',
+    as: 'playable_seasons',
+});
+QuizSeasonModel_1.default.hasMany(QuizSeasonArchetypeModel_1.default, {
+    foreignKey: 'season_id',
+    as: 'season_archetypes',
+});
+QuizSeasonArchetypeModel_1.default.belongsTo(QuizSeasonModel_1.default, {
+    foreignKey: 'season_id',
+    as: 'season',
+});
+QuizSeasonArchetypeModel_1.default.belongsTo(ArchetypeModel_1.default, {
+    foreignKey: 'archetype_id',
+    as: 'archetype',
+});
+ArchetypeModel_1.default.hasMany(QuizSeasonArchetypeModel_1.default, {
+    foreignKey: 'archetype_id',
+    as: 'season_archetypes',
+});
+UserModel_1.default.hasMany(SeasonTournamentRankSnapshotModel_1.default, {
+    foreignKey: 'user_id',
+    as: 'season_tournament_rank_snapshots',
+});
 TournamentModel_1.default.hasMany(TournamentPlayerModel_1.default, { foreignKey: 'tournament_id', as: 'players' });
 TournamentPlayerModel_1.default.belongsTo(TournamentModel_1.default, { foreignKey: 'tournament_id', as: 'tournament' });
 TournamentPlayerModel_1.default.belongsTo(UserModel_1.default, { foreignKey: 'user_id', as: 'user' });

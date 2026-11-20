@@ -162,7 +162,7 @@ class AuthenticateController {
         }
     }
 
-    async logout(request: Request, response: Response, next: NextFunction): Promise<void> {
+    async logout(_request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             clearAuthCookie(response);
             response.status(200).json({

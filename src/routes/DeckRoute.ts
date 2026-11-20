@@ -35,7 +35,11 @@ router.post(
     body('label').trim().notEmpty().withMessage('Le label du deck est obligatoire').isLength({ max: 120 }),
     body('archetype_id').optional({ nullable: true }).isInt({ min: 1 }),
     body('comment').optional().isString().isLength({ max: 5000 }),
-    body('deck_cards').optional().isArray({ max: 200 }),
+    body('deck_cards')
+        .optional()
+        .isArray()
+        .custom((cards) => Array.isArray(cards) && cards.length <= 200)
+        .withMessage('deck_cards ne peut pas dépasser 200 cartes'),
     validate,
     (request: Request, response: Response, next: NextFunction) =>
         DeckController.createDeck(request, response, next)
