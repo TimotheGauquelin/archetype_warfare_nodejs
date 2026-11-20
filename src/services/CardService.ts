@@ -233,6 +233,27 @@ class CardService {
         };
     }
 
+    static buildDeckBuilderNameSearchWhere(name: string, locale?: string | null): WhereOptions {
+        const normalizedLocale = CardService.normalizeLocale(locale);
+        const needle = String(name).trim();
+        const pattern = `%${needle}%`;
+        const escapedPattern = sequelize.escape(pattern);
+        const escapedLocale = sequelize.escape(normalizedLocale);
+
+        return {
+            [Op.or]: [
+                { name: { [Op.iLike]: pattern } },
+                sequelize.literal(`EXISTS (
+                    SELECT 1
+                    FROM card_translation ct
+                    WHERE ct.card_id = "Card"."id"
+                      AND ct.locale = ${escapedLocale}
+                      AND ct.name ILIKE ${escapedPattern}
+                )`),
+            ],
+        };
+    }
+
     /**
      * Upsert les traductions d'une carte.
      * Si aucune traduction n'est fournie, crée/met à jour la locale `en` depuis name/description.
@@ -465,7 +486,9 @@ class CardService {
                   : [missingFrClause];
         }
 
-        const result = await Card.findAndCountAll({
+        const currentPage = parseInt(String(page));
+        const total = await Card.count({ where });
+        const rows = await Card.findAll({
             where,
             attributes: {
                 include: [
@@ -486,11 +509,10 @@ class CardService {
             limit,
             offset,
             order: [['name', 'ASC']],
-            distinct: true
         });
 
         const localizedRows = await CardService.applyLocaleToCardRecords(
-            result.rows.map((row) => {
+            rows.map((row) => {
                 const json = row.toJSON() as Card & { id: string; is_archetype_card?: boolean | number | string };
                 const rawFlag = json.is_archetype_card;
                 const isArchetypeCard =
@@ -507,22 +529,22 @@ class CardService {
             locale
         );
 
-        const totalPages = Math.ceil(result.count / limit);
-        const hasNextPage = parseInt(String(page)) < totalPages;
-        const hasPreviousPage = parseInt(String(page)) > 1;
+        const totalPages = Math.ceil(total / limit) || 0;
+        const hasNextPage = currentPage < totalPages;
+        const hasPreviousPage = currentPage > 1;
 
         return {
             data: localizedRows as unknown as Card[],
             pagination: {
-                total: result.count,
-                totalPages: totalPages,
-                currentPage: parseInt(String(page)),
+                total,
+                totalPages,
+                currentPage,
                 pageSize: limit,
-                hasNextPage: hasNextPage,
-                hasPreviousPage: hasPreviousPage,
-                nextPage: hasNextPage ? parseInt(String(page)) + 1 : null,
-                previousPage: hasPreviousPage ? parseInt(String(page)) - 1 : null
-            }
+                hasNextPage,
+                hasPreviousPage,
+                nextPage: hasNextPage ? currentPage + 1 : null,
+                previousPage: hasPreviousPage ? currentPage - 1 : null,
+            },
         };
     }
 
@@ -543,11 +565,14 @@ class CardService {
 
         const limit = parseInt(String(size));
         const offset = (parseInt(String(page)) - 1) * limit;
+        const currentPage = parseInt(String(page));
 
         const cardWhere: WhereOptions = {};
+        const trimmedName = typeof name === 'string' ? name.trim() : '';
 
-        if (name) {
-            Object.assign(cardWhere, CardService.buildNameSearchWhere(name, locale));
+        // Deck builder : noms seuls (évite ILIKE sur description TEXT)
+        if (trimmedName.length >= 2) {
+            Object.assign(cardWhere, CardService.buildDeckBuilderNameSearchWhere(trimmedName, locale));
         }
 
         if (level) {
@@ -575,22 +600,16 @@ class CardService {
         }
 
         if (attribute) {
-            cardWhere.attribute = {
-                [Op.iLike]: `%${attribute}%`
-            };
+            cardWhere.attribute = { [Op.iLike]: String(attribute).trim() };
         }
 
         if (card_type) {
-            cardWhere.card_type = {
-                [Op.iLike]: `%${card_type}%`
-            };
+            cardWhere.card_type = { [Op.iLike]: String(card_type).trim() };
         }
 
         const selectedArchetypeId = Number(archetypeId);
 
-        // Cartes de l'archétype (BAC avec cet archetype_id)
-        // OU cartes hors archétype (aucune liaison BAC vers un archétype)
-        // — ne dépend plus des lignes BAC Unlimited génériques
+        // Cartes de l'archétype OU hors tout archétype (indexes idx_bac_*).
         const cardsForDeckBuilder = sequelize.literal(`(
             EXISTS (
                 SELECT 1
@@ -607,74 +626,83 @@ class CardService {
             )
         )`);
 
-        const whereConditions = [cardsForDeckBuilder];
-        // Object.keys ignore les Symboles (ex. Op.or du filtre nom) → utiliser aussi getOwnPropertySymbols
         const hasCardFilters =
             Object.keys(cardWhere).length > 0 ||
             Object.getOwnPropertySymbols(cardWhere).length > 0;
         const finalWhere = hasCardFilters
-            ? { [Op.and]: [cardWhere, ...whereConditions] }
-            : { [Op.and]: whereConditions };
+            ? { [Op.and]: [cardWhere, cardsForDeckBuilder] }
+            : { [Op.and]: [cardsForDeckBuilder] };
 
-        const result = await Card.findAndCountAll({
+        // Count sans JOIN (évite findAndCountAll + distinct coûteux)
+        const total = await Card.count({ where: finalWhere });
+
+        const rows = await Card.findAll({
             where: finalWhere,
-            include: [
-                {
-                    model: BanlistArchetypeCard,
-                    as: 'banlist_archetype_cards',
-                    required: false,
-                    attributes: ['id', 'archetype_id', 'card_status_id'],
-                    where: {
-                        [Op.or]: [
-                            { archetype_id: selectedArchetypeId },
-                            { archetype_id: null },
-                            { archetype_id: 0 },
-                        ],
-                    },
-                    include: [
-                        {
-                            model: CardStatus,
-                            as: 'card_status',
-                            required: false,
-                            attributes: ['id', 'label', 'limit']
-                        }
-                    ]
-                }
-            ],
             limit,
             offset,
-            distinct: true,
-            order: [['name', 'ASC']]
+            order: [['name', 'ASC']],
         });
 
-        const formattedData = result.rows.map(card => {
-            const cardData = card.toJSON() as Card & { banlist_archetype_cards?: Array<BanlistArchetypeCard & { card_status?: CardStatus }> };
+        const cardIds = rows.map((row) => String(row.id));
+        const bacByCardId = new Map<
+            string,
+            Array<BanlistArchetypeCard & { card_status?: CardStatus }>
+        >();
 
-            let banlistCard: (BanlistArchetypeCard & { card_status?: CardStatus }) | null = null;
+        if (cardIds.length > 0) {
+            const bacRows = await BanlistArchetypeCard.findAll({
+                where: {
+                    card_id: { [Op.in]: cardIds },
+                    [Op.or]: [
+                        { archetype_id: selectedArchetypeId },
+                        { archetype_id: null },
+                        { archetype_id: 0 },
+                    ],
+                },
+                attributes: ['id', 'archetype_id', 'card_status_id', 'card_id'],
+                include: [
+                    {
+                        model: CardStatus,
+                        as: 'card_status',
+                        required: false,
+                        attributes: ['id', 'label', 'limit'],
+                    },
+                ],
+            });
+
+            for (const bac of bacRows) {
+                const json = bac.toJSON() as BanlistArchetypeCard & {
+                    card_id: string;
+                    card_status?: CardStatus;
+                };
+                const key = String(json.card_id);
+                const list = bacByCardId.get(key) ?? [];
+                list.push(json);
+                bacByCardId.set(key, list);
+            }
+        }
+
+        const formattedData = rows.map((card) => {
+            const cardData = card.toJSON() as Card & { id: string };
+            const bacList = bacByCardId.get(String(cardData.id)) ?? [];
+
             const bacArchetypeId = (bac: BanlistArchetypeCard) =>
                 bac.archetype_id == null ? null : Number(bac.archetype_id);
 
-            const isArchetypeCard = !!(
-                cardData.banlist_archetype_cards?.some(
-                    (bac) => bacArchetypeId(bac) === selectedArchetypeId
-                )
+            const isArchetypeCard = bacList.some(
+                (bac) => bacArchetypeId(bac) === selectedArchetypeId
             );
 
-            if (cardData.banlist_archetype_cards && cardData.banlist_archetype_cards.length > 0) {
-                banlistCard = cardData.banlist_archetype_cards.find(
-                    (bac) => bacArchetypeId(bac) === selectedArchetypeId
-                ) || null;
-
-                if (!banlistCard) {
-                    banlistCard = cardData.banlist_archetype_cards.find(
+            let banlistCard =
+                bacList.find((bac) => bacArchetypeId(bac) === selectedArchetypeId) || null;
+            if (!banlistCard) {
+                banlistCard =
+                    bacList.find(
                         (bac) => bacArchetypeId(bac) === null || bacArchetypeId(bac) === 0
                     ) || null;
-                }
             }
 
-            const cardStatusData = banlistCard && banlistCard.card_status
-                ? banlistCard.card_status
-                : null;
+            const cardStatusData = banlistCard?.card_status ?? null;
 
             return {
                 ...cardData,
@@ -685,22 +713,22 @@ class CardService {
 
         const localizedData = await CardService.applyLocaleToCardRecords(formattedData, locale);
 
-        const totalPages = Math.ceil(result.count / limit);
-        const hasNextPage = parseInt(String(page)) < totalPages;
-        const hasPreviousPage = parseInt(String(page)) > 1;
+        const totalPages = Math.ceil(total / limit) || 0;
+        const hasNextPage = currentPage < totalPages;
+        const hasPreviousPage = currentPage > 1;
 
         return {
             data: localizedData,
             pagination: {
-                total: result.count,
-                totalPages: totalPages,
-                currentPage: parseInt(String(page)),
+                total,
+                totalPages,
+                currentPage,
                 pageSize: limit,
-                hasNextPage: hasNextPage,
-                hasPreviousPage: hasPreviousPage,
-                nextPage: hasNextPage ? parseInt(String(page)) + 1 : null,
-                previousPage: hasPreviousPage ? parseInt(String(page)) - 1 : null
-            }
+                hasNextPage,
+                hasPreviousPage,
+                nextPage: hasNextPage ? currentPage + 1 : null,
+                previousPage: hasPreviousPage ? currentPage - 1 : null,
+            },
         };
     }
 
