@@ -32,3 +32,10 @@ CREATE INDEX IF NOT EXISTS idx_card_translation_description_trgm
 
 CREATE INDEX IF NOT EXISTS idx_card_translation_card_locale
   ON card_translation (card_id, locale);
+
+-- Recherche admin archétypes (ILIKE %…% sur les noms)
+CREATE INDEX IF NOT EXISTS idx_archetype_name_trgm
+  ON archetype USING gin (name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_archetype_translation_name_trgm
+  ON archetype_translation USING gin (name gin_trgm_ops);

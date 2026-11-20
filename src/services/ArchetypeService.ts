@@ -219,9 +219,11 @@ class ArchetypeService {
         const offset = (parseInt(String(page)) - 1) * limit;
 
         const where: WhereOptions = {};
+        const trimmedName = typeof name === 'string' ? name.trim() : '';
 
-        if (name) {
-            Object.assign(where, ArchetypeService.buildNameSearchWhere(name, locale));
+        // Ignorer 1 caractère (trop large) — index gin_trgm sur les noms
+        if (trimmedName.length >= 2) {
+            Object.assign(where, ArchetypeService.buildNameSearchWhere(trimmedName, locale));
         }
 
         if (is_active) {
