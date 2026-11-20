@@ -54,7 +54,8 @@ class DiscordAuthService {
             client_id: envVars.DISCORD_CLIENT_ID!,
             redirect_uri: envVars.DISCORD_REDIRECT_URI!,
             response_type: 'code',
-            scope: 'identify email guilds',
+            // guilds.join : permet d'ajouter l'utilisateur au serveur via le bot
+            scope: 'identify email guilds guilds.join',
             state,
             prompt: 'consent',
         });
@@ -109,11 +110,12 @@ class DiscordAuthService {
         }
 
         // Fallback bot (si configuré + Server Members Intent)
-        if (envVars.DISCORD_BOT_TOKEN) {
+        const botToken = envVars.DISCORD_BOT_TOKEN?.trim();
+        if (botToken) {
             const memberResponse = await fetch(
                 `https://discord.com/api/v10/guilds/${guildId}/members/${discordUserId}`,
                 {
-                    headers: { Authorization: `Bot ${envVars.DISCORD_BOT_TOKEN}` },
+                    headers: { Authorization: `Bot ${botToken}` },
                 }
             );
             if (memberResponse.ok) {
@@ -122,6 +124,64 @@ class DiscordAuthService {
         }
 
         return false;
+    }
+
+    /**
+     * Ajoute l'utilisateur au serveur Discord requis (OAuth scope guilds.join + bot).
+     * 201 = ajouté, 204 = déjà membre.
+     * Prérequis : DISCORD_BOT_TOKEN, bot présent sur le serveur, permission Create Instant Invite.
+     */
+    static async addUserToRequiredGuild(accessToken: string, discordUserId: string): Promise<boolean> {
+        const botToken = envVars.DISCORD_BOT_TOKEN?.trim();
+        const guildId = envVars.DISCORD_GUILD_ID?.trim();
+        if (!botToken || !guildId) {
+            console.warn(
+                '[DiscordAuth] guilds.join impossible: DISCORD_BOT_TOKEN ou DISCORD_GUILD_ID manquant (vérifier le .env du conteneur backend).'
+            );
+            return false;
+        }
+
+        try {
+            const response = await fetch(
+                `https://discord.com/api/v10/guilds/${guildId}/members/${discordUserId}`,
+                {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `Bot ${botToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ access_token: accessToken }),
+                }
+            );
+
+            if (response.status === 201 || response.status === 204) {
+                return true;
+            }
+
+            // Log léger pour le debug ops (ex. permissions bot manquantes)
+            const bodyText = await response.text().catch(() => '');
+            console.warn(
+                `[DiscordAuth] guilds.join échoué (${response.status}) pour ${discordUserId}: ${bodyText.slice(0, 200)}`
+            );
+            return false;
+        } catch (error) {
+            console.warn('[DiscordAuth] guilds.join erreur réseau:', error);
+            return false;
+        }
+    }
+
+    static async ensureMemberOfRequiredGuild(
+        accessToken: string,
+        discordUserId: string
+    ): Promise<boolean> {
+        const alreadyMember = await DiscordAuthService.isMemberOfRequiredGuild(
+            accessToken,
+            discordUserId
+        );
+        if (alreadyMember) {
+            return true;
+        }
+        return DiscordAuthService.addUserToRequiredGuild(accessToken, discordUserId);
     }
 
     static buildUniqueUsername(base: string, discordId: string): string {
@@ -290,7 +350,7 @@ class DiscordAuthService {
         const tokenResponse = await DiscordAuthService.exchangeCode(code);
         const discordUser = await DiscordAuthService.fetchDiscordUser(tokenResponse.access_token);
 
-        const isMember = await DiscordAuthService.isMemberOfRequiredGuild(
+        const isMember = await DiscordAuthService.ensureMemberOfRequiredGuild(
             tokenResponse.access_token,
             discordUser.id
         );
@@ -298,7 +358,8 @@ class DiscordAuthService {
             return {
                 status: 'error',
                 code: 'not_in_guild',
-                message: 'Vous devez être membre du serveur Discord Archetype Warfare pour vous connecter.',
+                message:
+                    'Impossible de vous ajouter au serveur Discord Archetype Warfare. Rejoignez-le puis réessayez.',
             };
         }
 
