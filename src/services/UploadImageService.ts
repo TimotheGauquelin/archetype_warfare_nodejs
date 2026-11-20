@@ -183,9 +183,10 @@ class UploadImageService {
 
     /**
      * Liste les images d'un dossier Cloudinary.
-     * 1) prefix public_id (ex. jumbotron_archetypes/…)
-     * 2) fallback Media Library asset_folder (ex. picture_profile/default
-     *    où le public_id peut être juste « katsuya »)
+     * Combine :
+     * 1) prefix public_id (ex. jumbotron_archetypes/…, picture_profile/default/…)
+     * 2) Media Library asset_folder (ex. picture_profile/default avec public_id « katsuya »)
+     * Puis déduplique — un upload API ne doit pas masquer les anciennes assets folder-only.
      */
     static async listImagesInFolder(folderName: string): Promise<CloudinaryResource[]> {
         const normalized = folderName.replace(/\/+$/, '');
@@ -206,10 +207,9 @@ class UploadImageService {
             );
         });
 
-        if (byPrefix.length > 0) return byPrefix;
-
+        let byAssetFolder: CloudinaryResource[] = [];
         try {
-            return await new Promise<CloudinaryResource[]>((resolve, reject) => {
+            byAssetFolder = await new Promise<CloudinaryResource[]>((resolve, reject) => {
                 cloudinary.api.resources_by_asset_folder(
                     normalized,
                     {
@@ -230,8 +230,19 @@ class UploadImageService {
                         ? assetFolderError.message
                         : String(assetFolderError),
             });
-            return [];
         }
+
+        const seen = new Set<string>();
+        const merged: CloudinaryResource[] = [];
+        for (const img of [...byPrefix, ...byAssetFolder]) {
+            const key =
+                String(img.public_id ?? '').trim() ||
+                String(img.secure_url ?? img.url ?? '').trim();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            merged.push(img);
+        }
+        return merged;
     }
 
     static async getAllImagesFromFolder(request: Request, response: Response): Promise<void> {
