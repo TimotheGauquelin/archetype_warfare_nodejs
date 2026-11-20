@@ -1,4 +1,4 @@
--- Accélère la recherche deck builder (EXISTS BAC + ILIKE noms).
+-- Accélère la recherche deck builder (EXISTS BAC + ILIKE nom/description).
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -21,8 +21,14 @@ CREATE INDEX IF NOT EXISTS idx_bac_archetype_card
 CREATE INDEX IF NOT EXISTS idx_card_name_trgm
   ON card USING gin (name gin_trgm_ops);
 
+CREATE INDEX IF NOT EXISTS idx_card_description_trgm
+  ON card USING gin (description gin_trgm_ops);
+
 CREATE INDEX IF NOT EXISTS idx_card_translation_name_trgm
   ON card_translation USING gin (name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_card_translation_description_trgm
+  ON card_translation USING gin (description gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_card_translation_card_locale
   ON card_translation (card_id, locale);

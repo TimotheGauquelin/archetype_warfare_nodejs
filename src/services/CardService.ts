@@ -243,12 +243,16 @@ class CardService {
         return {
             [Op.or]: [
                 { name: { [Op.iLike]: pattern } },
+                { description: { [Op.iLike]: pattern } },
                 sequelize.literal(`EXISTS (
                     SELECT 1
                     FROM card_translation ct
                     WHERE ct.card_id = "Card"."id"
                       AND ct.locale = ${escapedLocale}
-                      AND ct.name ILIKE ${escapedPattern}
+                      AND (
+                        ct.name ILIKE ${escapedPattern}
+                        OR ct.description ILIKE ${escapedPattern}
+                      )
                 )`),
             ],
         };
@@ -435,9 +439,11 @@ class CardService {
         const offset = (parseInt(String(page)) - 1) * limit;
 
         const where: WhereOptions = {};
+        const trimmedName = typeof name === 'string' ? name.trim() : '';
 
-        if (name) {
-            Object.assign(where, CardService.buildNameSearchWhere(name, locale));
+        // Nom + description (index gin_trgm) — ignorer 1 caractère trop large
+        if (trimmedName.length >= 2) {
+            Object.assign(where, CardService.buildNameSearchWhere(trimmedName, locale));
         }
 
         if (level) {
@@ -466,13 +472,13 @@ class CardService {
 
         if (attribute) {
             where.attribute = {
-                [Op.iLike]: `%${attribute}%`
+                [Op.iLike]: String(attribute).trim()
             };
         }
 
         if (card_type) {
             where.card_type = {
-                [Op.iLike]: `%${card_type}%`
+                [Op.iLike]: String(card_type).trim()
             };
         }
 
@@ -570,7 +576,6 @@ class CardService {
         const cardWhere: WhereOptions = {};
         const trimmedName = typeof name === 'string' ? name.trim() : '';
 
-        // Deck builder : noms seuls (évite ILIKE sur description TEXT)
         if (trimmedName.length >= 2) {
             Object.assign(cardWhere, CardService.buildDeckBuilderNameSearchWhere(trimmedName, locale));
         }
