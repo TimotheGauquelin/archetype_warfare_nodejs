@@ -506,14 +506,31 @@ class TournamentService {
                 ? status
                 : { [Op.ne]: 'not_visible' },
         };
+        // Liste publique allégée : count joueurs + user_id seuls (badge inscription highlight)
         return Tournament.findAll({
             where,
+            attributes: {
+                exclude: ['description'],
+                include: [
+                    [
+                        sequelize.literal(`(
+                            SELECT COUNT(*)::int
+                            FROM tournament_player AS tp
+                            WHERE tp.tournament_id = "Tournament"."id"
+                              AND tp.dropped = false
+                        )`),
+                        'players_count',
+                    ],
+                ],
+            },
             order: [['event_date', 'DESC']],
             include: [
                 {
                     model: TournamentPlayer,
                     as: 'players',
-                    attributes: ['id', 'user_id', 'dropped'],
+                    attributes: ['user_id'],
+                    where: { dropped: false },
+                    required: false,
                 },
                 {
                     model: QuizSeason,
@@ -556,8 +573,30 @@ class TournamentService {
         }
         return Tournament.findAll({
             where,
+            attributes: {
+                exclude: ['description'],
+                include: [
+                    [
+                        sequelize.literal(`(
+                            SELECT COUNT(*)::int
+                            FROM tournament_player AS tp
+                            WHERE tp.tournament_id = "Tournament"."id"
+                              AND tp.dropped = false
+                        )`),
+                        'players_count',
+                    ],
+                ],
+            },
             order: [['event_date', 'DESC']],
-            include: [{ model: TournamentPlayer, as: 'players', attributes: ['id'] }]
+            include: [
+                {
+                    model: TournamentPlayer,
+                    as: 'players',
+                    attributes: ['id'],
+                    where: { dropped: false },
+                    required: false,
+                },
+            ],
         });
     }
 
