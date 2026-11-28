@@ -1,6 +1,7 @@
 import { Card, Archetype, Type, Attribute, SummonMechanic, BanlistArchetypeCard, CardStatus, CardTranslation } from '../models/relations';
 import { Op, WhereOptions } from 'sequelize';
 import sequelize from '../config/Sequelize';
+import { CustomError } from '../errors/CustomError';
 
 interface SearchFilters {
     name?: string;
@@ -16,6 +17,8 @@ interface SearchFilters {
     locale?: string;
     /** true = cartes sans ligne `card_translation` locale `fr` (texte EN à traduire). */
     missing_fr?: boolean;
+    /** true = filtre uniquement sur le nom (pas la description). */
+    name_only?: boolean;
 }
 
 export type CardLocale = 'fr' | 'en';
@@ -233,6 +236,28 @@ class CardService {
         };
     }
 
+    /** Recherche sous-chaîne uniquement sur le nom (card + traduction locale). */
+    static buildNameOnlySearchWhere(name: string, locale?: string | null): WhereOptions {
+        const normalizedLocale = CardService.normalizeLocale(locale);
+        const needle = String(name).trim();
+        const pattern = `%${needle}%`;
+        const escapedPattern = sequelize.escape(pattern);
+        const escapedLocale = sequelize.escape(normalizedLocale);
+
+        return {
+            [Op.or]: [
+                { name: { [Op.iLike]: pattern } },
+                sequelize.literal(`EXISTS (
+                    SELECT 1
+                    FROM card_translation ct
+                    WHERE ct.card_id = "Card"."id"
+                      AND ct.locale = ${escapedLocale}
+                      AND ct.name ILIKE ${escapedPattern}
+                )`),
+            ],
+        };
+    }
+
     static buildDeckBuilderNameSearchWhere(name: string, locale?: string | null): WhereOptions {
         const normalizedLocale = CardService.normalizeLocale(locale);
         const needle = String(name).trim();
@@ -399,6 +424,15 @@ class CardService {
         return CardService.getCardById(id, locale);
     }
 
+    /** Supprime une carte (CASCADE sur deck_card, BAC, traductions, etc.). */
+    static async deleteCard(id: string): Promise<void> {
+        const card = await Card.findByPk(id, { attributes: ['id', 'name'] });
+        if (!card) {
+            throw new CustomError('Carte introuvable', 404);
+        }
+        await card.destroy();
+    }
+
     static async getAllCards(): Promise<Card[]> {
         return Card.findAll({
             include: [
@@ -432,7 +466,8 @@ class CardService {
             page = 1,
             size = 10,
             locale,
-            missing_fr
+            missing_fr,
+            name_only,
         } = filters;
 
         const limit = parseInt(String(size));
@@ -441,9 +476,14 @@ class CardService {
         const where: WhereOptions = {};
         const trimmedName = typeof name === 'string' ? name.trim() : '';
 
-        // Nom + description (index gin_trgm) — ignorer 1 caractère trop large
+        // Nom (+ description sauf name_only) — ignorer 1 caractère trop large
         if (trimmedName.length >= 2) {
-            Object.assign(where, CardService.buildNameSearchWhere(trimmedName, locale));
+            Object.assign(
+                where,
+                name_only
+                    ? CardService.buildNameOnlySearchWhere(trimmedName, locale)
+                    : CardService.buildNameSearchWhere(trimmedName, locale)
+            );
         }
 
         if (level) {

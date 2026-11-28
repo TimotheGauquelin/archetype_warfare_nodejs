@@ -21,6 +21,23 @@ class CardController {
         }
     }
 
+    async deleteCard(request: Request, response: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+            if (!id || typeof id !== 'string') {
+                response.status(400).json({ success: false, message: 'ID de la carte requis' });
+                return;
+            }
+            await CardService.deleteCard(id);
+            response.status(200).json({
+                success: true,
+                message: 'Carte supprimée',
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     /** Mise à jour manuelle des détails d'une carte (met manual_update à true). */
     async updateCardDetail(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
@@ -60,6 +77,7 @@ class CardController {
     async searchCards(request: Request, response: Response, next: NextFunction): Promise<void> {
         try {
             const missingFrRaw = String(request.query.missing_fr ?? '').toLowerCase();
+            const nameOnlyRaw = String(request.query.name_only ?? '').toLowerCase();
             const filters = {
                 name: request.query.name as string | undefined,
                 card_type: request.query.card_type as string | undefined,
@@ -73,6 +91,7 @@ class CardController {
                 size: request.query.size ? parseInt(request.query.size as string) : 10,
                 locale: request.query.locale as string | undefined,
                 missing_fr: missingFrRaw === '1' || missingFrRaw === 'true',
+                name_only: nameOnlyRaw === '1' || nameOnlyRaw === 'true',
             };
 
             const cards = await CardService.searchCards(filters);

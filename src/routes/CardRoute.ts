@@ -21,6 +21,9 @@ router.get('/:id', (request: Request, response: Response, next: NextFunction) =>
 router.put('/:id', ...adminOnly, (request: Request, response: Response, next: NextFunction) =>
     CardController.updateCardDetail(request, response, next)
 );
+router.delete('/:id', ...adminOnly, (request: Request, response: Response, next: NextFunction) =>
+    CardController.deleteCard(request, response, next)
+);
 
 router.post('/', ...adminOnly, (request: Request, response: Response, next: NextFunction) =>
     CardController.addCards(request, response, next)
