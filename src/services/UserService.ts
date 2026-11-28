@@ -584,6 +584,10 @@ class UserService {
         if (typeof userPayload.is_banned === 'boolean') {
             existingUser.is_banned = userPayload.is_banned;
         }
+        if (typeof userPayload.has_accepted_terms_and_conditions === 'boolean') {
+            existingUser.has_accepted_terms_and_conditions =
+                userPayload.has_accepted_terms_and_conditions;
+        }
         if (userPayload.password !== undefined && userPayload.password !== '') {
             const password = String(userPayload.password);
             if (password.length < 8) {

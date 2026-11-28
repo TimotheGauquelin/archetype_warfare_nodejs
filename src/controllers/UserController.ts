@@ -143,6 +143,7 @@ class UserController {
                 send_invite_email,
                 is_active,
                 is_banned,
+                has_accepted_terms_and_conditions,
                 biography,
                 country,
                 loved_archetype_id,
@@ -173,7 +174,10 @@ class UserController {
                 password: hasPassword ? String(password).trim() : undefined,
                 is_active: typeof is_active === 'boolean' ? is_active : true,
                 is_banned: typeof is_banned === 'boolean' ? is_banned : false,
-                has_accepted_terms_and_conditions: false,
+                has_accepted_terms_and_conditions:
+                    typeof has_accepted_terms_and_conditions === 'boolean'
+                        ? has_accepted_terms_and_conditions
+                        : false,
                 reset_password_token: resetToken ? hashToken(resetToken) : null,
                 biography,
                 country,
@@ -244,6 +248,7 @@ class UserController {
                 roles,
                 is_active,
                 is_banned,
+                has_accepted_terms_and_conditions,
                 biography,
                 country,
                 loved_archetype_id,
@@ -256,6 +261,7 @@ class UserController {
                 roles !== undefined ||
                 typeof is_active === 'boolean' ||
                 typeof is_banned === 'boolean' ||
+                typeof has_accepted_terms_and_conditions === 'boolean' ||
                 biography !== undefined ||
                 country !== undefined ||
                 loved_archetype_id !== undefined ||
